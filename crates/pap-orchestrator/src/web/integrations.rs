@@ -200,24 +200,36 @@ pub async fn bb_proxy_chats(
     axum::Json(req): axum::Json<BbProxyRequest>,
 ) -> Response {
     let server_url = req.server_url.trim_end_matches('/');
-    let url = format!(
-        "{}/api/v1/chat?password={}&limit=50&sort=lastmessage&with=lastMessage,participants",
-        server_url, req.server_password,
-    );
 
     let http = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .unwrap_or_default();
 
-    let resp = match http.get(&url).send().await {
+    // Use proper query param encoding so passwords with special chars (!@# etc) work.
+    // BlueBubbles expects array params as with[]=x&with[]=y.
+    let url = format!("{}/api/v1/chat", server_url);
+
+    let resp = match http.get(&url)
+        .query(&[
+            ("password", req.server_password.as_str()),
+            ("limit", "50"),
+            ("sort", "lastmessage"),
+        ])
+        .query(&[
+            ("with[]", "lastMessage"),
+            ("with[]", "participants"),
+        ])
+        .send()
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             warn!("BB proxy: connection failed: {e}");
             let msg = if e.is_timeout() {
                 "Connection timed out. Is the BlueBubbles server running?".to_string()
             } else if e.is_connect() {
-                format!("Cannot reach {}. Is the server URL correct and the server running?", server_url)
+                format!("Cannot reach {}. Is the server URL correct and the server running? If PAP runs in Docker, use http://host.docker.internal:PORT instead of localhost.", server_url)
             } else {
                 format!("Connection failed: {}", e)
             };
@@ -231,8 +243,10 @@ pub async fn bb_proxy_chats(
         warn!("BB proxy: server returned {status}: {body}");
         let msg = if status.as_u16() == 401 {
             "Invalid password. Check your BlueBubbles server password.".to_string()
+        } else if status.as_u16() == 404 {
+            "BlueBubbles returned 404. Make sure the server URL includes the correct port (e.g. http://host.docker.internal:1234).".to_string()
         } else {
-            format!("BlueBubbles returned error {} -- is the password correct?", status)
+            format!("BlueBubbles returned error {}.", status)
         };
         return Json(BbProxyResponse { ok: false, error: Some(msg), chats: None }).into_response();
     }
