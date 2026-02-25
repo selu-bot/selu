@@ -120,9 +120,9 @@ async fn handle_inbound(
 
     // ── Extract origin message ref from metadata ──────────────────────────────
     let origin_message_ref = envelope.metadata.as_ref()
-        .and_then(|m| m.get("message_guid"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+        .and_then(|m: &serde_json::Value| m.get("message_guid"))
+        .and_then(|v: &serde_json::Value| v.as_str())
+        .map(|s: &str| s.to_string());
 
     // ── Route to agent ────────────────────────────────────────────────────────
     let agents_snapshot = state.agents.read().await.clone();

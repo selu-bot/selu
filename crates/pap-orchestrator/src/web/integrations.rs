@@ -2,11 +2,11 @@ use askama::Template;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    response::{Html, IntoResponse, Redirect, Response},
+    response::{Html, IntoResponse, Json, Redirect, Response},
     Form,
 };
-use serde::Deserialize;
-use tracing::error;
+use serde::{Deserialize, Serialize};
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::state::AppState;
@@ -110,6 +110,66 @@ pub struct FlashQuery {
     pub error: Option<String>,
 }
 
+// ── BlueBubbles proxy types ───────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct BbProxyRequest {
+    pub server_url: String,
+    pub server_password: String,
+}
+
+/// A single chat returned to the frontend picker.
+#[derive(Debug, Serialize)]
+pub struct BbChatInfo {
+    pub guid: String,
+    pub display_name: String,
+    pub participants: Vec<String>,
+    pub is_group: bool,
+    pub last_message: String,
+}
+
+/// Response envelope for the proxy endpoint.
+#[derive(Debug, Serialize)]
+pub struct BbProxyResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chats: Option<Vec<BbChatInfo>>,
+}
+
+// -- BB API response types (internal) --
+
+#[derive(Debug, Deserialize)]
+struct BbApiChatResponse {
+    #[allow(dead_code)]
+    status: u16,
+    data: Vec<BbApiChat>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BbApiChat {
+    guid: Option<String>,
+    display_name: Option<String>,
+    participants: Option<Vec<BbApiHandle>>,
+    #[serde(default)]
+    group_id: Option<String>,
+    last_message: Option<BbApiLastMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BbApiHandle {
+    address: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BbApiLastMessage {
+    text: Option<String>,
+}
+
 // ── Handlers: Overview ────────────────────────────────────────────────────────
 
 pub async fn integrations_index(
@@ -128,6 +188,110 @@ pub async fn integrations_index(
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+}
+
+// ── Handlers: BlueBubbles proxy ───────────────────────────────────────────────
+
+/// Server-side proxy: fetches chats from the user's BlueBubbles server.
+/// This avoids CORS issues (browser can't call BB directly) and keeps
+/// the BB password out of the browser's network tab.
+pub async fn bb_proxy_chats(
+    _user: AuthUser,
+    axum::Json(req): axum::Json<BbProxyRequest>,
+) -> Response {
+    let server_url = req.server_url.trim_end_matches('/');
+    let url = format!(
+        "{}/api/v1/chat?password={}&limit=50&sort=lastmessage&with=lastMessage,participants",
+        server_url, req.server_password,
+    );
+
+    let http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap_or_default();
+
+    let resp = match http.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("BB proxy: connection failed: {e}");
+            let msg = if e.is_timeout() {
+                "Connection timed out. Is the BlueBubbles server running?".to_string()
+            } else if e.is_connect() {
+                format!("Cannot reach {}. Is the server URL correct and the server running?", server_url)
+            } else {
+                format!("Connection failed: {}", e)
+            };
+            return Json(BbProxyResponse { ok: false, error: Some(msg), chats: None }).into_response();
+        }
+    };
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        warn!("BB proxy: server returned {status}: {body}");
+        let msg = if status.as_u16() == 401 {
+            "Invalid password. Check your BlueBubbles server password.".to_string()
+        } else {
+            format!("BlueBubbles returned error {} -- is the password correct?", status)
+        };
+        return Json(BbProxyResponse { ok: false, error: Some(msg), chats: None }).into_response();
+    }
+
+    let bb_resp: BbApiChatResponse = match resp.json().await {
+        Ok(r) => r,
+        Err(e) => {
+            error!("BB proxy: failed to parse response: {e}");
+            return Json(BbProxyResponse {
+                ok: false,
+                error: Some("Got an unexpected response from BlueBubbles. Is it running the latest version?".to_string()),
+                chats: None,
+            }).into_response();
+        }
+    };
+
+    let chats: Vec<BbChatInfo> = bb_resp.data.into_iter()
+        .filter_map(|c| {
+            let guid = c.guid?;
+            let participants: Vec<String> = c.participants
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|p| p.address)
+                .collect();
+
+            let display_name = c.display_name
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| {
+                    if participants.is_empty() {
+                        "Unknown".to_string()
+                    } else {
+                        participants.join(", ")
+                    }
+                });
+
+            let is_group = c.group_id.is_some() || participants.len() > 1;
+
+            let last_message = c.last_message
+                .and_then(|m| m.text)
+                .unwrap_or_default();
+
+            // Truncate long last messages
+            let last_message = if last_message.len() > 80 {
+                format!("{}...", &last_message[..77])
+            } else {
+                last_message
+            };
+
+            Some(BbChatInfo {
+                guid,
+                display_name,
+                participants,
+                is_group,
+                last_message,
+            })
+        })
+        .collect();
+
+    Json(BbProxyResponse { ok: true, error: None, chats: Some(chats) }).into_response()
 }
 
 // ── Handlers: iMessage Setup Wizard ───────────────────────────────────────────

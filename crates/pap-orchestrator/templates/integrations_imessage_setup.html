@@ -10,9 +10,9 @@
   </div>
 
   <div class="wizard-steps">
-    <div class="wizard-step active"><span class="step-num">1</span> BlueBubbles Server</div>
-    <div class="wizard-step"><span class="step-num">2</span> Choose Chat</div>
-    <div class="wizard-step"><span class="step-num">3</span> Add People</div>
+    <div class="wizard-step active" id="ws-1"><span class="step-num">1</span> Connect Server</div>
+    <div class="wizard-step" id="ws-2"><span class="step-num">2</span> Pick Chat</div>
+    <div class="wizard-step" id="ws-3"><span class="step-num">3</span> Add People</div>
   </div>
 
   {% if let Some(err) = error %}
@@ -22,51 +22,77 @@
   {% endif %}
 
   <form method="post" action="/integrations/imessage/setup" id="setup-form">
-    <!-- Step 1: BlueBubbles Server -->
+
+    <!-- ── Step 1: BlueBubbles Server ─────────────────────────────────── -->
     <div class="card" id="step-1">
       <div class="card-header">
         <span>Step 1: Connect to BlueBubbles</span>
-        <span class="badge badge-blue">Required</span>
       </div>
       <div class="form-body">
         <p style="font-size:0.85rem;color:var(--muted);line-height:1.6;margin-bottom:0.5rem;">
-          Enter your BlueBubbles server details. You can find these in the BlueBubbles app under Settings.
+          Enter your BlueBubbles server details. You can find these in the BlueBubbles app under <strong>Settings &gt; Connection</strong>.
         </p>
         <div class="form-grid">
           <div class="form-group">
-            <label for="bb-name">Integration Name</label>
-            <input id="bb-name" name="name" type="text" placeholder="e.g. Family Chat" required />
-            <span class="form-hint">A friendly name to identify this connection.</span>
-          </div>
-          <div class="form-group">
             <label for="bb-url">Server URL</label>
             <input id="bb-url" name="server_url" type="text" placeholder="http://localhost:1234" required />
-            <span class="form-hint">Your BlueBubbles server address and port.</span>
+            <span class="form-hint">The address shown in BlueBubbles under "Server Address".</span>
           </div>
           <div class="form-group">
             <label for="bb-pass">Server Password</label>
             <input id="bb-pass" name="server_password" type="password" placeholder="Your BlueBubbles password" required />
-            <span class="form-hint">Found in BlueBubbles Settings &gt; Connection &gt; Server Password.</span>
+            <span class="form-hint">Found in BlueBubbles &gt; Settings &gt; Server Password.</span>
           </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.5rem;">
+          <button type="button" id="btn-connect" class="btn btn-primary" onclick="testConnection()">
+            Connect to BlueBubbles
+          </button>
+          <span id="connect-status" style="font-size:0.85rem;"></span>
         </div>
       </div>
     </div>
 
-    <!-- Step 2: Chat Selection -->
-    <div class="card" id="step-2" style="margin-top:1rem;">
+    <!-- ── Step 2: Chat Selection ─────────────────────────────────────── -->
+    <div class="card" id="step-2" style="margin-top:1rem;opacity:0.4;pointer-events:none;transition:opacity 0.3s;">
       <div class="card-header">
-        <span>Step 2: Choose a Chat</span>
-        <span class="badge badge-blue">Required</span>
+        <span>Step 2: Pick a Chat</span>
       </div>
       <div class="form-body">
         <p style="font-size:0.85rem;color:var(--muted);line-height:1.6;margin-bottom:0.5rem;">
-          Enter the chat GUID that PAP should monitor. You can find this in BlueBubbles under your chat details.
+          Choose which iMessage conversation PAP should monitor and respond in.
         </p>
+
+        <!-- Chat list (populated by JS) -->
+        <div id="chat-list" style="display:none;margin-bottom:0.75rem;">
+          <div id="chat-search-wrap" style="margin-bottom:0.5rem;">
+            <input id="chat-search" type="text" placeholder="Search chats..."
+                   style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:0.5rem 0.75rem;font-size:0.85rem;" />
+          </div>
+          <div id="chat-items" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:7px;background:var(--bg);">
+            <!-- JS fills this -->
+          </div>
+        </div>
+
+        <!-- Hidden input for the actual GUID that gets submitted -->
+        <input type="hidden" name="chat_guid" id="chat-guid-input" value="" required />
+
+        <!-- Selected chat display -->
+        <div id="selected-chat" style="display:none;padding:0.65rem 0.875rem;background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.25);border-radius:7px;margin-bottom:0.75rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div id="selected-chat-name" style="font-weight:600;font-size:0.9rem;"></div>
+              <div id="selected-chat-detail" style="font-size:0.8rem;color:var(--muted);margin-top:0.15rem;"></div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="clearChatSelection()">Change</button>
+          </div>
+        </div>
+
         <div class="form-grid">
           <div class="form-group">
-            <label for="bb-chat">Chat GUID</label>
-            <input id="bb-chat" name="chat_guid" type="text" placeholder="iMessage;+;chat123..." required />
-            <span class="form-hint">The unique identifier for the iMessage chat or group.</span>
+            <label for="bb-name">Integration Name</label>
+            <input id="bb-name" name="name" type="text" placeholder="e.g. Family Chat" required />
+            <span class="form-hint">A friendly name for this connection.</span>
           </div>
           <div class="form-group">
             <label for="bb-agent">Default Agent</label>
@@ -75,26 +101,34 @@
               <option value="{{ a.id }}">{{ a.name }}</option>
               {% endfor %}
             </select>
-            <span class="form-hint">Which agent should respond to messages in this chat.</span>
+            <span class="form-hint">Which agent responds to messages in this chat.</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Step 3: People -->
-    <div class="card" id="step-3" style="margin-top:1rem;">
+    <!-- ── Step 3: People ─────────────────────────────────────────────── -->
+    <div class="card" id="step-3" style="margin-top:1rem;opacity:0.4;pointer-events:none;transition:opacity 0.3s;">
       <div class="card-header">
         <span>Step 3: Who Can Talk to PAP?</span>
         <span class="badge badge-gray">Optional</span>
       </div>
       <div class="form-body">
         <p style="font-size:0.85rem;color:var(--muted);line-height:1.6;margin-bottom:0.5rem;">
-          Add the people whose messages PAP should respond to. If you skip this step, PAP will respond to everyone in the chat.
-          You can always add more people later.
+          Restrict which people PAP responds to. If you skip this, PAP responds to <strong>everyone</strong> in the chat.
+          You can always change this later.
         </p>
 
+        <!-- Participants from the selected chat (auto-populated) -->
+        <div id="participant-suggestions" style="display:none;margin-bottom:0.75rem;">
+          <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:0.35rem;">People in this chat:</div>
+          <div id="participant-chips" style="display:flex;flex-wrap:wrap;gap:0.35rem;">
+            <!-- JS fills chips -->
+          </div>
+        </div>
+
         <div id="people-list" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:0.75rem;">
-          <!-- JS will add people here -->
+          <!-- JS adds person rows here -->
         </div>
 
         <div style="display:flex;gap:0.5rem;align-items:flex-end;">
@@ -120,10 +154,11 @@
       </div>
     </div>
 
-    <!-- Submit -->
+    <!-- ── Submit ─────────────────────────────────────────────────────── -->
     <div style="margin-top:1.25rem;display:flex;justify-content:space-between;align-items:center;">
       <a href="/integrations" class="btn btn-ghost">Cancel</a>
-      <button type="submit" class="btn btn-primary" style="padding:0.6rem 2rem;font-size:0.95rem;">
+      <button type="submit" id="btn-submit" class="btn btn-primary" disabled
+              style="padding:0.6rem 2rem;font-size:0.95rem;opacity:0.45;">
         Set Up iMessage
       </button>
     </div>
@@ -134,7 +169,185 @@
 
 {% block head %}
 <script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let allChats = [];
+let selectedChat = null;
 let people = [];
+
+// ── Step 1: Test connection & fetch chats ─────────────────────────────────────
+async function testConnection() {
+  const btn = document.getElementById('btn-connect');
+  const status = document.getElementById('connect-status');
+  const urlInput = document.getElementById('bb-url');
+  const passInput = document.getElementById('bb-pass');
+
+  const serverUrl = urlInput.value.trim();
+  const password = passInput.value;
+
+  if (!serverUrl || !password) {
+    status.innerHTML = '<span style="color:var(--danger)">Please enter both URL and password.</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Connecting...';
+  status.innerHTML = '<span style="color:var(--muted)">Reaching BlueBubbles server...</span>';
+
+  try {
+    const resp = await fetch('/integrations/imessage/proxy/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ server_url: serverUrl, server_password: password }),
+    });
+
+    const data = await resp.json();
+
+    if (!data.ok) {
+      status.innerHTML = `<span style="color:var(--danger)">${escapeHtml(data.error || 'Connection failed')}</span>`;
+      btn.disabled = false;
+      btn.textContent = 'Retry';
+      return;
+    }
+
+    // Success!
+    allChats = data.chats || [];
+    status.innerHTML = `<span style="color:var(--success)">Connected! Found ${allChats.length} chat(s).</span>`;
+    btn.textContent = 'Connected';
+    // Mark step 1 as done
+    document.getElementById('ws-1').classList.remove('active');
+    document.getElementById('ws-1').classList.add('done');
+    document.getElementById('ws-2').classList.add('active');
+
+    // Unlock step 2
+    unlockStep('step-2');
+    renderChatList();
+
+  } catch (e) {
+    status.innerHTML = `<span style="color:var(--danger)">Network error. Is PAP running?</span>`;
+    btn.disabled = false;
+    btn.textContent = 'Retry';
+  }
+}
+
+// ── Step 2: Chat picker ───────────────────────────────────────────────────────
+function renderChatList() {
+  const listEl = document.getElementById('chat-list');
+  const itemsEl = document.getElementById('chat-items');
+  listEl.style.display = 'block';
+
+  renderFilteredChats('');
+
+  document.getElementById('chat-search').addEventListener('input', (e) => {
+    renderFilteredChats(e.target.value.toLowerCase());
+  });
+}
+
+function renderFilteredChats(query) {
+  const itemsEl = document.getElementById('chat-items');
+  const filtered = allChats.filter(c => {
+    if (!query) return true;
+    return c.display_name.toLowerCase().includes(query)
+      || c.participants.some(p => p.toLowerCase().includes(query))
+      || c.guid.toLowerCase().includes(query);
+  });
+
+  if (filtered.length === 0) {
+    itemsEl.innerHTML = '<div style="padding:1rem;color:var(--muted);text-align:center;font-size:0.85rem;">No chats match your search.</div>';
+    return;
+  }
+
+  itemsEl.innerHTML = filtered.map((c, i) => `
+    <div class="chat-option" onclick="selectChat('${escapeAttr(c.guid)}')"
+         style="padding:0.65rem 0.875rem;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.1s;"
+         onmouseover="this.style.background='rgba(108,99,255,0.08)'"
+         onmouseout="this.style.background='transparent'">
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        <span style="font-size:1.1rem;">${c.is_group ? '👥' : '💬'}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;font-size:0.875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            ${escapeHtml(c.display_name)}
+          </div>
+          <div style="font-size:0.75rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            ${c.participants.length > 0 ? escapeHtml(c.participants.join(', ')) : ''}
+            ${c.last_message ? ' — ' + escapeHtml(c.last_message) : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectChat(guid) {
+  selectedChat = allChats.find(c => c.guid === guid);
+  if (!selectedChat) return;
+
+  // Set hidden input
+  document.getElementById('chat-guid-input').value = guid;
+
+  // Show selected state
+  document.getElementById('chat-list').style.display = 'none';
+  document.getElementById('selected-chat').style.display = 'block';
+  document.getElementById('selected-chat-name').textContent =
+    (selectedChat.is_group ? '👥 ' : '💬 ') + selectedChat.display_name;
+  document.getElementById('selected-chat-detail').textContent =
+    selectedChat.participants.join(', ');
+
+  // Pre-fill integration name if empty
+  const nameInput = document.getElementById('bb-name');
+  if (!nameInput.value.trim()) {
+    nameInput.value = selectedChat.display_name;
+  }
+
+  // Mark step 2 done, unlock step 3
+  document.getElementById('ws-2').classList.remove('active');
+  document.getElementById('ws-2').classList.add('done');
+  document.getElementById('ws-3').classList.add('active');
+  unlockStep('step-3');
+  enableSubmit();
+
+  // Show participant suggestions in step 3
+  showParticipantSuggestions(selectedChat.participants);
+}
+
+function clearChatSelection() {
+  selectedChat = null;
+  document.getElementById('chat-guid-input').value = '';
+  document.getElementById('selected-chat').style.display = 'none';
+  document.getElementById('chat-list').style.display = 'block';
+  document.getElementById('participant-suggestions').style.display = 'none';
+
+  document.getElementById('ws-2').classList.add('active');
+  document.getElementById('ws-2').classList.remove('done');
+  document.getElementById('ws-3').classList.remove('active');
+  lockStep('step-3');
+  disableSubmit();
+}
+
+// ── Step 3: People management ─────────────────────────────────────────────────
+function showParticipantSuggestions(participants) {
+  if (!participants || participants.length === 0) return;
+
+  const container = document.getElementById('participant-suggestions');
+  const chips = document.getElementById('participant-chips');
+  container.style.display = 'block';
+
+  chips.innerHTML = participants.map(p => `
+    <button type="button" onclick="suggestPerson('${escapeAttr(p)}')"
+            style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:0.3rem 0.6rem;
+                   border-radius:99px;font-size:0.8rem;cursor:pointer;font-family:var(--font);
+                   transition:border-color 0.15s;"
+            onmouseover="this.style.borderColor='var(--accent)'"
+            onmouseout="this.style.borderColor='var(--border)'">
+      + ${escapeHtml(p)}
+    </button>
+  `).join('');
+}
+
+function suggestPerson(phone) {
+  // Fill the phone input and focus the user select
+  document.getElementById('add-phone').value = phone;
+  document.getElementById('add-user').focus();
+}
 
 function addPerson() {
   const phone = document.getElementById('add-phone');
@@ -144,6 +357,13 @@ function addPerson() {
   const userLabel = userSelect.options[userSelect.selectedIndex]?.text || '';
 
   if (!phoneVal) { phone.focus(); return; }
+  if (!userId) { userSelect.focus(); return; }
+
+  // Prevent duplicates
+  if (people.some(p => p.phone === phoneVal)) {
+    phone.value = '';
+    return;
+  }
 
   people.push({ phone: phoneVal, userId: userId, userLabel: userLabel });
   phone.value = '';
@@ -179,10 +399,39 @@ function renderPeople() {
   input.value = people.map(p => `${p.phone}:${p.userId}`).join(',');
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function unlockStep(id) {
+  const el = document.getElementById(id);
+  el.style.opacity = '1';
+  el.style.pointerEvents = 'auto';
+}
+
+function lockStep(id) {
+  const el = document.getElementById(id);
+  el.style.opacity = '0.4';
+  el.style.pointerEvents = 'none';
+}
+
+function enableSubmit() {
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = false;
+  btn.style.opacity = '1';
+}
+
+function disableSubmit() {
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.style.opacity = '0.45';
+}
+
 function escapeHtml(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+function escapeAttr(s) {
+  return s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 </script>
 {% endblock %}

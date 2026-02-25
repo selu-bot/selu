@@ -33,6 +33,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         // Integrations (user-friendly flow)
         .route("/integrations", get(integrations::integrations_index))
         .route("/integrations/imessage/setup", get(integrations::imessage_setup_page).post(integrations::imessage_setup_submit))
+        .route("/integrations/imessage/proxy/chats", post(integrations::bb_proxy_chats))
         .route("/integrations/imessage/{config_id}", get(integrations::imessage_detail).delete(integrations::imessage_delete))
         .route("/integrations/imessage/{config_id}/people", post(integrations::imessage_add_person))
         .route("/integrations/imessage/{config_id}/people/{ref_id}", delete(integrations::imessage_remove_person))

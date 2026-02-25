@@ -4,7 +4,8 @@
 #   docker buildx build --platform linux/amd64,linux/arm64 -t pap .
 #
 # Requires:
-#   - .sqlx/ directory with offline query metadata (run: cargo sqlx prepare)
+#   - crates/pap-orchestrator/.sqlx/ directory with offline query metadata
+#     (run: cargo sqlx prepare   from crates/pap-orchestrator/)
 #   - SQLX_OFFLINE=true is set automatically below
 #
 # Runtime requirements:
@@ -28,8 +29,8 @@ ENV SQLX_OFFLINE=true
 
 # ── Layer 1: dependency compilation (cached when Cargo.toml/lock unchanged) ──
 #
-# Copy only manifests, lockfile, build.rs, proto, and .sqlx – then create
-# minimal stub source files so `cargo build` compiles every dependency
+# Copy only manifests, lockfile, build.rs, proto, .sqlx, and templates – then
+# create minimal stub source files so `cargo build` compiles every dependency
 # without seeing our real code. This layer is expensive but rarely changes.
 
 COPY Cargo.toml Cargo.lock ./
@@ -37,23 +38,28 @@ COPY crates/pap-core/Cargo.toml crates/pap-core/Cargo.toml
 COPY crates/pap-orchestrator/Cargo.toml crates/pap-orchestrator/Cargo.toml
 COPY crates/pap-orchestrator/build.rs crates/pap-orchestrator/build.rs
 COPY crates/pap-orchestrator/proto/ crates/pap-orchestrator/proto/
+COPY crates/pap-orchestrator/.sqlx/ crates/pap-orchestrator/.sqlx/
 COPY crates/pap-bluebubbles/Cargo.toml crates/pap-bluebubbles/Cargo.toml
-COPY .sqlx/ .sqlx/
 
 # Stub source files – just enough for cargo to resolve the crate graph
 RUN mkdir -p crates/pap-core/src && echo "pub fn _stub() {}" > crates/pap-core/src/lib.rs \
     && mkdir -p crates/pap-orchestrator/src && echo "fn main() {}" > crates/pap-orchestrator/src/main.rs \
     && mkdir -p crates/pap-bluebubbles/src && echo "fn main() {}" > crates/pap-bluebubbles/src/main.rs \
-    && mkdir -p crates/pap-orchestrator/migrations
+    && mkdir -p crates/pap-orchestrator/migrations \
+    && mkdir -p crates/pap-orchestrator/templates
 
 RUN cargo build --release --bin pap-orchestrator 2>/dev/null || true
 RUN cargo build --release --bin pap-bluebubbles 2>/dev/null || true
 
 # ── Layer 2: compile actual source (only this re-runs on code changes) ───────
 
-# Remove stub source + fingerprints so cargo detects the new real source
+# Remove stub source + ALL pap crate fingerprints to force recompilation
 RUN rm -rf crates/pap-core/src crates/pap-orchestrator/src crates/pap-bluebubbles/src \
-    && find target -name '*.fingerprint' -path '*/pap[-_]*' -exec rm -rf {} + 2>/dev/null || true
+    && rm -rf target/release/.fingerprint/pap-* \
+    && rm -rf target/release/.fingerprint/pap_* \
+    && rm -rf target/release/deps/pap_* \
+    && rm -rf target/release/deps/libpap_* \
+    && rm -rf target/release/incremental/pap_*
 
 COPY crates/ crates/
 
