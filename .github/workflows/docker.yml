@@ -36,7 +36,7 @@ jobs:
             echo "### Release build: \`${VERSION}\` + \`latest\`" >> "$GITHUB_STEP_SUMMARY"
           else
             TS=$(date -u +%Y%m%d_%H%M%S)
-            echo "tags=${IMAGE}:dev_${TS}" >> "$GITHUB_OUTPUT"
+            echo "tags=${IMAGE}:dev,${IMAGE}:dev_${TS}" >> "$GITHUB_OUTPUT"
             echo "### Dev build: \`dev_${TS}\`" >> "$GITHUB_STEP_SUMMARY"
           fi
 

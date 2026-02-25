@@ -14,11 +14,9 @@
 # The default agents are baked into the image. Override with a volume mount
 # if you want to use custom agents:  -v ./my-agents:/app/agents
 
-# ── Build stage: compile the application ─────────────────────────────────────
+# ── Build stage ──────────────────────────────────────────────────────────────
 FROM rust:1-bookworm AS builder
 
-# Install protobuf compiler (needed by protox/tonic-build at compile time)
-# and pkg-config for ring's native dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
         protobuf-compiler \
         pkg-config \
@@ -26,29 +24,40 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-# Copy manifests first for better layer caching
+ENV SQLX_OFFLINE=true
+
+# ── Layer 1: dependency compilation (cached when Cargo.toml/lock unchanged) ──
+#
+# Copy only manifests, lockfile, build.rs, proto, and .sqlx – then create
+# minimal stub source files so `cargo build` compiles every dependency
+# without seeing our real code. This layer is expensive but rarely changes.
+
 COPY Cargo.toml Cargo.lock ./
 COPY crates/pap-core/Cargo.toml crates/pap-core/Cargo.toml
 COPY crates/pap-orchestrator/Cargo.toml crates/pap-orchestrator/Cargo.toml
+COPY crates/pap-orchestrator/build.rs crates/pap-orchestrator/build.rs
+COPY crates/pap-orchestrator/proto/ crates/pap-orchestrator/proto/
 COPY crates/pap-bluebubbles/Cargo.toml crates/pap-bluebubbles/Cargo.toml
-
-# Copy SQLx offline query metadata for compile-time SQL checking
 COPY .sqlx/ .sqlx/
 
-ENV SQLX_OFFLINE=true
+# Stub source files – just enough for cargo to resolve the crate graph
+RUN mkdir -p crates/pap-core/src && echo "pub fn _stub() {}" > crates/pap-core/src/lib.rs \
+    && mkdir -p crates/pap-orchestrator/src && echo "fn main() {}" > crates/pap-orchestrator/src/main.rs \
+    && mkdir -p crates/pap-bluebubbles/src && echo "fn main() {}" > crates/pap-bluebubbles/src/main.rs \
+    && mkdir -p crates/pap-orchestrator/migrations
 
-# Copy full source
+RUN cargo build --release --bin pap-orchestrator 2>/dev/null || true
+RUN cargo build --release --bin pap-bluebubbles 2>/dev/null || true
+
+# ── Layer 2: compile actual source (only this re-runs on code changes) ───────
+
+# Remove stub source + fingerprints so cargo detects the new real source
+RUN rm -rf crates/pap-core/src crates/pap-orchestrator/src crates/pap-bluebubbles/src \
+    && find target -name '*.fingerprint' -path '*/pap[-_]*' -exec rm -rf {} + 2>/dev/null || true
+
 COPY crates/ crates/
 
-# Build the orchestrator binary.
-# Cargo registry and git checkouts are cached via buildx cache mounts so
-# dependencies are not re-downloaded on every build. The target directory is
-# also cached so incremental compilation works across builds.
-RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
-    --mount=type=cache,target=/build/target,sharing=locked \
-    cargo build --release --bin pap-orchestrator \
-    && cp /build/target/release/pap-orchestrator /usr/local/bin/pap-orchestrator
+RUN cargo build --release --bin pap-orchestrator
 
 # ── Runtime stage ────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
@@ -58,19 +67,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
 RUN groupadd -g 1000 pap && useradd -u 1000 -g 1000 -m pap
 
 WORKDIR /app
 
-# Copy the compiled binary
-COPY --from=builder /usr/local/bin/pap-orchestrator /app/pap-orchestrator
+COPY --from=builder /build/target/release/pap-orchestrator /app/pap-orchestrator
 
 # Bake in the default agent definitions (YAML, system prompts, capability containers).
 # Override at runtime with: -v ./my-agents:/app/agents
 COPY agents/ /app/agents/
 
-# Data directory for SQLite database
 RUN mkdir -p /app/data && chown pap:pap /app/data
 
 # The orchestrator needs access to the Docker socket for capability containers,
@@ -80,7 +86,6 @@ RUN mkdir -p /app/data && chown pap:pap /app/data
 
 EXPOSE 3000
 
-# Default environment – override via .env or -e flags
 ENV PAP__SERVER__HOST=0.0.0.0
 ENV PAP__SERVER__PORT=3000
 ENV PAP__DATABASE__URL=sqlite:///app/data/pap.db?mode=rwc
