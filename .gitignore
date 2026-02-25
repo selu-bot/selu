@@ -1,0 +1,34 @@
+# Build artifacts
+/target/
+
+# SQLite databases (contain runtime data, credentials, etc.)
+*.db
+*.db-shm
+*.db-wal
+
+# Environment config (contains secrets: encryption key, passwords, tokens)
+.env
+
+# macOS
+.DS_Store
+
+# JetBrains IDE
+.idea/
+
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Docker capability container build artifacts
+**/container/__pycache__/
+**/container/*.pyc
+
+# NOTE: .sqlx/ is intentionally NOT ignored – it contains offline query
+# metadata required for Docker/CI builds (SQLX_OFFLINE=true).
+# Regenerate with: cargo sqlx prepare --workspace
+.idea

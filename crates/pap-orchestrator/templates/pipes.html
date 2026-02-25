@@ -1,0 +1,133 @@
+{% extends "layout.html" %}
+
+{% block title %}Pipes{% endblock %}
+
+{% block body %}
+<div class="page-content">
+  <div class="page-header">
+    <h1>Pipes</h1>
+    <p>Inbound/outbound message channels. Each pipe connects an external adapter to an agent via webhook.</p>
+  </div>
+
+  {% if let Some(f) = flash %}
+  <div class="flash flash-success">
+    <strong>Pipe created successfully.</strong>
+    <span>Inbound URL: <code>{{ f.inbound_url }}</code></span>
+    <span>Bearer token (save this — shown only once): <code>{{ f.inbound_token }}</code></span>
+    <span style="color:var(--muted);font-size:0.8rem;">POST to the inbound URL with <code>Authorization: Bearer &lt;token&gt;</code> and a JSON body <code>{"sender_ref":"...","text":"..."}</code>.</span>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">Pipes</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Transport</th>
+            <th>Outbound URL</th>
+            <th>Default Agent</th>
+            <th>Inbound URL</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pipe in pipes %}
+          <tr>
+            <td><strong>{{ pipe.name }}</strong></td>
+            <td><span class="badge badge-blue">{{ pipe.transport }}</span></td>
+            <td class="mono">{{ pipe.outbound_url }}</td>
+            <td class="mono">{{ pipe.default_agent_id }}</td>
+            <td class="mono">/api/pipes/{{ pipe.id }}/inbound</td>
+            <td>
+              {% if pipe.active %}
+              <span class="badge badge-green">active</span>
+              {% else %}
+              <span class="badge badge-red">inactive</span>
+              {% endif %}
+            </td>
+            <td class="mono">{{ pipe.created_at }}</td>
+            <td class="actions">
+              {% if pipe.active %}
+              <button class="btn btn-danger btn-sm"
+                      hx-delete="/pipes/{{ pipe.id }}"
+                      hx-target="closest tr"
+                      hx-swap="outerHTML"
+                      hx-confirm="Deactivate pipe &quot;{{ pipe.name }}&quot;?">Deactivate</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% if pipes.is_empty() %}
+          <tr class="empty-row">
+            <td colspan="8">No pipes yet. Create one below.</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Create Pipe</div>
+    <form method="post" action="/pipes">
+      <div class="form-body">
+        {% if users.is_empty() %}
+        <div class="flash flash-info">
+          <strong>No users found.</strong>
+          <span>You need at least one user account before creating a pipe. <a href="/users" style="color:var(--accent)">Create a user</a>.</span>
+        </div>
+        {% endif %}
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="pipe-name">Name</label>
+            <input id="pipe-name" name="name" type="text" placeholder="My Pipe" required />
+          </div>
+          <div class="form-group">
+            <label for="pipe-user">Owner</label>
+            <select id="pipe-user" name="user_id" required {% if users.is_empty() %}disabled{% endif %}>
+              <option value="">— select user —</option>
+              {% for u in users %}
+              <option value="{{ u.id }}">{{ u.display }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pipe-transport">Transport</label>
+            <select id="pipe-transport" name="transport">
+              <option value="webhook">webhook</option>
+              <option value="web">web</option>
+              <option value="api">api</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pipe-agent">Default Agent</label>
+            <select id="pipe-agent" name="default_agent_id">
+              <option value="">— none —</option>
+              {% for a in agents %}
+              <option value="{{ a.id }}">{{ a.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pipe-outbound">Outbound URL</label>
+            <input id="pipe-outbound" name="outbound_url" type="text" placeholder="https://adapter.example.com/send" required />
+            <span class="form-hint">The URL to POST assistant replies to.</span>
+          </div>
+          <div class="form-group">
+            <label for="pipe-auth">Outbound Auth Header</label>
+            <input id="pipe-auth" name="outbound_auth" type="text" placeholder="Bearer token123 (optional)" />
+            <span class="form-hint">Value for the Authorization header on outbound requests.</span>
+          </div>
+        </div>
+        <div class="form-footer">
+          <button type="submit" class="btn btn-primary" {% if users.is_empty() %}disabled{% endif %}>Create Pipe</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

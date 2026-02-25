@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT role, content FROM messages\n               WHERE pipe_id = ? AND (session_id = ? OR session_id IS NULL)\n                 AND thread_id IS NULL\n               ORDER BY created_at DESC\n               LIMIT 30",
+  "describe": {
+    "columns": [
+      {
+        "name": "role",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "content",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2e22aaabb87941969dc26cf719e27d965dfde804691aea86785a3efe0ba28f42"
+}

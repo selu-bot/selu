@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT sr.id, sr.user_id, sr.pipe_id, sr.sender_ref, sr.created_at,\n                  u.display_name, u.username,\n                  p.name as pipe_name\n           FROM user_sender_refs sr\n           JOIN users u ON u.id = sr.user_id\n           JOIN pipes p ON p.id = sr.pipe_id\n           ORDER BY sr.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "sender_ref",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "display_name",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "username",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_name",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e7c059ab03aa10a1b9ea30225f765baeabc161554c40c8b8a25d46042edfb895"
+}

@@ -1,0 +1,76 @@
+[package]
+name = "pap-orchestrator"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+pap-core = { path = "../pap-core" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Web framework
+axum = { workspace = true }
+axum-extra = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Database
+sqlx = { workspace = true }
+
+# Crypto / security
+ring = { workspace = true }
+base64 = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true }
+eventsource-stream = { workspace = true }
+
+# Templating
+askama = { workspace = true }
+askama_axum = { workspace = true }
+
+# Config
+config = { workspace = true }
+dotenvy = { workspace = true }
+
+# Logging / tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Misc
+uuid = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+tokio-stream = { workspace = true }
+serde_yaml = { workspace = true }
+urlencoding = { workspace = true }
+
+# Password hashing
+argon2 = { workspace = true }
+
+# gRPC
+tonic = { workspace = true }
+prost = { workspace = true }
+
+# CEL filter evaluation
+cel-interpreter = { workspace = true }
+
+# Time (for cookie max_age)
+time = { workspace = true }
+
+# Docker
+bollard = { workspace = true }
+
+[build-dependencies]
+tonic-build = { version = "0.13", features = ["prost"] }
+protox = "0.7"

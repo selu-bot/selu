@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT me.message_id, me.embedding, me.dimension, m.content\n               FROM message_embeddings me\n               JOIN messages m ON m.id = me.message_id\n               WHERE me.session_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "message_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "embedding",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "dimension",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "content",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d3e4cba56c61fac4dc58eb9e989604f0e712dcf08ff7766c91ee2dec0117ce35"
+}

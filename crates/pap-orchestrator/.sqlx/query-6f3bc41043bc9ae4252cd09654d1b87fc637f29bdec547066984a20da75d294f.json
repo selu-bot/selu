@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM system_credentials\n             WHERE capability_id = ? AND credential_name = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "6f3bc41043bc9ae4252cd09654d1b87fc637f29bdec547066984a20da75d294f"
+}

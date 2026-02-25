@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT role, content, created_at FROM messages WHERE pipe_id = ? ORDER BY created_at LIMIT 100",
+  "describe": {
+    "columns": [
+      {
+        "name": "role",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "content",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "83127492aeb2ddab39425523e91511a8e0d2dd94f6400069f9fa0209c97f001e"
+}

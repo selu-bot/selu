@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO llm_providers (id, display_name, api_key_encrypted, base_url, active)\n           VALUES ('bedrock', 'Amazon Bedrock', '', 'us-east-1', 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "7ee414710ea3ea6050e0372614ce1d586be3da51275fdfb68980844877e7658a"
+}

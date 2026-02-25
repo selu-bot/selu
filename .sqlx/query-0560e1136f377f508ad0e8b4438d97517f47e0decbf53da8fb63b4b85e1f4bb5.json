@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, user_id, inbound_token, outbound_url, outbound_auth, default_agent_id, active\n         FROM pipes WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "inbound_token",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "outbound_url",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "outbound_auth",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "default_agent_id",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "active",
+        "ordinal": 6,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "0560e1136f377f508ad0e8b4438d97517f47e0decbf53da8fb63b4b85e1f4bb5"
+}

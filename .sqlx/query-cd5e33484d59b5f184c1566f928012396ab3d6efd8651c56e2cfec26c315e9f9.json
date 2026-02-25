@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE llm_providers SET base_url = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "cd5e33484d59b5f184c1566f928012396ab3d6efd8651c56e2cfec26c315e9f9"
+}

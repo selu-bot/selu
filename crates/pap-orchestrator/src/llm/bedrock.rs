@@ -1,0 +1,314 @@
+/// Amazon Bedrock Converse API provider.
+///
+/// Uses the Bedrock Converse endpoint with Bearer token authentication.
+/// Endpoint: POST https://bedrock-runtime.{region}.amazonaws.com/model/{model-id}/converse
+///
+/// The Bedrock Converse API has its own message format:
+///   - Messages have `role` and `content` (array of content blocks)
+///   - Content blocks: `{"text": "..."}` or `{"toolUse": {...}}` or `{"toolResult": {...}}`
+///   - Tools are declared in a `toolConfig` object
+///   - System prompts go in a separate `system` array
+///
+/// Streaming uses /converse-stream and returns event-stream chunks.
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use futures::StreamExt;
+use reqwest::Client;
+use serde::Deserialize;
+use serde_json::{json, Value};
+use tracing::debug;
+
+use super::provider::{
+    ChunkStream, ChatMessage, LlmProvider, LlmResponse, MessageContent, StreamChunk, ToolCall,
+    ToolSpec,
+};
+
+pub struct BedrockProvider {
+    client: Client,
+    api_key: String,
+    region: String,
+    model_id: String,
+}
+
+impl BedrockProvider {
+    pub fn new(
+        api_key: impl Into<String>,
+        region: impl Into<String>,
+        model_id: impl Into<String>,
+    ) -> Self {
+        let model = model_id.into();
+        Self {
+            client: Client::new(),
+            api_key: api_key.into(),
+            region: region.into(),
+            model_id: if model.is_empty() {
+                "us.anthropic.claude-sonnet-4-20250514-v1:0".into()
+            } else {
+                model
+            },
+        }
+    }
+
+    fn converse_url(&self) -> String {
+        format!(
+            "https://bedrock-runtime.{}.amazonaws.com/model/{}/converse",
+            self.region, self.model_id
+        )
+    }
+
+    fn converse_stream_url(&self) -> String {
+        format!(
+            "https://bedrock-runtime.{}.amazonaws.com/model/{}/converse-stream",
+            self.region, self.model_id
+        )
+    }
+}
+
+/// Build the Bedrock Converse request body from our internal message types.
+fn build_converse_body(
+    messages: &[ChatMessage],
+    tools: &[ToolSpec],
+    temperature: f32,
+) -> Value {
+    // Extract system prompts
+    let system: Vec<Value> = messages
+        .iter()
+        .filter(|m| m.role == "system")
+        .map(|m| json!({"text": m.content.as_text()}))
+        .collect();
+
+    // Convert messages to Bedrock format, merging consecutive tool-result
+    // messages into a single "user" message (Bedrock requires all toolResult
+    // blocks for one turn to live in one message).
+    let non_system: Vec<&ChatMessage> = messages
+        .iter()
+        .filter(|m| m.role != "system")
+        .collect();
+
+    let mut bedrock_messages: Vec<Value> = Vec::new();
+    let mut i = 0;
+    while i < non_system.len() {
+        let m = non_system[i];
+
+        if m.role == "assistant" && !m.tool_calls.is_empty() {
+            // Assistant message with tool calls → emit toolUse content blocks
+            let mut content_blocks: Vec<Value> = Vec::new();
+            let text = m.content.as_text();
+            if !text.is_empty() {
+                content_blocks.push(json!({"text": text}));
+            }
+            for tc in &m.tool_calls {
+                content_blocks.push(json!({
+                    "toolUse": {
+                        "toolUseId": tc.id,
+                        "name": tc.name,
+                        "input": tc.arguments
+                    }
+                }));
+            }
+            bedrock_messages.push(json!({"role": "assistant", "content": content_blocks}));
+        } else if m.role == "tool" {
+            // Collect all consecutive tool-result messages into one "user" message
+            let mut tool_result_blocks: Vec<Value> = Vec::new();
+            while i < non_system.len() && non_system[i].role == "tool" {
+                let tr = non_system[i];
+                tool_result_blocks.push(json!({
+                    "toolResult": {
+                        "toolUseId": tr.tool_call_id.as_deref().unwrap_or("unknown"),
+                        "content": [{"text": tr.content.as_text()}]
+                    }
+                }));
+                i += 1;
+            }
+            bedrock_messages.push(json!({"role": "user", "content": tool_result_blocks}));
+            continue; // skip the i += 1 at bottom since we advanced i in the inner loop
+        } else {
+            // Plain user or assistant text message
+            let content = match &m.content {
+                MessageContent::Text(t) => json!([{"text": t}]),
+                MessageContent::Parts(parts) => {
+                    let blocks: Vec<Value> = parts
+                        .iter()
+                        .filter_map(|p| p.text.as_ref().map(|t| json!({"text": t})))
+                        .collect();
+                    json!(blocks)
+                }
+            };
+            bedrock_messages.push(json!({"role": &m.role, "content": content}));
+        }
+
+        i += 1;
+    }
+
+    let mut body = json!({
+        "messages": bedrock_messages,
+        "inferenceConfig": {
+            "temperature": temperature,
+            "maxTokens": 4096,
+        }
+    });
+
+    if !system.is_empty() {
+        body["system"] = json!(system);
+    }
+
+    if !tools.is_empty() {
+        let tool_defs: Vec<Value> = tools
+            .iter()
+            .map(|t| {
+                json!({
+                    "toolSpec": {
+                        "name": t.name,
+                        "description": t.description,
+                        "inputSchema": {
+                            "json": t.parameters
+                        }
+                    }
+                })
+            })
+            .collect();
+        body["toolConfig"] = json!({"tools": tool_defs});
+    }
+
+    body
+}
+
+#[async_trait]
+impl LlmProvider for BedrockProvider {
+    fn id(&self) -> &str {
+        "bedrock"
+    }
+
+    async fn chat(
+        &self,
+        messages: &[ChatMessage],
+        tools: &[ToolSpec],
+        temperature: f32,
+    ) -> Result<LlmResponse> {
+        let body = build_converse_body(messages, tools, temperature);
+        debug!(provider = "bedrock", model = %self.model_id, "Sending converse request");
+
+        let resp = self
+            .client
+            .post(self.converse_url())
+            .bearer_auth(&self.api_key)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("Bedrock API error {}: {}", status, text));
+        }
+
+        // Parse Bedrock Converse response
+        #[derive(Deserialize)]
+        struct ToolUseBlock {
+            #[serde(rename = "toolUseId")]
+            tool_use_id: String,
+            name: String,
+            input: Value,
+        }
+
+        let resp_json: Value = resp.json().await?;
+
+        // Extract content blocks from output.message.content
+        let content_blocks = resp_json["output"]["message"]["content"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+
+        let mut tool_calls = Vec::new();
+        let mut text_parts = Vec::new();
+
+        for block in &content_blocks {
+            if let Some(text) = block["text"].as_str() {
+                text_parts.push(text.to_string());
+            }
+            if let Some(tool_use) = block.get("toolUse") {
+                if let Ok(tc) = serde_json::from_value::<ToolUseBlock>(tool_use.clone()) {
+                    tool_calls.push(ToolCall {
+                        id: tc.tool_use_id,
+                        name: tc.name,
+                        arguments: tc.input,
+                    });
+                }
+            }
+        }
+
+        if !tool_calls.is_empty() {
+            return Ok(LlmResponse::ToolCalls(tool_calls));
+        }
+
+        Ok(LlmResponse::Text(text_parts.join("")))
+    }
+
+    async fn chat_stream(
+        &self,
+        messages: &[ChatMessage],
+        tools: &[ToolSpec],
+        temperature: f32,
+    ) -> Result<ChunkStream> {
+        let body = build_converse_body(messages, tools, temperature);
+        debug!(provider = "bedrock", model = %self.model_id, "Sending converse-stream request");
+
+        let resp = self
+            .client
+            .post(self.converse_stream_url())
+            .bearer_auth(&self.api_key)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("Bedrock stream API error {}: {}", status, text));
+        }
+
+        // Bedrock converse-stream returns newline-delimited JSON events
+        // Each event has a type field indicating what kind of chunk it is
+        let stream = resp
+            .bytes_stream()
+            .filter_map(|chunk| async move {
+                let bytes = chunk.ok()?;
+                let text = String::from_utf8_lossy(&bytes);
+
+                // Bedrock stream events are JSON objects separated by newlines
+                for line in text.lines() {
+                    let line = line.trim();
+                    if line.is_empty() {
+                        continue;
+                    }
+
+                    if let Ok(event) = serde_json::from_str::<Value>(line) {
+                        // Content block delta with text
+                        if let Some(delta) = event.get("contentBlockDelta") {
+                            if let Some(text) = delta["delta"]["text"].as_str() {
+                                return Some(Ok(StreamChunk::Text(text.to_string())));
+                            }
+                        }
+
+                        // Content block start with toolUse
+                        if let Some(start) = event.get("contentBlockStart") {
+                            if let Some(name) = start["start"]["toolUse"]["name"].as_str() {
+                                return Some(Ok(StreamChunk::ToolCallStart(name.to_string())));
+                            }
+                        }
+
+                        // Message stop
+                        if event.get("messageStop").is_some() {
+                            return Some(Ok(StreamChunk::Done));
+                        }
+                    }
+                }
+
+                None
+            });
+
+        Ok(Box::pin(stream))
+    }
+}

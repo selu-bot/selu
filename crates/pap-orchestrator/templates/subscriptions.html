@@ -1,0 +1,122 @@
+{% extends "layout.html" %}
+
+{% block title %}Subscriptions{% endblock %}
+
+{% block body %}
+<div class="page-content">
+  <div class="page-header">
+    <h1>Subscriptions</h1>
+    <p>Trigger outbound notifications or agent invocations when agent events match a CEL filter expression.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Event Subscriptions</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Event Type</th>
+            <th>Reaction</th>
+            <th>Config</th>
+            <th>Filter</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sub in subs %}
+          <tr>
+            <td>{{ sub.username }}</td>
+            <td class="mono">{{ sub.event_type }}</td>
+            <td><span class="badge badge-blue">{{ sub.reaction_type }}</span></td>
+            <td class="mono" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ sub.reaction_config }}">{{ sub.reaction_config }}</td>
+            <td class="mono" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ sub.filter_expression }}">{{ sub.filter_expression }}</td>
+            <td>
+              {% if sub.active %}
+              <span class="badge badge-green">active</span>
+              {% else %}
+              <span class="badge badge-red">inactive</span>
+              {% endif %}
+            </td>
+            <td class="mono">{{ sub.created_at }}</td>
+            <td class="actions">
+              {% if sub.active %}
+              <button class="btn btn-danger btn-sm"
+                      hx-delete="/subscriptions/{{ sub.id }}"
+                      hx-target="closest tr"
+                      hx-swap="outerHTML"
+                      hx-confirm="Deactivate this subscription?">Deactivate</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% if subs.is_empty() %}
+          <tr class="empty-row">
+            <td colspan="8">No subscriptions yet. Create one below.</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Create Subscription</div>
+    <form method="post" action="/subscriptions">
+      <div class="form-body">
+        {% if users.is_empty() %}
+        <div class="flash flash-info">
+          <strong>No users found.</strong>
+          <span><a href="/users" style="color:var(--accent)">Create a user</a> before adding subscriptions.</span>
+        </div>
+        {% endif %}
+        <div class="form-grid">
+          <div class="form-group">
+            <label>User</label>
+            <select name="user_id" required {% if users.is_empty() %}disabled{% endif %}>
+              <option value="">— select user —</option>
+              {% for u in users %}
+              <option value="{{ u.id }}">{{ u.display }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Event Type</label>
+            <input name="event_type" type="text" placeholder="e.g. task.completed" required />
+            <span class="form-hint">The event type emitted by the agent via the emit_event tool.</span>
+          </div>
+          <div class="form-group">
+            <label>Reaction Type</label>
+            <select name="reaction_type" required>
+              <option value="pipe_notification">pipe_notification</option>
+              <option value="agent_invocation">agent_invocation</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>CEL Filter Expression</label>
+            <input name="filter_expression" type="text" placeholder='e.g. event.payload.priority == "high"' />
+            <span class="form-hint">Optional. Leave blank to match all events of this type.</span>
+          </div>
+          <div class="form-group">
+            <label>Filter Description</label>
+            <input name="filter_description" type="text" placeholder="Human-readable description of the filter" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Reaction Config (JSON)</label>
+          <textarea name="reaction_config" rows="5" required>{}</textarea>
+          <span class="form-hint">
+            <strong>pipe_notification:</strong> <code>{"pipe_id": "&lt;id&gt;", "message": "Event received"}</code><br/>
+            <strong>agent_invocation:</strong> <code>{"agent_id": "&lt;id&gt;", "pipe_id": "&lt;id&gt;"}</code>
+          </span>
+        </div>
+        <div class="form-footer">
+          <button type="submit" class="btn btn-primary" {% if users.is_empty() %}disabled{% endif %}>Create Subscription</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

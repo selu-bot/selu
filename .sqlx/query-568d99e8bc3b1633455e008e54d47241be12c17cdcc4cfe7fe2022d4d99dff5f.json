@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO user_credentials\n               (id, user_id, capability_id, credential_name, encrypted_value)\n               VALUES (?, ?, ?, ?, ?)\n               ON CONFLICT(user_id, capability_id, credential_name)\n               DO UPDATE SET encrypted_value = excluded.encrypted_value,\n                             created_at = datetime('now')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "568d99e8bc3b1633455e008e54d47241be12c17cdcc4cfe7fe2022d4d99dff5f"
+}

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, reaction_type, reaction_config_json, filter_expression\n           FROM event_subscriptions\n           WHERE user_id = ? AND event_type = ? AND active = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "reaction_type",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "reaction_config_json",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "filter_expression",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "7cc5be7cec7bb6483ea365f1e470f92aaeea50887a52c5d1d2e92c2309c6bf8d"
+}

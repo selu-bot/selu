@@ -1,0 +1,88 @@
+{% extends "layout.html" %}
+{% block title %}LLM Providers{% endblock %}
+{% block body %}
+<div class="page-content">
+  <div class="page-header">
+    <h1>LLM Providers</h1>
+    <p>Configure API keys and endpoints for LLM providers. Keys are encrypted at rest with AES-256-GCM.</p>
+  </div>
+
+  {% for p in providers %}
+  <div class="card">
+    <div class="card-header">
+      <div style="display:flex;align-items:center;gap:0.75rem">
+        <span>{{ p.display_name }}</span>
+        <span class="badge {% if p.has_key %}badge-green{% else %}badge-red{% endif %}">
+          {% if p.has_key %}Key Set{% else %}No Key{% endif %}
+        </span>
+        {% if p.active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-gray">Inactive</span>{% endif %}
+      </div>
+      <span class="badge badge-blue">{{ p.id }}</span>
+    </div>
+
+    <div class="form-body">
+      {# ── API Key ── #}
+      <form method="POST" action="/providers/{{ p.id }}/key" style="display:flex;flex-direction:column;gap:0.75rem">
+        <div class="form-group">
+          <label>API Key</label>
+          <div style="display:flex;gap:0.5rem;align-items:flex-start">
+            <input type="password" name="api_key"
+                   placeholder="{% if p.has_key %}(encrypted key is set — enter new value to replace){% else %}Paste your API key here{% endif %}"
+                   style="flex:1" />
+            <button type="submit" class="btn btn-primary btn-sm">
+              {% if p.has_key %}Update{% else %}Set Key{% endif %}
+            </button>
+            {% if p.has_key %}
+            <button type="button" class="btn btn-danger btn-sm"
+                    hx-delete="/providers/{{ p.id }}/key"
+                    hx-target="closest .card"
+                    hx-swap="outerHTML"
+                    hx-confirm="Remove the API key for {{ p.display_name }}?">
+              Remove
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      </form>
+
+      {# ── Region / Base URL ── #}
+      <form method="POST" action="/providers/{{ p.id }}/region" style="display:flex;flex-direction:column;gap:0.75rem">
+        <div class="form-group">
+          <label>
+            {% if p.id == "bedrock" %}AWS Region{% else if p.id == "ollama" %}Ollama URL{% else %}Base URL{% endif %}
+          </label>
+          <div style="display:flex;gap:0.5rem;align-items:flex-start">
+            <input type="text" name="base_url"
+                   value="{{ p.base_url }}"
+                   placeholder="{% if p.id == "bedrock" %}us-east-1{% else if p.id == "ollama" %}http://localhost:11434{% else %}https://api.openai.com{% endif %}"
+                   style="flex:1" />
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+          </div>
+          <span class="form-hint">
+            {% if p.id == "bedrock" %}
+              AWS region where Bedrock is enabled (e.g. us-east-1, us-west-2, eu-west-1)
+            {% else if p.id == "ollama" %}
+              URL of your Ollama instance. Append |model-name to override the default model (e.g. http://localhost:11434|llama3.2)
+            {% else if p.id == "openai" %}
+              Leave empty to use the default (https://api.openai.com). Set a custom URL for OpenAI-compatible APIs.
+            {% else if p.id == "anthropic" %}
+              Leave empty to use the default (https://api.anthropic.com).
+            {% endif %}
+          </span>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if providers.is_empty() %}
+  <div class="card">
+    <div class="form-body">
+      <p style="color:var(--muted);text-align:center;padding:1rem 0">
+        No LLM providers configured. They are created automatically during first-run setup.
+      </p>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

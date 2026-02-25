@@ -1,0 +1,186 @@
+id: pim-api
+class: tool
+image: pap-cap-pim-api:latest
+
+tools:
+  # ── Email (IMAP) ────────────────────────────────────────────────────────────
+
+  - name: list_mailboxes
+    description: >
+      List all mailboxes (folders) in the user's email account.
+      Returns names and message counts.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+
+  - name: fetch_emails
+    description: >
+      Fetch recent emails from a mailbox. Returns subject, sender, date,
+      and a text snippet for each message.
+    input_schema:
+      type: object
+      properties:
+        mailbox:
+          type: string
+          description: "Mailbox name (e.g. 'INBOX', 'Sent'). Defaults to INBOX."
+        limit:
+          type: integer
+          description: "Maximum number of emails to return. Defaults to 10."
+      required: []
+
+  - name: search_emails
+    description: >
+      Search emails by criteria: sender, subject keyword, date range,
+      or body text. Returns matching messages.
+    input_schema:
+      type: object
+      properties:
+        mailbox:
+          type: string
+          description: "Mailbox to search. Defaults to INBOX."
+        from:
+          type: string
+          description: "Filter by sender address or name."
+        subject:
+          type: string
+          description: "Filter by subject keyword."
+        since:
+          type: string
+          description: "Only emails after this date (YYYY-MM-DD)."
+        before:
+          type: string
+          description: "Only emails before this date (YYYY-MM-DD)."
+        body:
+          type: string
+          description: "Search email body text."
+        limit:
+          type: integer
+          description: "Maximum results. Defaults to 10."
+      required: []
+
+  - name: read_email
+    description: >
+      Fetch the full body of a specific email by its message UID.
+    input_schema:
+      type: object
+      properties:
+        mailbox:
+          type: string
+          description: "Mailbox containing the email. Defaults to INBOX."
+        uid:
+          type: integer
+          description: "The message UID (returned by fetch_emails or search_emails)."
+      required: [uid]
+
+  - name: send_email
+    description: >
+      Send an email via SMTP. This action is irreversible and requires
+      explicit user confirmation before execution.
+    requires_confirmation: true
+    input_schema:
+      type: object
+      properties:
+        to:
+          type: string
+          description: "Recipient email address."
+        subject:
+          type: string
+          description: "Email subject line."
+        body:
+          type: string
+          description: "Email body (plain text)."
+        cc:
+          type: string
+          description: "CC recipient(s), comma-separated."
+        reply_to_uid:
+          type: integer
+          description: >
+            If replying to an existing email, the UID of the original message.
+            The tool will set In-Reply-To and References headers automatically.
+      required: [to, subject, body]
+
+  # ── Calendar (CalDAV) ───────────────────────────────────────────────────────
+
+  - name: list_calendars
+    description: >
+      List all calendars available in the user's CalDAV account.
+      Returns calendar names and colors.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+
+  - name: list_events
+    description: >
+      List calendar events within a date range. Defaults to the next 7 days
+      from today.
+    input_schema:
+      type: object
+      properties:
+        calendar:
+          type: string
+          description: "Calendar name to filter. If omitted, returns events from all calendars."
+        start_date:
+          type: string
+          description: "Start of range (YYYY-MM-DD). Defaults to today."
+        end_date:
+          type: string
+          description: "End of range (YYYY-MM-DD). Defaults to 7 days from start."
+      required: []
+
+network:
+  mode: any
+
+filesystem: temp
+
+credentials:
+  # IMAP settings
+  - name: imap_host
+    scope: user
+    credential_type: config
+    required: true
+  - name: imap_username
+    scope: user
+    credential_type: config
+    required: true
+  - name: imap_password
+    scope: user
+    credential_type: secret
+    required: true
+  # SMTP settings
+  - name: smtp_host
+    scope: user
+    credential_type: config
+    required: true
+  - name: smtp_username
+    scope: user
+    credential_type: config
+    required: true
+  - name: smtp_password
+    scope: user
+    credential_type: secret
+    required: true
+  - name: smtp_from
+    scope: user
+    credential_type: config
+    required: true
+  # CalDAV settings
+  - name: caldav_url
+    scope: user
+    credential_type: config
+    required: false
+  - name: caldav_username
+    scope: user
+    credential_type: config
+    required: false
+  - name: caldav_password
+    scope: user
+    credential_type: secret
+    required: false
+
+resources:
+  max_memory_mb: 128
+  max_cpu_fraction: 0.5
+  max_cpu_seconds: 30
+  pids_limit: 32

@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+
+{% block title %}Agents{% endblock %}
+
+{% block body %}
+<div class="page-content">
+  <div class="page-header">
+    <h1>Agents</h1>
+    <p>Agent definitions loaded from the <code style="font-size:0.8rem;background:rgba(0,0,0,0.3);padding:0.1rem 0.4rem;border-radius:4px;font-family:'SF Mono','Fira Code',monospace">agents/</code> directory at startup.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Loaded Agents</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Provider</th>
+            <th>Model</th>
+            <th>Capabilities</th>
+            <th>Trigger</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for agent in agents %}
+          <tr>
+            <td class="mono">{{ agent.id }}</td>
+            <td><strong>{{ agent.name }}</strong></td>
+            <td><span class="badge badge-blue">{{ agent.provider }}</span></td>
+            <td class="mono">{{ agent.model_id }}</td>
+            <td>{{ agent.capability_count }}</td>
+            <td><span class="badge badge-gray">{{ agent.session_trigger }}</span></td>
+          </tr>
+          {% endfor %}
+          {% if agents.is_empty() %}
+          <tr class="empty-row">
+            <td colspan="6">No agents loaded. Add agent definitions to the agents/ directory and restart.</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

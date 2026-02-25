@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, name, transport FROM pipes WHERE active = 1 ORDER BY created_at",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "transport",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "c9e15a7538d8d79190529860a56050b1f0a303500447521701bb97b4db7ad214"
+}

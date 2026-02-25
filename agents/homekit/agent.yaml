@@ -1,0 +1,12 @@
+id: homekit
+name: HomeKit Assistant
+model:
+  provider: bedrock
+  model_id: us.anthropic.claude-sonnet-4-20250514-v1:0
+  temperature: 0.3
+session:
+  trigger: mention
+  idle_timeout_minutes: 15
+memory:
+  policy: none
+  top_k: 0

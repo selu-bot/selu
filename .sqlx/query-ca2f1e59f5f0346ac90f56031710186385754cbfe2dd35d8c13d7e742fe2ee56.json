@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO event_subscriptions\n           (id, user_id, event_type, reaction_type, reaction_config_json,\n            filter_expression, filter_description)\n           VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "ca2f1e59f5f0346ac90f56031710186385754cbfe2dd35d8c13d7e742fe2ee56"
+}

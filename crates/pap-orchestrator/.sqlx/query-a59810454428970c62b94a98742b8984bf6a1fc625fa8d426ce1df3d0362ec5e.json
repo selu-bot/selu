@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id FROM sessions\n         WHERE status = 'active'\n           AND last_active_at < datetime('now', ? || ' minutes')",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a59810454428970c62b94a98742b8984bf6a1fc625fa8d426ce1df3d0362ec5e"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT outbound_url, outbound_auth FROM pipes WHERE id = ? AND active = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "outbound_url",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "outbound_auth",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "5b235599270162dbdb06bba9db51c9f030c6ad4cef17b3f1288dbf8a5f5e1ff6"
+}

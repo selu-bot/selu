@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE workspaces SET status = 'destroyed' WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "43d36b565bd684198dfb4e608815d075a67b70de15b49759e75012f06bcd47c8"
+}

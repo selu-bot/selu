@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE sessions SET last_active_at = datetime('now') WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "7b838af84288a1d66e4c5f9c42c3add2a01aaffbe0ba3b8da55bda6031d53956"
+}

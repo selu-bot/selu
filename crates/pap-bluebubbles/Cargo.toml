@@ -1,0 +1,32 @@
+[package]
+name = "pap-bluebubbles"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "pap-bluebubbles"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+
+# Web framework (to receive webhooks from BlueBubbles + outbound from pap)
+axum = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# HTTP client (to call BlueBubbles API + pap inbound)
+reqwest = { workspace = true }
+
+# Config
+dotenvy = { workspace = true }
+
+# Logging / tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }

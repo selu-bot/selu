@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO llm_providers (id, display_name, api_key_encrypted, base_url, active)\n           VALUES ('openai', 'OpenAI', '', '', 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "32e538442a0ba363886fdd7769815f3c0c035ec8d582f1af09dd197e7ef5619c"
+}
