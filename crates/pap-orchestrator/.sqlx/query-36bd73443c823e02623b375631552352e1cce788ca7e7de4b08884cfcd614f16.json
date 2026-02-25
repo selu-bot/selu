@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE pipes SET active = 0 WHERE id IN (SELECT pipe_id FROM bluebubbles_configs WHERE id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "36bd73443c823e02623b375631552352e1cce788ca7e7de4b08884cfcd614f16"
+}

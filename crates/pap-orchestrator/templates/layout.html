@@ -64,6 +64,9 @@
     }
     nav a:hover { color: var(--text); background: rgba(255,255,255,0.05); }
     nav a.active { color: var(--text); background: rgba(108,99,255,0.15); }
+    nav a.nav-advanced { font-size: 0.75rem; opacity: 0.5; }
+    nav a.nav-advanced:hover { opacity: 0.8; }
+    nav a.nav-advanced.active { opacity: 1; }
 
     /* ── Layout ── */
     .layout {
@@ -370,6 +373,65 @@
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* Integration cards */
+    .integration-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .integration-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      transition: border-color 0.15s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .integration-card:hover { border-color: var(--accent); }
+    .integration-card .ic-header { display: flex; align-items: center; gap: 0.75rem; }
+    .integration-card .ic-icon { font-size: 1.75rem; width: 2.5rem; text-align: center; }
+    .integration-card .ic-title { font-weight: 600; font-size: 1rem; }
+    .integration-card .ic-desc { font-size: 0.825rem; color: var(--muted); line-height: 1.5; }
+    .integration-card .ic-status { font-size: 0.8rem; display: flex; align-items: center; gap: 0.5rem; }
+
+    /* Wizard steps */
+    .wizard-steps { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .wizard-step {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-size: 0.8rem; color: var(--muted);
+      padding: 0.4rem 0.75rem; border-radius: 99px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+    }
+    .wizard-step.active { color: var(--text); background: rgba(108,99,255,0.15); border-color: var(--accent); }
+    .wizard-step.done { color: var(--success); border-color: rgba(34,197,94,0.3); }
+    .wizard-step .step-num {
+      width: 1.4rem; height: 1.4rem;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; font-size: 0.7rem; font-weight: 700;
+      background: var(--border); color: var(--muted);
+    }
+    .wizard-step.active .step-num { background: var(--accent); color: #fff; }
+    .wizard-step.done .step-num { background: rgba(34,197,94,0.2); color: var(--success); }
+
+    /* Person rows (for adding allowed senders) */
+    .person-row {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .person-row:last-child { border-bottom: none; }
+    .person-row .person-info { flex: 1; }
+    .person-row .person-name { font-weight: 500; font-size: 0.875rem; }
+    .person-row .person-phone { font-size: 0.8rem; color: var(--muted); font-family: "SF Mono","Fira Code",monospace; }
+    .person-avatar {
+      width: 2rem; height: 2rem;
+      border-radius: 50%;
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700; color: #fff;
+    }
   </style>
   {% block head %}{% endblock %}
 </head>
@@ -377,13 +439,13 @@
   <nav>
     <span class="logo">PAP</span>
     <a href="/chat"          class="{% if active_nav == "chat" %}active{% endif %}">Chat</a>
+    <a href="/integrations"  class="{% if active_nav == "integrations" %}active{% endif %}">Integrations</a>
     <a href="/agents"        class="{% if active_nav == "agents" %}active{% endif %}">Agents</a>
-    <a href="/pipes"         class="{% if active_nav == "pipes" %}active{% endif %}">Pipes</a>
-    <a href="/credentials"   class="{% if active_nav == "credentials" %}active{% endif %}">Credentials</a>
     <a href="/providers"     class="{% if active_nav == "providers" %}active{% endif %}">Providers</a>
-    <a href="/subscriptions" class="{% if active_nav == "subscriptions" %}active{% endif %}">Subscriptions</a>
     <a href="/users"         class="{% if active_nav == "users" %}active{% endif %}">Users</a>
-    <a href="/bluebubbles"   class="{% if active_nav == "bluebubbles" %}active{% endif %}">BlueBubbles</a>
+    <a href="/credentials"   class="nav-advanced {% if active_nav == "credentials" %}active{% endif %}">Credentials</a>
+    <a href="/pipes"         class="nav-advanced {% if active_nav == "pipes" %}active{% endif %}">Pipes</a>
+    <a href="/subscriptions" class="nav-advanced {% if active_nav == "subscriptions" %}active{% endif %}">Events</a>
     <span style="flex:1"></span>
     <form method="POST" action="/logout" style="margin:0">
       <button type="submit" class="btn btn-ghost btn-sm" style="border:none;color:var(--muted);font-size:0.8rem;cursor:pointer">Logout</button>

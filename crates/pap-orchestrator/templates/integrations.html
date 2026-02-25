@@ -1,0 +1,86 @@
+{% extends "layout.html" %}
+
+{% block title %}Integrations{% endblock %}
+
+{% block body %}
+<div class="page-content">
+  <div class="page-header">
+    <h1>Integrations</h1>
+    <p>Connect PAP to messaging platforms so your agents can receive and reply to messages.</p>
+  </div>
+
+  {% if !imessage_configs.is_empty() %}
+  <div class="card">
+    <div class="card-header">Active Integrations</div>
+    <div style="padding:1rem;display:flex;flex-direction:column;gap:0.5rem;">
+      {% for cfg in imessage_configs %}
+      <a href="/integrations/imessage/{{ cfg.config_id }}" class="integration-card" style="border:1px solid var(--border);">
+        <div class="ic-header">
+          <div class="ic-icon">💬</div>
+          <div>
+            <div class="ic-title">{{ cfg.name }}</div>
+            <div style="font-size:0.8rem;color:var(--muted)">iMessage via BlueBubbles</div>
+          </div>
+          <span style="margin-left:auto">
+            {% if cfg.active %}
+            <span class="badge badge-green">Connected</span>
+            {% else %}
+            <span class="badge badge-red">Inactive</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="ic-desc">
+          Agent: <strong>{{ cfg.agent_name }}</strong>
+          &middot; Server: <code style="font-size:0.75rem;background:rgba(0,0,0,0.2);padding:0.1rem 0.3rem;border-radius:3px">{{ cfg.server_url }}</code>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div style="margin-top:0.5rem;">
+    <h2 style="font-size:1rem;font-weight:600;margin-bottom:0.75rem;color:var(--muted)">Add New Integration</h2>
+    <div class="integration-grid">
+      <a href="/integrations/imessage/setup" class="integration-card">
+        <div class="ic-header">
+          <div class="ic-icon">💬</div>
+          <div class="ic-title">iMessage</div>
+        </div>
+        <div class="ic-desc">
+          Connect your Mac's iMessage via BlueBubbles. Your agents will be able to receive and reply to iMessages.
+        </div>
+        <div class="ic-status">
+          <span class="badge badge-blue">Setup Guide</span>
+        </div>
+      </a>
+
+      <div class="integration-card" style="opacity:0.4;cursor:not-allowed;border-style:dashed;">
+        <div class="ic-header">
+          <div class="ic-icon">📱</div>
+          <div class="ic-title">WhatsApp</div>
+        </div>
+        <div class="ic-desc">
+          Connect WhatsApp via Baileys adapter. Coming soon.
+        </div>
+        <div class="ic-status">
+          <span class="badge badge-gray">Coming Soon</span>
+        </div>
+      </div>
+
+      <div class="integration-card" style="opacity:0.4;cursor:not-allowed;border-style:dashed;">
+        <div class="ic-header">
+          <div class="ic-icon">🔌</div>
+          <div class="ic-title">Custom Webhook</div>
+        </div>
+        <div class="ic-desc">
+          Connect any messaging platform via a custom webhook adapter.
+        </div>
+        <div class="ic-status">
+          <span class="badge badge-gray">Coming Soon</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

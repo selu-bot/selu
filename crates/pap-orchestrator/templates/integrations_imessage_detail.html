@@ -1,0 +1,131 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ config.name }} — iMessage{% endblock %}
+
+{% block body %}
+<div class="page-content" style="max-width:700px;">
+
+  <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.25rem;">
+    <a href="/integrations" style="color:var(--muted);text-decoration:none;font-size:0.85rem;">&larr; Integrations</a>
+  </div>
+
+  <div class="page-header" style="flex-direction:row;align-items:center;justify-content:space-between;">
+    <div>
+      <h1 style="display:flex;align-items:center;gap:0.5rem;">
+        <span style="font-size:1.5rem;">💬</span>
+        {{ config.name }}
+      </h1>
+      <p>iMessage integration via BlueBubbles</p>
+    </div>
+    {% if config.active %}
+    <span class="badge badge-green" style="font-size:0.8rem;padding:0.3rem 0.75rem;">Connected</span>
+    {% else %}
+    <span class="badge badge-red" style="font-size:0.8rem;padding:0.3rem 0.75rem;">Inactive</span>
+    {% endif %}
+  </div>
+
+  {% if let Some(msg) = flash %}
+  <div class="flash flash-success">
+    <strong>{{ msg }}</strong>
+  </div>
+  {% endif %}
+
+  <!-- Connection Info -->
+  <div class="card">
+    <div class="card-header">Connection Details</div>
+    <div class="form-body" style="gap:0.5rem;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        <div>
+          <div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:0.2rem;">Server</div>
+          <div class="mono" style="font-size:0.85rem;">{{ config.server_url }}</div>
+        </div>
+        <div>
+          <div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:0.2rem;">Agent</div>
+          <div style="font-size:0.85rem;">{{ config.agent_name }}</div>
+        </div>
+        <div style="grid-column:1/-1;">
+          <div style="font-size:0.75rem;color:var(--muted);font-weight:600;margin-bottom:0.2rem;">Chat GUID</div>
+          <div class="mono" style="font-size:0.85rem;word-break:break-all;">{{ config.chat_guid }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- People who can talk to PAP -->
+  <div class="card">
+    <div class="card-header">
+      <span>Allowed People</span>
+      <span style="color:var(--muted);font-size:0.8rem;font-weight:400;">
+        {% if people.is_empty() %}Everyone (no restrictions){% else %}{{ people.len() }} configured{% endif %}
+      </span>
+    </div>
+
+    {% if people.is_empty() %}
+    <div style="padding:1.25rem;color:var(--muted);font-size:0.85rem;line-height:1.6;">
+      No sender restrictions configured. PAP will respond to <strong>all messages</strong> in this chat.
+      Add people below to only respond to specific senders.
+    </div>
+    {% else %}
+    <div>
+      {% for person in people %}
+      <div class="person-row">
+        <div class="person-avatar">{{ person.initials }}</div>
+        <div class="person-info">
+          <div class="person-name">{{ person.display_name }}</div>
+          <div class="person-phone">{{ person.sender_ref }}</div>
+        </div>
+        <button class="btn btn-danger btn-sm"
+                hx-delete="/integrations/imessage/{{ config.config_id }}/people/{{ person.ref_id }}"
+                hx-target="closest .person-row"
+                hx-swap="outerHTML"
+                hx-confirm="Remove {{ person.display_name }}?">Remove</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Add person form -->
+    <div style="border-top:1px solid var(--border);padding:1rem;">
+      <form method="post" action="/integrations/imessage/{{ config.config_id }}/people"
+            style="display:flex;gap:0.5rem;align-items:flex-end;">
+        <div class="form-group" style="flex:1">
+          <label>Phone / Apple ID</label>
+          <input name="sender_ref" type="text" placeholder="+14155551234 or email@icloud.com" required />
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>PAP User</label>
+          <select name="user_id" required>
+            {% for u in users %}
+            <option value="{{ u.id }}">{{ u.display }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:0.35rem;white-space:nowrap;">
+          Add Person
+        </button>
+      </form>
+      <span class="form-hint" style="margin-top:0.35rem;display:block;">
+        The phone number or Apple ID must match exactly how it appears in BlueBubbles for this person.
+      </span>
+    </div>
+  </div>
+
+  <!-- Danger zone -->
+  <div class="card" style="border-color:rgba(239,68,68,0.2);">
+    <div class="card-header" style="color:var(--danger);">Danger Zone</div>
+    <div class="form-body">
+      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.5rem;">
+        Removing this integration will stop PAP from monitoring this chat. Messages already received are kept.
+      </p>
+      <div>
+        <button class="btn btn-danger"
+                hx-delete="/integrations/imessage/{{ config.config_id }}"
+                hx-confirm="Remove this iMessage integration? PAP will stop monitoring this chat.">
+          Remove Integration
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

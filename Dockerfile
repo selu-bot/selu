@@ -9,8 +9,10 @@
 #
 # Runtime requirements:
 #   - Docker socket mounted (-v /var/run/docker.sock:/var/run/docker.sock)
-#   - agents/ directory mounted (-v ./agents:/app/agents)
 #   - .env file or environment variables for configuration
+#
+# The default agents are baked into the image. Override with a volume mount
+# if you want to use custom agents:  -v ./my-agents:/app/agents
 
 # ── Build stage: compile the application ─────────────────────────────────────
 FROM rust:1-bookworm AS builder
@@ -64,8 +66,9 @@ WORKDIR /app
 # Copy the compiled binary
 COPY --from=builder /usr/local/bin/pap-orchestrator /app/pap-orchestrator
 
-# Default agents directory – mount or copy your agents here
-RUN mkdir -p /app/agents && chown pap:pap /app/agents
+# Bake in the default agent definitions (YAML, system prompts, capability containers).
+# Override at runtime with: -v ./my-agents:/app/agents
+COPY agents/ /app/agents/
 
 # Data directory for SQLite database
 RUN mkdir -p /app/data && chown pap:pap /app/data

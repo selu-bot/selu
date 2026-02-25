@@ -92,7 +92,19 @@ docker pull ghcr.io/<your-org>/pap:dev_20260225_143000
 
 ### Run with Docker
 
-PAP needs access to the Docker socket (it manages capability containers) and requires the `agents/` directory to be mounted:
+PAP needs access to the Docker socket (it manages capability containers). The default agents (default, weather, pim, homekit) are baked into the image -- no mount required to get started:
+
+```bash
+docker run -d \
+  --name pap \
+  -p 3000:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v pap-data:/app/data \
+  -e PAP__ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  ghcr.io/<your-org>/pap:latest
+```
+
+To use custom agent definitions instead, mount over `/app/agents`:
 
 ```bash
 docker run -d \
@@ -109,8 +121,8 @@ docker run -d \
 
 | Mount | Purpose |
 |-------|---------|
-| `/var/run/docker.sock` | Required – PAP manages capability containers via the Docker API |
-| `/app/agents` | Agent definitions (YAML + system prompts + capability containers) |
+| `/var/run/docker.sock` | Required -- PAP manages capability containers via the Docker API |
+| `/app/agents` | Optional override -- custom agent definitions (defaults are built-in) |
 | `/app/data` | SQLite database (persistent state) |
 
 ### Docker Compose (recommended)
@@ -125,8 +137,9 @@ services:
       - "3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./agents:/app/agents:ro
       - pap-data:/app/data
+      # Uncomment to use custom agents instead of the built-in ones:
+      # - ./agents:/app/agents:ro
     environment:
       - PAP__ENCRYPTION_KEY=${PAP__ENCRYPTION_KEY}
       - PAP__EMBEDDING__API_KEY=${PAP__EMBEDDING__API_KEY:-}

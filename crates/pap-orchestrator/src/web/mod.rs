@@ -3,6 +3,7 @@ pub mod auth;
 pub mod bluebubbles;
 pub mod chat;
 pub mod credentials;
+pub mod integrations;
 pub mod pipes;
 pub mod providers;
 pub mod subscriptions;
@@ -29,12 +30,18 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/chat/{pipe_id}/stream/{stream_id}", get(chat::chat_stream))
         .route("/chat/{pipe_id}/send", post(chat::chat_send))
         .route("/chat/confirm/{confirmation_id}", post(chat::chat_confirm))
+        // Integrations (user-friendly flow)
+        .route("/integrations", get(integrations::integrations_index))
+        .route("/integrations/imessage/setup", get(integrations::imessage_setup_page).post(integrations::imessage_setup_submit))
+        .route("/integrations/imessage/{config_id}", get(integrations::imessage_detail).delete(integrations::imessage_delete))
+        .route("/integrations/imessage/{config_id}/people", post(integrations::imessage_add_person))
+        .route("/integrations/imessage/{config_id}/people/{ref_id}", delete(integrations::imessage_remove_person))
         // Agents (read-only; load from disk)
         .route("/agents", get(agents::agents_index))
-        // Pipes
+        // Pipes (advanced)
         .route("/pipes", get(pipes::pipes_index).post(pipes::pipes_create))
         .route("/pipes/{pipe_id}", delete(pipes::pipes_delete))
-        // Credentials
+        // Credentials (advanced)
         .route(
             "/credentials",
             get(credentials::credentials_index),
@@ -59,7 +66,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/providers", get(providers::providers_index))
         .route("/providers/{provider_id}/key", post(providers::providers_set_key).delete(providers::providers_delete_key))
         .route("/providers/{provider_id}/region", post(providers::providers_set_region))
-        // Subscriptions
+        // Subscriptions (advanced)
         .route(
             "/subscriptions",
             get(subscriptions::subscriptions_index).post(subscriptions::subscriptions_create),
@@ -71,7 +78,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         // Users
         .route("/users", get(users::users_index).post(users::users_create))
         .route("/users/{id}", delete(users::users_delete))
-        // BlueBubbles
+        // BlueBubbles (legacy, kept for direct access)
         .route("/bluebubbles", get(bluebubbles::bluebubbles_index))
         .route("/bluebubbles/configs", post(bluebubbles::bb_config_create))
         .route("/bluebubbles/configs/{id}", delete(bluebubbles::bb_config_delete))

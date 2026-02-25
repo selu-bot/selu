@@ -1,0 +1,188 @@
+{% extends "layout.html" %}
+
+{% block title %}Set Up iMessage{% endblock %}
+
+{% block body %}
+<div class="page-content" style="max-width:640px;">
+  <div class="page-header">
+    <h1>Set Up iMessage</h1>
+    <p>Connect your iMessage to PAP in a few steps. You'll need a <a href="https://bluebubbles.app" target="_blank" style="color:var(--accent)">BlueBubbles</a> server running on your Mac.</p>
+  </div>
+
+  <div class="wizard-steps">
+    <div class="wizard-step active"><span class="step-num">1</span> BlueBubbles Server</div>
+    <div class="wizard-step"><span class="step-num">2</span> Choose Chat</div>
+    <div class="wizard-step"><span class="step-num">3</span> Add People</div>
+  </div>
+
+  {% if let Some(err) = error %}
+  <div class="flash" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#f87171;">
+    <strong>{{ err }}</strong>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/integrations/imessage/setup" id="setup-form">
+    <!-- Step 1: BlueBubbles Server -->
+    <div class="card" id="step-1">
+      <div class="card-header">
+        <span>Step 1: Connect to BlueBubbles</span>
+        <span class="badge badge-blue">Required</span>
+      </div>
+      <div class="form-body">
+        <p style="font-size:0.85rem;color:var(--muted);line-height:1.6;margin-bottom:0.5rem;">
+          Enter your BlueBubbles server details. You can find these in the BlueBubbles app under Settings.
+        </p>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="bb-name">Integration Name</label>
+            <input id="bb-name" name="name" type="text" placeholder="e.g. Family Chat" required />
+            <span class="form-hint">A friendly name to identify this connection.</span>
+          </div>
+          <div class="form-group">
+            <label for="bb-url">Server URL</label>
+            <input id="bb-url" name="server_url" type="text" placeholder="http://localhost:1234" required />
+            <span class="form-hint">Your BlueBubbles server address and port.</span>
+          </div>
+          <div class="form-group">
+            <label for="bb-pass">Server Password</label>
+            <input id="bb-pass" name="server_password" type="password" placeholder="Your BlueBubbles password" required />
+            <span class="form-hint">Found in BlueBubbles Settings &gt; Connection &gt; Server Password.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: Chat Selection -->
+    <div class="card" id="step-2" style="margin-top:1rem;">
+      <div class="card-header">
+        <span>Step 2: Choose a Chat</span>
+        <span class="badge badge-blue">Required</span>
+      </div>
+      <div class="form-body">
+        <p style="font-size:0.85rem;color:var(--muted);line-height:1.6;margin-bottom:0.5rem;">
+          Enter the chat GUID that PAP should monitor. You can find this in BlueBubbles under your chat details.
+        </p>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="bb-chat">Chat GUID</label>
+            <input id="bb-chat" name="chat_guid" type="text" placeholder="iMessage;+;chat123..." required />
+            <span class="form-hint">The unique identifier for the iMessage chat or group.</span>
+          </div>
+          <div class="form-group">
+            <label for="bb-agent">Default Agent</label>
+            <select id="bb-agent" name="default_agent_id">
+              {% for a in agents %}
+              <option value="{{ a.id }}">{{ a.name }}</option>
+              {% endfor %}
+            </select>
+            <span class="form-hint">Which agent should respond to messages in this chat.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: People -->
+    <div class="card" id="step-3" style="margin-top:1rem;">
+      <div class="card-header">
+        <span>Step 3: Who Can Talk to PAP?</span>
+        <span class="badge badge-gray">Optional</span>
+      </div>
+      <div class="form-body">
+        <p style="font-size:0.85rem;color:var(--muted);line-height:1.6;margin-bottom:0.5rem;">
+          Add the people whose messages PAP should respond to. If you skip this step, PAP will respond to everyone in the chat.
+          You can always add more people later.
+        </p>
+
+        <div id="people-list" style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:0.75rem;">
+          <!-- JS will add people here -->
+        </div>
+
+        <div style="display:flex;gap:0.5rem;align-items:flex-end;">
+          <div class="form-group" style="flex:1">
+            <label>Phone / Apple ID</label>
+            <input id="add-phone" type="text" placeholder="+14155551234 or email@icloud.com" />
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>PAP User</label>
+            <select id="add-user">
+              {% for u in users %}
+              <option value="{{ u.id }}">{{ u.display }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="addPerson()" style="margin-bottom:0.35rem;white-space:nowrap;">
+            + Add
+          </button>
+        </div>
+        <span class="form-hint">The phone number or Apple ID must match exactly how it appears in BlueBubbles.</span>
+
+        <input type="hidden" name="people" id="people-input" value="" />
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <div style="margin-top:1.25rem;display:flex;justify-content:space-between;align-items:center;">
+      <a href="/integrations" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-primary" style="padding:0.6rem 2rem;font-size:0.95rem;">
+        Set Up iMessage
+      </button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block head %}
+<script>
+let people = [];
+
+function addPerson() {
+  const phone = document.getElementById('add-phone');
+  const userSelect = document.getElementById('add-user');
+  const phoneVal = phone.value.trim();
+  const userId = userSelect.value;
+  const userLabel = userSelect.options[userSelect.selectedIndex]?.text || '';
+
+  if (!phoneVal) { phone.focus(); return; }
+
+  people.push({ phone: phoneVal, userId: userId, userLabel: userLabel });
+  phone.value = '';
+  renderPeople();
+}
+
+function removePerson(idx) {
+  people.splice(idx, 1);
+  renderPeople();
+}
+
+function renderPeople() {
+  const list = document.getElementById('people-list');
+  const input = document.getElementById('people-input');
+
+  if (people.length === 0) {
+    list.innerHTML = '';
+    input.value = '';
+    return;
+  }
+
+  list.innerHTML = people.map((p, i) => `
+    <div class="person-row" style="background:var(--bg);border-radius:7px;border:1px solid var(--border);">
+      <div class="person-avatar">${p.userLabel.substring(0, 2).toUpperCase()}</div>
+      <div class="person-info">
+        <div class="person-name">${escapeHtml(p.userLabel)}</div>
+        <div class="person-phone">${escapeHtml(p.phone)}</div>
+      </div>
+      <button type="button" class="btn btn-danger btn-sm" onclick="removePerson(${i})">Remove</button>
+    </div>
+  `).join('');
+
+  input.value = people.map(p => `${p.phone}:${p.userId}`).join(',');
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+{% endblock %}

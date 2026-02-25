@@ -32,6 +32,6 @@ __pycache__/
 # CI/CD (not needed inside image)
 .github/
 
-# Documentation
-*.md
-LICENSE
+# Documentation (top-level only – agents/**/*.md must be included)
+/SETUP.md
+/LICENSE
