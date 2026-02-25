@@ -40,8 +40,20 @@ async fn main() -> Result<()> {
 
     let db = persistence::db::connect(&cfg.database.url).await?;
 
-    let agent_defs = agents::loader::load_all(&cfg.agents_dir).await?;
-    info!("Loaded {} agent(s)", agent_defs.len());
+    // ── Ensure installed agents directory exists ──────────────────────────────
+    tokio::fs::create_dir_all(&cfg.installed_agents_dir).await?;
+
+    // ── Ensure bundled default agent has a DB row ─────────────────────────────
+    agents::bundled::ensure_db_row(&db).await?;
+
+    // ── Load installed agents from DB + filesystem ────────────────────────────
+    let mut agent_defs = agents::loader::load_installed(&db, &cfg.installed_agents_dir).await?;
+
+    // Always inject the bundled default agent (cannot be uninstalled)
+    let default_agent = agents::bundled::default_agent();
+    agent_defs.insert("default".to_string(), default_agent);
+
+    info!("Loaded {} agent(s) (including bundled default)", agent_defs.len());
 
     // ── Credential store ──────────────────────────────────────────────────────
     let enc_key = parse_key(&cfg.encryption_key)?;

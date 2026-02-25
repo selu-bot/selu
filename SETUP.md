@@ -55,7 +55,8 @@ Defaults that work out of the box (override if needed):
 PAP__SERVER__HOST=0.0.0.0
 PAP__SERVER__PORT=3000
 PAP__DATABASE__URL=sqlite://pap.db?mode=rwc
-PAP__AGENTS_DIR=./agents
+PAP__MARKETPLACE_URL=https://test.doko-ost.de/agents.json
+PAP__INSTALLED_AGENTS_DIR=./installed_agents
 PAP__EGRESS_PROXY_ADDR=0.0.0.0:8888
 ```
 
@@ -92,7 +93,7 @@ docker pull ghcr.io/<your-org>/pap:dev_20260225_143000
 
 ### Run with Docker
 
-PAP needs access to the Docker socket (it manages capability containers). The default agents (default, weather, pim, homekit) are baked into the image -- no mount required to get started:
+PAP needs access to the Docker socket (it manages capability containers). The default assistant agent is bundled into the binary. Additional agents (weather, homekit, etc.) are installed at runtime from the marketplace via the web UI:
 
 ```bash
 docker run -d \
@@ -100,19 +101,7 @@ docker run -d \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v pap-data:/app/data \
-  -e PAP__ENCRYPTION_KEY="$(openssl rand -base64 32)" \
-  ghcr.io/<your-org>/pap:latest
-```
-
-To use custom agent definitions instead, mount over `/app/agents`:
-
-```bash
-docker run -d \
-  --name pap \
-  -p 3000:3000 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v $(pwd)/agents:/app/agents:ro \
-  -v pap-data:/app/data \
+  -v pap-agents:/app/installed_agents \
   -e PAP__ENCRYPTION_KEY="$(openssl rand -base64 32)" \
   ghcr.io/<your-org>/pap:latest
 ```
@@ -122,7 +111,7 @@ docker run -d \
 | Mount | Purpose |
 |-------|---------|
 | `/var/run/docker.sock` | Required -- PAP manages capability containers via the Docker API |
-| `/app/agents` | Optional override -- custom agent definitions (defaults are built-in) |
+| `/app/installed_agents` | Persistent storage for agents installed from the marketplace |
 | `/app/data` | SQLite database (persistent state) |
 
 ### Docker Compose (recommended)
@@ -138,15 +127,17 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - pap-data:/app/data
-      # Uncomment to use custom agents instead of the built-in ones:
-      # - ./agents:/app/agents:ro
+      - pap-agents:/app/installed_agents
     environment:
       - PAP__ENCRYPTION_KEY=${PAP__ENCRYPTION_KEY}
       - PAP__EMBEDDING__API_KEY=${PAP__EMBEDDING__API_KEY:-}
+      # Optional: override marketplace URL
+      # - PAP__MARKETPLACE_URL=https://test.doko-ost.de/agents.json
     restart: unless-stopped
 
 volumes:
   pap-data:
+  pap-agents:
 ```
 
 Then:
@@ -226,12 +217,13 @@ No additional secrets are needed. The workflow uses the built-in `GITHUB_TOKEN` 
 │                                │                         │
 │  ┌─────────────────────────────▼──────────────────────┐  │
 │  │              Agent Router & Engine                  │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────┐ │  │
-│  │  │ default  │ │ weather  │ │   pim    │ │homekit│ │  │
-│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └───┬───┘ │  │
-│  └───────┼─────────────┼────────────┼───────────┼─────┘  │
-│          │             │            │           │         │
-│  ┌───────▼─────────────▼────────────▼───────────▼─────┐  │
+│  │  ┌──────────┐                                      │  │
+│  │  │ default  │  + installed agents from marketplace  │  │
+│  │  │(bundled) │  (homekit, weather, ...)              │  │
+│  │  └────┬─────┘                                      │  │
+│  └───────┼────────────────────────────────────────────┘  │
+│          │                                               │
+│  ┌───────▼──────────────────────────────────────────┐  │
 │  │         Capability Engine (Docker + gRPC)          │  │
 │  └────────────────────────────────────────────────────┘  │
 │                                                          │
@@ -253,7 +245,8 @@ No additional secrets are needed. The workflow uses the built-in `GITHUB_TOKEN` 
 | `PAP__SERVER__HOST` | `0.0.0.0` | Bind address |
 | `PAP__SERVER__PORT` | `3000` | HTTP port |
 | `PAP__DATABASE__URL` | `sqlite://pap.db?mode=rwc` | SQLite connection string |
-| `PAP__AGENTS_DIR` | `./agents` | Path to agent definitions |
+| `PAP__MARKETPLACE_URL` | `https://test.doko-ost.de/agents.json` | Agent marketplace catalogue URL |
+| `PAP__INSTALLED_AGENTS_DIR` | `./installed_agents` | Directory for marketplace-installed agents |
 | `PAP__ENCRYPTION_KEY` | *(required)* | Base64-encoded 32-byte AES key |
 | `PAP__EGRESS_PROXY_ADDR` | `0.0.0.0:8888` | Egress proxy listen address |
 | `PAP__MAX_CHAIN_DEPTH` | `3` | Max event chain depth |

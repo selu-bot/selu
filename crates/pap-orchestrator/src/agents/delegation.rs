@@ -121,22 +121,19 @@ pub fn parse_args(args: &serde_json::Value) -> Result<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agents::loader::{AgentDefinition, ModelConfig};
+    use crate::agents::loader::AgentDefinition;
 
     fn make_agent(id: &str, name: &str, prompt: &str) -> AgentDefinition {
         AgentDefinition {
             id: id.to_string(),
             name: name.to_string(),
-            model: ModelConfig {
-                provider: "bedrock".to_string(),
-                model_id: "test-model".to_string(),
-                temperature: 0.5,
-            },
+            model: None,
             session: Default::default(),
             memory: Default::default(),
             system_prompt: prompt.to_string(),
             capabilities: vec![],
             capability_manifests: HashMap::new(),
+            install_steps: vec![],
         }
     }
 

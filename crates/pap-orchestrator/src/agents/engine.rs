@@ -101,7 +101,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         });
     }
 
-    // ── Context + provider ────────────────────────────────────────────────────
+    // ── Context + provider (model resolved from DB) ────────────────────────────
     let messages = context::build(
         &state.db,
         &agent,
@@ -112,7 +112,9 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         &effective_text,
         Some(&agents_snapshot),
     ).await?;
-    let provider = load_provider(&state.db, &agent.model.provider, &agent.model.model_id, &state.credentials).await?;
+
+    let resolved = crate::agents::model::resolve_model(&state.db, &agent.id).await?;
+    let provider = load_provider(&state.db, &resolved.provider_id, &resolved.model_id, &state.credentials).await?;
 
     // ── Tool specs: capability tools + built-in emit_event + delegation ───────
     let (mut tool_specs, confirmation_tools) = build_tool_specs(&agent.capability_manifests);
@@ -139,7 +141,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         provider,
         messages,
         tool_specs,
-        agent.model.temperature,
+        resolved.temperature,
         tx.clone(),
         confirmation_tools,
         move |name, args| {

@@ -6,3 +6,6 @@ pub mod delegation;
 pub mod memory;
 pub mod engine;
 pub mod thread;
+pub mod model;
+pub mod bundled;
+pub mod marketplace;

@@ -71,16 +71,13 @@ mod tests {
             AgentDefinition {
                 id: "dev".to_string(),
                 name: "Dev".to_string(),
-                model: crate::agents::loader::ModelConfig {
-                    provider: "anthropic".to_string(),
-                    model_id: "claude-opus-4-5".to_string(),
-                    temperature: 0.7,
-                },
+                model: None,
                 session: Default::default(),
                 memory: Default::default(),
                 system_prompt: String::new(),
                 capabilities: vec![],
                 capability_manifests: std::collections::HashMap::new(),
+                install_steps: vec![],
             },
         );
 

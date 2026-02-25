@@ -6,42 +6,249 @@
 <div class="page-content">
   <div class="page-header">
     <h1>Agents</h1>
-    <p>Agent definitions loaded from the <code style="font-size:0.8rem;background:rgba(0,0,0,0.3);padding:0.1rem 0.4rem;border-radius:4px;font-family:'SF Mono','Fira Code',monospace">agents/</code> directory at startup.</p>
+    <p>Install agents from the marketplace and configure their LLM provider and model.</p>
   </div>
 
+  {# ── Global Default Model ─────────────────────────────────────────────────── #}
   <div class="card">
-    <div class="card-header">Loaded Agents</div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Provider</th>
-            <th>Model</th>
-            <th>Capabilities</th>
-            <th>Trigger</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for agent in agents %}
-          <tr>
-            <td class="mono">{{ agent.id }}</td>
-            <td><strong>{{ agent.name }}</strong></td>
-            <td><span class="badge badge-blue">{{ agent.provider }}</span></td>
-            <td class="mono">{{ agent.model_id }}</td>
-            <td>{{ agent.capability_count }}</td>
-            <td><span class="badge badge-gray">{{ agent.session_trigger }}</span></td>
-          </tr>
-          {% endfor %}
-          {% if agents.is_empty() %}
-          <tr class="empty-row">
-            <td colspan="6">No agents loaded. Add agent definitions to the agents/ directory and restart.</td>
-          </tr>
+    <div class="card-header">
+      <span>Global Default Model</span>
+      <span class="badge badge-gray">Used when no per-agent model is set</span>
+    </div>
+    <div class="form-body">
+      <form method="POST" action="/agents/default-model" style="display:flex;flex-direction:column;gap:0.75rem">
+        <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="flex:1;min-width:150px">
+            <label>Provider</label>
+            <select name="provider_id" id="global-provider-select"
+                    onchange="fetchModels(this.value, '#global-model-select')">
+              <option value="">-- Select provider --</option>
+              {% for p in providers %}
+              <option value="{{ p.id }}" {% if p.id == global_provider %}selected{% endif %}>{{ p.display_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="flex:2;min-width:200px">
+            <label>Model</label>
+            <select name="model_id" id="global-model-select"
+                    data-current="{{ global_model }}">
+              {% if global_model.is_empty() %}
+              <option value="">-- Select a provider first --</option>
+              {% else %}
+              <option value="{{ global_model }}" selected>{{ global_model_display_name }}</option>
+              {% endif %}
+            </select>
+          </div>
+          <div class="form-group" style="width:80px">
+            <label>Temp</label>
+            <input type="text" name="temperature" value="{{ global_temperature }}" placeholder="0.7" />
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:0.25rem">Save</button>
+        </div>
+        {% if providers.is_empty() %}
+        <p style="color:var(--muted);font-size:0.8rem">No providers configured. Go to <a href="/providers" style="color:var(--primary)">Providers</a> to set up an API key first.</p>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+
+  {# ── Tab Navigation ────────────────────────────────────────────────────────── #}
+  <div style="display:flex;gap:1rem;margin-bottom:1rem">
+    <button class="btn btn-sm" onclick="showTab('installed')" id="tab-installed" style="opacity:1">Installed Agents</button>
+    <button class="btn btn-sm" onclick="showTab('marketplace')" id="tab-marketplace" style="opacity:0.6">Marketplace</button>
+  </div>
+
+  {# ── Installed Agents Tab ──────────────────────────────────────────────────── #}
+  <div id="panel-installed">
+    <div class="card">
+      <div class="card-header">Installed Agents</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Provider / Model</th>
+              <th>Capabilities</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for agent in agents %}
+            <tr>
+              <td class="mono">{{ agent.id }}</td>
+              <td>
+                <strong>{{ agent.name }}</strong>
+                {% if agent.is_bundled %}<span class="badge badge-blue" style="margin-left:0.5rem">Bundled</span>{% endif %}
+              </td>
+              <td>
+                {% if !agent.provider_id.is_empty() %}
+                  <span class="badge badge-blue">{{ agent.provider_id }}</span>
+                  <span style="font-size:0.85rem">{{ agent.model_display_name }}</span>
+                {% else %}
+                  <span class="badge badge-gray">Global default</span>
+                {% endif %}
+              </td>
+              <td>{{ agent.capability_count }}</td>
+              <td>
+                {% if agent.setup_complete %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-yellow">Setup pending</span>
+                {% endif %}
+              </td>
+              <td style="display:flex;gap:0.25rem;flex-wrap:wrap">
+                {% if !agent.setup_complete %}
+                  <a href="/agents/{{ agent.id }}/setup" class="btn btn-primary btn-sm">Setup</a>
+                {% endif %}
+
+                {# Model assignment form (inline toggle) #}
+                <button class="btn btn-sm"
+                        onclick="var p=this.nextElementSibling; p.style.display=p.style.display==='none'?'block':'none'; var ms=p.querySelector('select[name=model_id]'); var pv=p.querySelector('select[name=provider_id]').value; if(pv && ms.options.length<=1){fetchModels(pv, ms);}">
+                  Model
+                </button>
+                <div style="display:none;position:absolute;z-index:10;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:0.75rem;min-width:320px;box-shadow:0 4px 12px rgba(0,0,0,0.3)">
+                  <form method="POST" action="/agents/{{ agent.id }}/model" style="display:flex;flex-direction:column;gap:0.5rem">
+                    <div class="form-group">
+                      <label>Provider</label>
+                      <select name="provider_id"
+                              onchange="fetchModels(this.value, this.closest('form').querySelector('select[name=model_id]'))">
+                        <option value="">-- Global default --</option>
+                        {% for p in providers %}
+                        <option value="{{ p.id }}" {% if p.id == agent.provider_id %}selected{% endif %}>{{ p.display_name }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label>Model</label>
+                      <select name="model_id" data-current="{{ agent.model_id }}">
+                        {% if agent.model_id.is_empty() %}
+                        <option value="">-- Select a provider first --</option>
+                        {% else %}
+                        <option value="{{ agent.model_id }}" selected>{{ agent.model_display_name }}</option>
+                        {% endif %}
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label>Temperature</label>
+                      <input type="text" name="temperature" value="0.7" placeholder="0.7" style="width:80px" />
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                  </form>
+                </div>
+
+                {% if !agent.is_bundled %}
+                <form method="POST" action="/agents/{{ agent.id }}/uninstall" style="display:inline"
+                      onsubmit="return confirm('Uninstall {{ agent.name }}? This will remove all agent files.')">
+                  <button type="submit" class="btn btn-danger btn-sm">Uninstall</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            {% if agents.is_empty() %}
+            <tr class="empty-row">
+              <td colspan="6">No agents installed. Visit the Marketplace tab to install agents.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {# ── Marketplace Tab ───────────────────────────────────────────────────────── #}
+  <div id="panel-marketplace" style="display:none">
+    {% if !marketplace_error.is_empty() %}
+    <div class="card">
+      <div class="form-body">
+        <p style="color:var(--danger);padding:0.5rem 0">{{ marketplace_error }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if marketplace_agents.is_empty() && marketplace_error.is_empty() %}
+    <div class="card">
+      <div class="form-body">
+        <p style="color:var(--muted);text-align:center;padding:1rem 0">
+          No agents available in the marketplace.
+        </p>
+      </div>
+    </div>
+    {% endif %}
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem">
+      {% for agent in marketplace_agents %}
+      <div class="card">
+        <div class="card-header">
+          <span>{{ agent.name }}</span>
+          <span class="badge badge-gray">v{{ agent.version }}</span>
+        </div>
+        <div class="form-body">
+          <p style="color:var(--muted);margin-bottom:0.75rem">{{ agent.description }}</p>
+          {% if !agent.author.is_empty() %}
+          <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem">By {{ agent.author }}</p>
           {% endif %}
-        </tbody>
-      </table>
+          {% if agent.is_installed %}
+            <span class="badge badge-green">Installed</span>
+          {% else %}
+            <form method="POST" action="/agents/install">
+              <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
+              <button type="submit" class="btn btn-primary btn-sm">Install</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
     </div>
   </div>
 </div>
+
+<script>
+function showTab(tab) {
+  document.getElementById('panel-installed').style.display = tab === 'installed' ? 'block' : 'none';
+  document.getElementById('panel-marketplace').style.display = tab === 'marketplace' ? 'block' : 'none';
+  document.getElementById('tab-installed').style.opacity = tab === 'installed' ? '1' : '0.6';
+  document.getElementById('tab-marketplace').style.opacity = tab === 'marketplace' ? '1' : '0.6';
+}
+
+// Fetch models for a provider and populate a target <select>.
+// `target` can be a CSS selector string or a DOM element.
+function fetchModels(providerId, target) {
+  var sel = (typeof target === 'string') ? document.querySelector(target) : target;
+  if (!sel) return;
+  if (!providerId) {
+    sel.innerHTML = '<option value="">-- Select a provider first --</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Loading models...</option>';
+  fetch('/agents/models/' + providerId, { credentials: 'same-origin' })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      sel.innerHTML = html;
+      // Re-select the previously saved value if present
+      var cur = sel.dataset.current;
+      if (cur) {
+        for (var i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === cur) {
+            sel.selectedIndex = i;
+            break;
+          }
+        }
+      }
+    })
+    .catch(function() {
+      sel.innerHTML = '<option value="">Failed to load models</option>';
+    });
+}
+
+// On page load, fetch models for any provider that is already selected
+document.addEventListener('DOMContentLoaded', function() {
+  var gp = document.getElementById('global-provider-select');
+  if (gp && gp.value) {
+    fetchModels(gp.value, '#global-model-select');
+  }
+});
+</script>
 {% endblock %}

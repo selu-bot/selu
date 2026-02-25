@@ -78,3 +78,7 @@ cel-interpreter = "0.8"
 
 # Time (for cookie max_age)
 time = "0.3"
+
+# Archive handling (agent marketplace)
+flate2 = "1"
+tar = "0.4"

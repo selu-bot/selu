@@ -345,12 +345,6 @@ pub async fn setup_submit(
     )
     .execute(&state.db)
     .await;
-    let _ = sqlx::query!(
-        r#"INSERT OR IGNORE INTO llm_providers (id, display_name, api_key_encrypted, base_url, active)
-           VALUES ('ollama', 'Ollama (local)', '', 'http://localhost:11434', 1)"#
-    )
-    .execute(&state.db)
-    .await;
 
     // Auto-login: create a web session
     let session_id = Uuid::new_v4().to_string();

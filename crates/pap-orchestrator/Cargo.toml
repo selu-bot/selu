@@ -71,6 +71,10 @@ time = { workspace = true }
 # Docker
 bollard = { workspace = true }
 
+# Archive handling (agent marketplace)
+flate2 = { workspace = true }
+tar = { workspace = true }
+
 [build-dependencies]
 tonic-build = { version = "0.13", features = ["prost"] }
 protox = "0.7"

@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 pub struct AppConfig {
     pub server: ServerConfig,
     pub database: DatabaseConfig,
-    pub agents_dir: String,
+    /// URL of the agent marketplace catalogue JSON
+    pub marketplace_url: String,
+    /// Directory where installed agents are stored (Docker volume mount)
+    pub installed_agents_dir: String,
     pub encryption_key: String, // base64-encoded 32-byte key
     /// Address the egress proxy listens on.
     /// Listens on 0.0.0.0:<port> so it is reachable from all Docker bridge networks.
@@ -63,7 +66,8 @@ impl AppConfig {
             .set_default("server.host", "0.0.0.0")?
             .set_default("server.port", 3000)?
             .set_default("database.url", "sqlite://pap.db?mode=rwc")?
-            .set_default("agents_dir", "./agents")?
+            .set_default("marketplace_url", "https://test.doko-ost.de/agents.json")?
+            .set_default("installed_agents_dir", "./installed_agents")?
             .set_default("egress_proxy_addr", "0.0.0.0:8888")?
             .set_default("max_chain_depth", 3)?
             .set_default("embedding.api_key", "")?
