@@ -207,10 +207,7 @@ async fn poll_loop(instance: AdapterInstance, state: AppState) {
 }
 
 async fn poll_once(instance: &AdapterInstance, state: &AppState, after_ts: i64) -> Result<i64> {
-    let url = format!(
-        "{}/api/v1/message/query?password={}",
-        instance.server_url, instance.server_password
-    );
+    let url = format!("{}/api/v1/message/query", instance.server_url);
 
     let body = serde_json::json!({
         "chatGuid": instance.chat_guid,
@@ -220,7 +217,11 @@ async fn poll_once(instance: &AdapterInstance, state: &AppState, after_ts: i64) 
         "with": ["handle"],
     });
 
-    let resp = instance.http.post(&url).json(&body).send().await?;
+    let resp = instance.http.post(&url)
+        .query(&[("password", instance.server_password.as_str())])
+        .json(&body)
+        .send()
+        .await?;
     let bb_resp: BbQueryResponse = resp.json().await?;
 
     let mut max_ts = after_ts;
@@ -445,10 +446,7 @@ async fn send_bb_reply(
     reply_to_guid: Option<&str>,
     sent_guids: &SentGuids,
 ) {
-    let url = format!(
-        "{}/api/v1/message/text?password={}",
-        server_url, server_password
-    );
+    let url = format!("{}/api/v1/message/text", server_url);
 
     let temp_guid = format!("pap-{}", current_epoch_ms());
 
@@ -460,7 +458,11 @@ async fn send_bb_reply(
         selected_message_guid: reply_to_guid.map(|s| s.to_string()),
     };
 
-    let resp = http.post(&url).json(&body).send().await;
+    let resp = http.post(&url)
+        .query(&[("password", server_password)])
+        .json(&body)
+        .send()
+        .await;
 
     match resp {
         Ok(r) if r.status().is_success() => {

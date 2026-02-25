@@ -152,21 +152,26 @@ struct BbApiChatResponse {
 struct BbApiChat {
     guid: Option<String>,
     display_name: Option<String>,
+    #[serde(default)]
     participants: Option<Vec<BbApiHandle>>,
     #[serde(default)]
     group_id: Option<String>,
+    /// When queried with ["lastMessage"], BB nests the full message object here.
+    #[serde(default)]
     last_message: Option<BbApiLastMessage>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BbApiHandle {
+    #[serde(default)]
     address: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BbApiLastMessage {
+    #[serde(default)]
     text: Option<String>,
 }
 
@@ -206,20 +211,19 @@ pub async fn bb_proxy_chats(
         .build()
         .unwrap_or_default();
 
-    // Use proper query param encoding so passwords with special chars (!@# etc) work.
-    // BlueBubbles expects array params as with[]=x&with[]=y.
-    let url = format!("{}/api/v1/chat", server_url);
+    // BlueBubbles uses POST /api/v1/chat/query with a JSON body.
+    // Password goes as a query param; the rest is in the body.
+    let url = format!("{}/api/v1/chat/query", server_url);
 
-    let resp = match http.get(&url)
-        .query(&[
-            ("password", req.server_password.as_str()),
-            ("limit", "50"),
-            ("sort", "lastmessage"),
-        ])
-        .query(&[
-            ("with[]", "lastMessage"),
-            ("with[]", "participants"),
-        ])
+    let body = serde_json::json!({
+        "with": ["lastMessage", "participants"],
+        "limit": 50,
+        "sort": "lastmessage",
+    });
+
+    let resp = match http.post(&url)
+        .query(&[("password", req.server_password.as_str())])
+        .json(&body)
         .send()
         .await
     {
@@ -251,13 +255,28 @@ pub async fn bb_proxy_chats(
         return Json(BbProxyResponse { ok: false, error: Some(msg), chats: None }).into_response();
     }
 
-    let bb_resp: BbApiChatResponse = match resp.json().await {
+    let raw_body = match resp.text().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("BB proxy: failed to read response body: {e}");
+            return Json(BbProxyResponse {
+                ok: false,
+                error: Some("Failed to read response from BlueBubbles.".to_string()),
+                chats: None,
+            }).into_response();
+        }
+    };
+
+    let bb_resp: BbApiChatResponse = match serde_json::from_str(&raw_body) {
         Ok(r) => r,
         Err(e) => {
             error!("BB proxy: failed to parse response: {e}");
+            // Log a truncated version of the body for debugging
+            let preview = if raw_body.len() > 500 { &raw_body[..500] } else { &raw_body };
+            error!("BB proxy: response body preview: {preview}");
             return Json(BbProxyResponse {
                 ok: false,
-                error: Some("Got an unexpected response from BlueBubbles. Is it running the latest version?".to_string()),
+                error: Some("Got an unexpected response from BlueBubbles. Check the PAP logs for details.".to_string()),
                 chats: None,
             }).into_response();
         }

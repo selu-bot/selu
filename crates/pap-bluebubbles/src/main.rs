@@ -180,8 +180,8 @@ async fn poll_loop(state: AppState) {
 
 async fn poll_once(state: &AppState, after_ts: i64) -> Result<i64> {
     let url = format!(
-        "{}/api/v1/message/query?password={}",
-        state.config.bb_url, state.config.bb_password
+        "{}/api/v1/message/query",
+        state.config.bb_url
     );
 
     let body = serde_json::json!({
@@ -192,7 +192,11 @@ async fn poll_once(state: &AppState, after_ts: i64) -> Result<i64> {
         "with": ["handle"],
     });
 
-    let resp = state.http.post(&url).json(&body).send().await?;
+    let resp = state.http.post(&url)
+        .query(&[("password", state.config.bb_password.as_str())])
+        .json(&body)
+        .send()
+        .await?;
     let bb_resp: BbQueryResponse = resp.json().await?;
 
     let mut max_ts = after_ts;
@@ -430,8 +434,8 @@ async fn handle_pap_outbound(
     );
 
     let bb_url = format!(
-        "{}/api/v1/message/text?password={}",
-        state.config.bb_url, state.config.bb_password
+        "{}/api/v1/message/text",
+        state.config.bb_url
     );
 
     let clean_text = strip_markdown(&envelope.text);
@@ -444,7 +448,11 @@ async fn handle_pap_outbound(
         temp_guid,
     };
 
-    let resp = state.http.post(&bb_url).json(&body).send().await;
+    let resp = state.http.post(&bb_url)
+        .query(&[("password", state.config.bb_password.as_str())])
+        .json(&body)
+        .send()
+        .await;
 
     match resp {
         Ok(r) if r.status().is_success() => {
