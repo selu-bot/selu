@@ -16,52 +16,134 @@ permissions:
   packages: write
 
 jobs:
-  build-and-push:
+  # ── Compute tags once, share across jobs ─────────────────────────────────
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.tags.outputs.tags }}
+      image: ${{ steps.tags.outputs.image }}
+    steps:
+      - name: Compute image tags
+        id: tags
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref_name }}" =~ ^release_(.+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            echo "tags=${IMAGE}:latest,${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "### Release build: \`${VERSION}\` + \`latest\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            TS=$(date -u +%Y%m%d_%H%M%S)
+            echo "tags=${IMAGE}:dev_${TS}" >> "$GITHUB_OUTPUT"
+            echo "### Dev build: \`dev_${TS}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ── Per-architecture builds (run in parallel) ───────────────────────────
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (for multi-arch builds)
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Determine image tags ───────────────────────────────────────────
-      - name: Compute image tags
-        id: tags
+      # Derive a cache scope from the platform (e.g. "linux-amd64")
+      - name: Prepare platform vars
+        id: platform
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          PAIR="${{ matrix.platform }}"
+          echo "scope=${PAIR//\//-}" >> "$GITHUB_OUTPUT"
 
-          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref_name }}" =~ ^release_(.+)$ ]]; then
-            # Tag event: release_x.x.x → latest + x.x.x
-            VERSION="${BASH_REMATCH[1]}"
-            echo "tags=${IMAGE}:latest,${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "### Release build: \`${VERSION}\` + \`latest\`" >> "$GITHUB_STEP_SUMMARY"
-          else
-            # Push to main → dev_<timestamp>
-            TS=$(date -u +%Y%m%d_%H%M%S)
-            echo "tags=${IMAGE}:dev_${TS}" >> "$GITHUB_OUTPUT"
-            echo "### Dev build: \`dev_${TS}\`" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      # ── Build + push multi-arch image ──────────────────────────────────
-      - name: Build and push
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          platforms: ${{ matrix.platform }}
+          # Push individual arch image as a digest (no tag yet)
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          # Per-architecture GHA cache so amd64 and arm64 don't evict each other
+          cache-from: type=gha,scope=${{ steps.platform.outputs.scope }}
+          cache-to: type=gha,scope=${{ steps.platform.outputs.scope }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          DIGEST="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ steps.platform.outputs.scope }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ── Merge per-arch images into a multi-arch manifest ────────────────────
+  merge:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Create and push multi-arch manifest
+        run: |
+          IMAGE="${{ needs.prepare.outputs.image }}"
+          TAGS="${{ needs.prepare.outputs.tags }}"
+
+          # Build --tag flags from comma-separated list
+          TAG_FLAGS=""
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          for TAG in "${TAG_ARRAY[@]}"; do
+            TAG_FLAGS="${TAG_FLAGS} --tag ${TAG}"
+          done
+
+          # Build source list from digests
+          SOURCES=""
+          for DIGEST_FILE in /tmp/digests/*; do
+            SOURCES="${SOURCES} ${IMAGE}@sha256:$(basename ${DIGEST_FILE})"
+          done
+
+          docker buildx imagetools create ${TAG_FLAGS} ${SOURCES}
+
+      - name: Inspect manifest
+        run: |
+          TAGS="${{ needs.prepare.outputs.tags }}"
+          FIRST_TAG="${TAGS%%,*}"
+          docker buildx imagetools inspect "${FIRST_TAG}"

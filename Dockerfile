@@ -12,22 +12,8 @@
 #   - agents/ directory mounted (-v ./agents:/app/agents)
 #   - .env file or environment variables for configuration
 
-# ── Chef stage: cache Rust dependencies ──────────────────────────────────────
-FROM rust:1.87-bookworm AS chef
-
-RUN cargo install cargo-chef --locked
-WORKDIR /build
-
-# ── Plan stage: generate dependency recipe ───────────────────────────────────
-FROM chef AS planner
-
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ crates/
-
-RUN cargo chef prepare --recipe-path recipe.json
-
 # ── Build stage: compile the application ─────────────────────────────────────
-FROM chef AS builder
+FROM rust:1-bookworm AS builder
 
 # Install protobuf compiler (needed by protox/tonic-build at compile time)
 # and pkg-config for ring's native dependencies
@@ -36,22 +22,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=planner /build/recipe.json recipe.json
+WORKDIR /build
 
-# Build dependencies only (cached layer)
-RUN cargo chef cook --release --recipe-path recipe.json
-
-# Copy full source
+# Copy manifests first for better layer caching
 COPY Cargo.toml Cargo.lock ./
-COPY crates/ crates/
+COPY crates/pap-core/Cargo.toml crates/pap-core/Cargo.toml
+COPY crates/pap-orchestrator/Cargo.toml crates/pap-orchestrator/Cargo.toml
+COPY crates/pap-bluebubbles/Cargo.toml crates/pap-bluebubbles/Cargo.toml
 
 # Copy SQLx offline query metadata for compile-time SQL checking
 COPY .sqlx/ .sqlx/
 
 ENV SQLX_OFFLINE=true
 
-# Build the orchestrator binary
-RUN cargo build --release --bin pap-orchestrator
+# Copy full source
+COPY crates/ crates/
+
+# Build the orchestrator binary.
+# Cargo registry and git checkouts are cached via buildx cache mounts so
+# dependencies are not re-downloaded on every build. The target directory is
+# also cached so incremental compilation works across builds.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/build/target,sharing=locked \
+    cargo build --release --bin pap-orchestrator \
+    && cp /build/target/release/pap-orchestrator /usr/local/bin/pap-orchestrator
 
 # ── Runtime stage ────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
@@ -67,7 +62,7 @@ RUN groupadd -g 1000 pap && useradd -u 1000 -g 1000 -m pap
 WORKDIR /app
 
 # Copy the compiled binary
-COPY --from=builder /build/target/release/pap-orchestrator /app/pap-orchestrator
+COPY --from=builder /usr/local/bin/pap-orchestrator /app/pap-orchestrator
 
 # Default agents directory – mount or copy your agents here
 RUN mkdir -p /app/agents && chown pap:pap /app/agents
