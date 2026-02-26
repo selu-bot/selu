@@ -126,13 +126,52 @@ pub async fn install_agent(
     // 3. Extract archive
     extract_archive(&archive_bytes, installed_dir, &entry.id)?;
 
+    // Steps 4-6 can fail after files have been extracted to disk.
+    // If anything goes wrong, clean up the extracted directory and any
+    // partial DB row so the user can retry cleanly.
+    match install_agent_inner(entry, &agent_dir, db, agents, docker).await {
+        Ok(agent_def) => Ok(agent_def),
+        Err(e) => {
+            warn!(agent = %entry.id, "Installation failed, cleaning up: {e}");
+
+            // Remove from in-memory map (best-effort, may not have been added)
+            {
+                let mut map = agents.write().await;
+                map.remove(&entry.id);
+            }
+
+            // Remove partially-inserted DB row (best-effort)
+            let _ = sqlx::query("DELETE FROM agents WHERE id = ? AND is_bundled = 0")
+                .bind(&entry.id)
+                .execute(db)
+                .await;
+
+            // Remove extracted directory (best-effort)
+            if agent_dir.exists() {
+                let _ = tokio::fs::remove_dir_all(&agent_dir).await;
+            }
+
+            Err(e)
+        }
+    }
+}
+
+/// Inner install logic (steps 4-6) that runs after the archive has been
+/// extracted. Factored out so that `install_agent` can clean up on failure.
+async fn install_agent_inner(
+    entry: &MarketplaceEntry,
+    agent_dir: &Path,
+    db: &SqlitePool,
+    agents: &Arc<RwLock<HashMap<String, AgentDefinition>>>,
+    docker: &bollard::Docker,
+) -> Result<AgentDefinition> {
     // 4. Pull Docker images
     for image in &entry.capability_images {
         pull_image(docker, image).await?;
     }
 
     // 5. Insert DB row (setup_complete = 0 if the agent has install steps)
-    let agent_def = loader::load_one(&agent_dir).await
+    let agent_def = loader::load_one(agent_dir).await
         .with_context(|| format!("Failed to load extracted agent from {}", agent_dir.display()))?;
 
     let has_steps = !agent_def.install_steps.is_empty();
