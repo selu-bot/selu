@@ -44,7 +44,9 @@ pub async fn load_provider(
         "openai" => Arc::new(OpenAiProvider::new(api_key, model_id)),
         "bedrock" => {
             // base_url stores the AWS region (e.g. "us-east-1")
-            let region = base_url.unwrap_or_else(|| "us-east-1".into());
+            let region = base_url
+                .filter(|u| !u.is_empty())
+                .unwrap_or_else(|| "us-east-1".into());
             Arc::new(BedrockProvider::new(api_key, region, model_id))
         }
         "ollama" => {

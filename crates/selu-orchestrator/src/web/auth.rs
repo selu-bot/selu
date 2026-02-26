@@ -324,10 +324,12 @@ pub async fn setup_submit(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    // Seed the Bedrock LLM provider entry (API key will be added later via credentials UI)
+    // Seed the Bedrock LLM provider entry (region will be set by the user via the providers UI).
+    // base_url is left empty so Bedrock doesn't appear as "configured" in the agents page
+    // until the user explicitly sets a region.
     let _ = sqlx::query!(
         r#"INSERT OR IGNORE INTO llm_providers (id, display_name, api_key_encrypted, base_url, active)
-           VALUES ('bedrock', 'Amazon Bedrock', '', 'us-east-1', 1)"#
+           VALUES ('bedrock', 'Amazon Bedrock', '', '', 1)"#
     )
     .execute(&state.db)
     .await;
