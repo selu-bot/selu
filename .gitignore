@@ -32,3 +32,5 @@ __pycache__/
 # metadata required for Docker/CI builds (SQLX_OFFLINE=true).
 # Regenerate with: cargo sqlx prepare --workspace
 .idea
+
+installed_agents
