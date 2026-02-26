@@ -251,8 +251,11 @@ impl LlmProvider for AnthropicProvider {
                 "content_block_start" => {
                     let block_type = data["content_block"]["type"].as_str()?;
                     if block_type == "tool_use" {
-                        let name = data["content_block"]["name"].as_str()?.to_string();
-                        Some(Ok(StreamChunk::ToolCallStart(name)))
+                        if data["content_block"]["name"].as_str().is_some() {
+                            Some(Ok(StreamChunk::ToolCallStart))
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }

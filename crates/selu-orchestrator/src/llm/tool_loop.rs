@@ -85,7 +85,7 @@ pub async fn run_loop(
                                 streamed_text.push_str(&t);
                                 let _ = tx.send(LoopEvent::Token(t)).await;
                             }
-                            StreamChunk::ToolCallStart(_) => {
+                            StreamChunk::ToolCallStart => {
                                 // Unexpected tool call during streaming — fall back to
                                 // the text we already got from the non-streaming call.
                                 break;

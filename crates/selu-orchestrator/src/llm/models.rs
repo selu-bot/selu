@@ -287,8 +287,6 @@ async fn fetch_bedrock(api_key: &str, region: &str) -> Result<Vec<ModelInfo>> {
                 id: String,
                 #[serde(rename = "inferenceProfileName")]
                 name: Option<String>,
-                #[serde(rename = "type", default)]
-                profile_type: Option<String>,
                 #[serde(rename = "status", default)]
                 status: Option<String>,
             }

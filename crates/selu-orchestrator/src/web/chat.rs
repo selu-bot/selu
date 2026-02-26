@@ -34,10 +34,8 @@ pub struct PipeView {
 #[derive(Debug, Clone)]
 pub struct ThreadView {
     pub id: String,
-    pub pipe_id: String,
     pub title: String,
     pub status: String,
-    pub created_at: String,
 }
 
 #[derive(Debug, Clone)]
@@ -103,10 +101,8 @@ async fn fetch_threads(db: &sqlx::SqlitePool, pipe_id: &str, user_id: &str) -> V
         });
         ThreadView {
             id: r.id.unwrap_or_default(),
-            pipe_id: r.pipe_id,
             title,
             status: r.status,
-            created_at: r.created_at,
         }
     })
     .collect()

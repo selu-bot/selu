@@ -26,15 +26,12 @@ pub struct InstalledAgentView {
     pub model_id: String,
     pub model_display_name: String,
     pub capability_count: usize,
-    pub session_trigger: String,
     pub is_bundled: bool,
     pub setup_complete: bool,
-    pub has_install_steps: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct MarketplaceAgentView {
-    pub id: String,
     pub name: String,
     pub description: String,
     pub version: String,
@@ -58,7 +55,6 @@ pub struct SetupStepView {
     pub description: String,
     pub default_value: String,
     pub validation: String,
-    pub depends_on: String,
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
@@ -160,10 +156,8 @@ pub async fn agents_index(_user: AuthUser, Query(q): Query<AgentsQuery>, State(s
             model_id: mod_id,
             model_display_name,
             capability_count: def.capability_manifests.len(),
-            session_trigger: def.session.trigger.clone(),
             is_bundled: is_bundled != 0,
             setup_complete: setup_complete != 0,
-            has_install_steps: !def.install_steps.is_empty(),
         });
     }
     drop(agents_map);
@@ -186,10 +180,8 @@ pub async fn agents_index(_user: AuthUser, Query(q): Query<AgentsQuery>, State(s
                 model_id: String::new(),
                 model_display_name: String::new(),
                 capability_count: 0,
-                session_trigger: String::new(),
                 is_bundled: false,
                 setup_complete: false,
-                has_install_steps: true,
             });
         }
     }
@@ -205,7 +197,6 @@ pub async fn agents_index(_user: AuthUser, Query(q): Query<AgentsQuery>, State(s
                 .map(|entry| {
                     let entry_json = serde_json::to_string(entry).unwrap_or_default();
                     MarketplaceAgentView {
-                        id: entry.id.clone(),
                         name: entry.name.clone(),
                         description: entry.description.clone(),
                         version: entry.version.clone(),
@@ -334,7 +325,6 @@ pub async fn setup_wizard(
             description: s.description.clone(),
             default_value: s.default.clone().unwrap_or_default(),
             validation: s.validation.clone().unwrap_or_default(),
-            depends_on: s.depends_on.clone().unwrap_or_default(),
         })
         .collect();
 

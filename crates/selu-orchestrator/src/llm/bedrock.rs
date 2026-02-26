@@ -294,8 +294,8 @@ impl LlmProvider for BedrockProvider {
 
                         // Content block start with toolUse
                         if let Some(start) = event.get("contentBlockStart") {
-                            if let Some(name) = start["start"]["toolUse"]["name"].as_str() {
-                                return Some(Ok(StreamChunk::ToolCallStart(name.to_string())));
+                            if start["start"]["toolUse"]["name"].as_str().is_some() {
+                                return Some(Ok(StreamChunk::ToolCallStart));
                             }
                         }
 

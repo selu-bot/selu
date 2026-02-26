@@ -233,6 +233,7 @@ pub async fn uninstall_agent(
 }
 
 /// Check if an agent is installed.
+#[allow(dead_code)]
 pub async fn is_installed(db: &SqlitePool, agent_id: &str) -> Result<bool> {
     let row = sqlx::query_as::<_, (i32,)>(
         "SELECT COUNT(*) FROM agents WHERE id = ?",

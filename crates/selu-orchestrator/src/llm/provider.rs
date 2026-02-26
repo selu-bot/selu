@@ -101,8 +101,8 @@ pub enum LlmResponse {
 pub enum StreamChunk {
     /// A text delta token
     Text(String),
-    /// LLM is about to call a tool (name for status display)
-    ToolCallStart(String),
+    /// LLM is about to call a tool (signals streaming should stop)
+    ToolCallStart,
     /// All tool results have been fed back and a final text response is complete
     Done,
 }

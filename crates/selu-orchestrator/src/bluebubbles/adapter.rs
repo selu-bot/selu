@@ -515,6 +515,7 @@ async fn send_bb_reply(
 /// Send an outbound envelope via BlueBubbles.
 /// Called when a pipe's outbound should go through a BB adapter.
 /// This is used by the pipe outbound flow when the adapter is integrated.
+#[allow(dead_code)]
 pub async fn send_outbound(
     state: &AppState,
     pipe_id: &str,

@@ -127,6 +127,7 @@ pub async fn set_agent_model(
 }
 
 /// Clear the model override for a specific agent (revert to global default).
+#[allow(dead_code)]
 pub async fn clear_agent_model(db: &SqlitePool, agent_id: &str) -> Result<()> {
     sqlx::query("UPDATE agents SET provider_id = NULL, model_id = NULL WHERE id = ?")
         .bind(agent_id)

@@ -209,8 +209,8 @@ impl LlmProvider for OpenAiProvider {
             // Tool call start
             if let Some(tool_calls) = delta["tool_calls"].as_array() {
                 if let Some(first) = tool_calls.first() {
-                    if let Some(name) = first["function"]["name"].as_str() {
-                        return Some(Ok(StreamChunk::ToolCallStart(name.to_string())));
+                    if first["function"]["name"].as_str().is_some() {
+                        return Some(Ok(StreamChunk::ToolCallStart));
                     }
                 }
                 return None;
