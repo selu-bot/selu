@@ -72,6 +72,7 @@ async fn main() -> Result<()> {
 
     let runner = CapabilityRunner::new(egress_registry, &cfg.egress_proxy_addr)?;
     runner.ensure_networks().await?;
+    runner.cleanup_stale_containers().await?;
     let cap_engine = CapabilityEngine::new(runner);
 
     // ── Event bus + fanout ────────────────────────────────────────────────────
@@ -157,6 +158,8 @@ async fn main() -> Result<()> {
         }
     });
 
+    let shutdown_state = state.clone();
+
     let app = axum::Router::new()
         .merge(web::router(state.clone()))
         .merge(api::router(state.clone()))
@@ -167,7 +170,41 @@ async fn main() -> Result<()> {
     info!("Listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+
+    // Graceful shutdown: stop accepting requests when a signal arrives, then
+    // tear down all running capability containers so they don't get orphaned.
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    info!("Shutting down – cleaning up capability containers...");
+    shutdown_state.capabilities.close_all().await;
+    info!("Shutdown complete");
 
     Ok(())
+}
+
+/// Wait for SIGINT (Ctrl+C) or SIGTERM (docker stop / systemd stop).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => info!("Received SIGINT"),
+        _ = terminate => info!("Received SIGTERM"),
+    }
 }

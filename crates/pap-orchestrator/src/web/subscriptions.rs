@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
     Form,
@@ -42,6 +42,14 @@ struct SubscriptionsTemplate {
     active_nav: &'static str,
     subs: Vec<SubView>,
     users: Vec<UserOption>,
+    error: Option<String>,
+    success: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SubsQuery {
+    pub error: Option<String>,
+    pub success: Option<String>,
 }
 
 // ── Form struct ───────────────────────────────────────────────────────────────
@@ -58,7 +66,7 @@ pub struct CreateSubForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn subscriptions_index(_user: AuthUser, State(state): State<AppState>) -> Response {
+pub async fn subscriptions_index(_user: AuthUser, Query(q): Query<SubsQuery>, State(state): State<AppState>) -> Response {
     let rows = sqlx::query!(
         r#"SELECT es.id, es.user_id, u.username,
                   es.event_type, es.reaction_type, es.reaction_config_json,
@@ -102,7 +110,7 @@ pub async fn subscriptions_index(_user: AuthUser, State(state): State<AppState>)
         })
         .collect();
 
-    match (SubscriptionsTemplate { active_nav: "subscriptions", subs, users }).render() {
+    match (SubscriptionsTemplate { active_nav: "subscriptions", subs, users, error: q.error, success: q.success }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -120,17 +128,17 @@ pub async fn subscriptions_create(
         || form.event_type.trim().is_empty()
         || form.reaction_type.is_empty()
     {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Redirect::to("/subscriptions?error=User%2C+event+type%2C+and+reaction+type+are+required.").into_response();
     }
 
     if form.reaction_type != "pipe_notification" && form.reaction_type != "agent_invocation" {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Redirect::to("/subscriptions?error=Invalid+reaction+type.").into_response();
     }
 
     // Validate and re-serialize reaction_config JSON
     let config_val: serde_json::Value = match serde_json::from_str(&form.reaction_config) {
         Ok(v) => v,
-        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+        Err(_) => return Redirect::to("/subscriptions?error=Reaction+config+must+be+valid+JSON.").into_response(),
     };
     let config_json = config_val.to_string();
 
@@ -185,10 +193,10 @@ pub async fn subscriptions_create(
     .await;
 
     match result {
-        Ok(_) => Redirect::to("/subscriptions").into_response(),
+        Ok(_) => Redirect::to("/subscriptions?success=Subscription+created.").into_response(),
         Err(e) => {
             error!("Failed to create subscription: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Redirect::to("/subscriptions?error=Failed+to+create+subscription.+Please+try+again.").into_response()
         }
     }
 }

@@ -12,7 +12,8 @@
 ///   - HTTP_PROXY / HTTPS_PROXY pointing at the orchestrator's egress proxy
 use anyhow::{anyhow, Context, Result};
 use bollard::container::{
-    Config, CreateContainerOptions, RemoveContainerOptions, StartContainerOptions,
+    Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+    StartContainerOptions,
 };
 use bollard::models::{
     ContainerInspectResponse, HostConfig, PortBinding, ResourcesUlimits,
@@ -72,6 +73,60 @@ impl CapabilityRunner {
             egress_registry,
             egress_proxy_port: port,
         })
+    }
+
+    /// Remove any orphaned `pap-cap-*` containers left over from a previous
+    /// orchestrator run.  Called once at startup before accepting requests.
+    pub async fn cleanup_stale_containers(&self) -> Result<()> {
+        let mut filters = HashMap::new();
+        filters.insert("name".to_string(), vec!["pap-cap-".to_string()]);
+
+        let containers = self
+            .docker
+            .list_containers(Some(ListContainersOptions {
+                all: true, // include stopped containers too
+                filters,
+                ..Default::default()
+            }))
+            .await
+            .context("Failed to list stale capability containers")?;
+
+        if containers.is_empty() {
+            debug!("No stale capability containers found");
+            return Ok(());
+        }
+
+        info!(
+            "Found {} stale capability container(s) from previous run, removing...",
+            containers.len()
+        );
+
+        for container in &containers {
+            let id = container.id.as_deref().unwrap_or("unknown");
+            let names = container
+                .names
+                .as_ref()
+                .map(|n| n.join(", "))
+                .unwrap_or_default();
+
+            if let Err(e) = self
+                .docker
+                .remove_container(
+                    id,
+                    Some(RemoveContainerOptions {
+                        force: true,
+                        ..Default::default()
+                    }),
+                )
+                .await
+            {
+                tracing::warn!(container_id = %id, names = %names, "Failed to remove stale container: {e}");
+            } else {
+                info!(container_id = %id, names = %names, "Removed stale capability container");
+            }
+        }
+
+        Ok(())
     }
 
     /// Ensure the isolated bridge networks exist (called once at startup)

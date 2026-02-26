@@ -2,7 +2,6 @@
 members = [
     "crates/pap-core",
     "crates/pap-orchestrator",
-    "crates/pap-bluebubbles",
 ]
 resolver = "2"
 

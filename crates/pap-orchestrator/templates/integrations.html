@@ -3,84 +3,101 @@
 {% block title %}Integrations{% endblock %}
 
 {% block body %}
-<div class="page-content">
-  <div class="page-header">
-    <h1>Integrations</h1>
-    <p>Connect PAP to messaging platforms so your agents can receive and reply to messages.</p>
-  </div>
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-4xl mx-auto px-6 py-8 space-y-8">
 
-  {% if !imessage_configs.is_empty() %}
-  <div class="card">
-    <div class="card-header">Active Integrations</div>
-    <div style="padding:1rem;display:flex;flex-direction:column;gap:0.5rem;">
-      {% for cfg in imessage_configs %}
-      <a href="/integrations/imessage/{{ cfg.config_id }}" class="integration-card" style="border:1px solid var(--border);">
-        <div class="ic-header">
-          <div class="ic-icon">💬</div>
-          <div>
-            <div class="ic-title">{{ cfg.name }}</div>
-            <div style="font-size:0.8rem;color:var(--muted)">iMessage via BlueBubbles</div>
-          </div>
-          <span style="margin-left:auto">
+    <!-- Header -->
+    <div>
+      <h1 class="text-2xl font-bold text-white">Integrations</h1>
+      <p class="text-sm text-slate-400 mt-1">Connect PAP to messaging platforms so your agents can receive and reply to messages.</p>
+    </div>
+
+    <!-- Active Integrations -->
+    {% if !imessage_configs.is_empty() %}
+    <div>
+      <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Active Integrations</h2>
+      <div class="space-y-3">
+        {% for cfg in imessage_configs %}
+        <a href="/integrations/imessage/{{ cfg.config_id }}"
+           class="block bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-brand-500/40 transition-colors group">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <div class="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div>
+                <div class="text-sm font-semibold text-white group-hover:text-brand-300 transition-colors">{{ cfg.name }}</div>
+                <div class="text-xs text-slate-500 mt-0.5">iMessage via BlueBubbles</div>
+              </div>
+            </div>
             {% if cfg.active %}
-            <span class="badge badge-green">Connected</span>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Connected
+            </span>
             {% else %}
-            <span class="badge badge-red">Inactive</span>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+              Inactive
+            </span>
             {% endif %}
+          </div>
+          <div class="mt-3 flex items-center gap-4 text-xs text-slate-500">
+            <span>Agent: <span class="text-slate-300">{{ cfg.agent_name }}</span></span>
+            <span class="text-slate-700">|</span>
+            <span class="font-mono text-slate-500">{{ cfg.server_url }}</span>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Add New Integration -->
+    <div>
+      <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Add New Integration</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- iMessage -->
+        <a href="/integrations/imessage/setup"
+           class="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-brand-500/40 transition-colors group flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <span class="text-sm font-semibold text-white group-hover:text-brand-300 transition-colors">iMessage</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">Connect your Mac's iMessage via BlueBubbles. Your agents will be able to receive and reply to iMessages.</p>
+          <span class="inline-flex items-center gap-1 text-xs font-medium text-brand-400 mt-auto">
+            Set up
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </span>
-        </div>
-        <div class="ic-desc">
-          Agent: <strong>{{ cfg.agent_name }}</strong>
-          &middot; Server: <code style="font-size:0.75rem;background:rgba(0,0,0,0.2);padding:0.1rem 0.3rem;border-radius:3px">{{ cfg.server_url }}</code>
-        </div>
-      </a>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
+        </a>
 
-  <div style="margin-top:0.5rem;">
-    <h2 style="font-size:1rem;font-weight:600;margin-bottom:0.75rem;color:var(--muted)">Add New Integration</h2>
-    <div class="integration-grid">
-      <a href="/integrations/imessage/setup" class="integration-card">
-        <div class="ic-header">
-          <div class="ic-icon">💬</div>
-          <div class="ic-title">iMessage</div>
+        <!-- WhatsApp (coming soon) -->
+        <div class="bg-slate-900/50 border border-slate-800 border-dashed rounded-xl p-5 opacity-50 flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+            </div>
+            <span class="text-sm font-semibold text-slate-300">WhatsApp</span>
+          </div>
+          <p class="text-xs text-slate-500 leading-relaxed">Connect WhatsApp via Baileys adapter.</p>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-500 mt-auto w-fit">Coming Soon</span>
         </div>
-        <div class="ic-desc">
-          Connect your Mac's iMessage via BlueBubbles. Your agents will be able to receive and reply to iMessages.
-        </div>
-        <div class="ic-status">
-          <span class="badge badge-blue">Setup Guide</span>
-        </div>
-      </a>
 
-      <div class="integration-card" style="opacity:0.4;cursor:not-allowed;border-style:dashed;">
-        <div class="ic-header">
-          <div class="ic-icon">📱</div>
-          <div class="ic-title">WhatsApp</div>
-        </div>
-        <div class="ic-desc">
-          Connect WhatsApp via Baileys adapter. Coming soon.
-        </div>
-        <div class="ic-status">
-          <span class="badge badge-gray">Coming Soon</span>
-        </div>
-      </div>
-
-      <div class="integration-card" style="opacity:0.4;cursor:not-allowed;border-style:dashed;">
-        <div class="ic-header">
-          <div class="ic-icon">🔌</div>
-          <div class="ic-title">Custom Webhook</div>
-        </div>
-        <div class="ic-desc">
-          Connect any messaging platform via a custom webhook adapter.
-        </div>
-        <div class="ic-status">
-          <span class="badge badge-gray">Coming Soon</span>
+        <!-- Custom Webhook (coming soon) -->
+        <div class="bg-slate-900/50 border border-slate-800 border-dashed rounded-xl p-5 opacity-50 flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </div>
+            <span class="text-sm font-semibold text-slate-300">Custom Webhook</span>
+          </div>
+          <p class="text-xs text-slate-500 leading-relaxed">Connect any messaging platform via a custom webhook adapter.</p>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-500 mt-auto w-fit">Coming Soon</span>
         </div>
       </div>
     </div>
+
   </div>
 </div>
 {% endblock %}

@@ -76,6 +76,8 @@ pub async fn users_index(
     let error = q.error.map(|code| match code.as_str() {
         "duplicate" => "Username is already taken. Please choose a different username.".to_string(),
         "hash_failed" => "Password hashing failed. Please try again.".to_string(),
+        "username_required" => "Username and password are required.".to_string(),
+        "create_failed" => "Failed to create user. Please try again.".to_string(),
         _ => "An unexpected error occurred.".to_string(),
     });
 
@@ -94,7 +96,7 @@ pub async fn users_create(
     Form(form): Form<CreateUserForm>,
 ) -> Response {
     if form.username.trim().is_empty() || form.password.is_empty() {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Redirect::to("/users?error=username_required").into_response();
     }
 
     let display_name = if form.display_name.trim().is_empty() {
@@ -146,7 +148,7 @@ pub async fn users_create(
         }
         Err(e) => {
             error!("Failed to create user: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Redirect::to("/users?error=create_failed").into_response()
         }
     }
 }

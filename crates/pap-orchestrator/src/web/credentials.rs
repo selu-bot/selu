@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
     Form,
@@ -44,6 +44,14 @@ struct CredentialsTemplate {
     sys_creds: Vec<SysCredRow>,
     user_creds: Vec<UserCredRow>,
     users: Vec<UserOption>,
+    error: Option<String>,
+    success: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CredentialsQuery {
+    pub error: Option<String>,
+    pub success: Option<String>,
 }
 
 // ── Form structs ──────────────────────────────────────────────────────────────
@@ -65,7 +73,7 @@ pub struct SetUserCredForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn credentials_index(_user: AuthUser, State(state): State<AppState>) -> Response {
+pub async fn credentials_index(_user: AuthUser, Query(q): Query<CredentialsQuery>, State(state): State<AppState>) -> Response {
     let sys_creds = sqlx::query!(
         "SELECT capability_id, credential_name, created_at
          FROM system_credentials ORDER BY capability_id, credential_name"
@@ -111,7 +119,7 @@ pub async fn credentials_index(_user: AuthUser, State(state): State<AppState>) -
         })
         .collect();
 
-    match (CredentialsTemplate { active_nav: "credentials", sys_creds, user_creds, users })
+    match (CredentialsTemplate { active_nav: "credentials", sys_creds, user_creds, users, error: q.error, success: q.success })
         .render()
     {
         Ok(html) => Html(html).into_response(),
@@ -131,17 +139,17 @@ pub async fn credentials_set_system(
         || form.credential_name.trim().is_empty()
         || form.value.is_empty()
     {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Redirect::to("/credentials?error=All+fields+are+required.").into_response();
     }
     match state
         .credentials
         .set_system(&form.capability_id, &form.credential_name, &form.value)
         .await
     {
-        Ok(_) => Redirect::to("/credentials").into_response(),
+        Ok(_) => Redirect::to("/credentials?success=System+credential+saved.").into_response(),
         Err(e) => {
             error!("Failed to set system credential: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Redirect::to("/credentials?error=Failed+to+save+credential.+Please+try+again.").into_response()
         }
     }
 }
@@ -167,17 +175,17 @@ pub async fn credentials_set_user(
         || form.credential_name.trim().is_empty()
         || form.value.is_empty()
     {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Redirect::to("/credentials?error=All+fields+are+required.").into_response();
     }
     match state
         .credentials
         .set_user(&form.user_id, &form.capability_id, &form.credential_name, &form.value)
         .await
     {
-        Ok(_) => Redirect::to("/credentials").into_response(),
+        Ok(_) => Redirect::to("/credentials?success=User+credential+saved.").into_response(),
         Err(e) => {
             error!("Failed to set user credential: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Redirect::to("/credentials?error=Failed+to+save+credential.+Please+try+again.").into_response()
         }
     }
 }

@@ -54,6 +54,7 @@ struct PipesTemplate {
     users: Vec<UserOption>,
     agents: Vec<AgentOption>,
     flash: Option<PipeCreatedFlash>,
+    error: Option<String>,
 }
 
 // ── Query / Form structs ──────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ pub struct PipesQuery {
     pub created: Option<String>,
     pub pipe_id: Option<String>,
     pub token: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,7 +142,7 @@ pub async fn pipes_index(
         None
     };
 
-    match (PipesTemplate { active_nav: "pipes", pipes, users, agents, flash }).render() {
+    match (PipesTemplate { active_nav: "pipes", pipes, users, agents, flash, error: q.error }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -158,7 +160,7 @@ pub async fn pipes_create(
         || form.user_id.is_empty()
         || form.outbound_url.trim().is_empty()
     {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Redirect::to("/pipes?error=Name%2C+owner%2C+and+outbound+URL+are+required.").into_response();
     }
 
     let id = Uuid::new_v4().to_string();
@@ -194,7 +196,7 @@ pub async fn pipes_create(
         .into_response(),
         Err(e) => {
             error!("Failed to create pipe: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Redirect::to("/pipes?error=Failed+to+create+pipe.+Please+try+again.").into_response()
         }
     }
 }

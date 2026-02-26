@@ -3,88 +3,100 @@
 {% block title %}Setup: {{ agent_name }}{% endblock %}
 
 {% block body %}
-<div class="page-content">
-  <div class="page-header">
-    <h1>Setup: {{ agent_name }}</h1>
-    <p>Complete the following steps to finish installing this agent.</p>
-  </div>
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6">
 
-  <form method="POST" action="/agents/{{ agent_id }}/setup" id="setup-form">
-    {% for step in steps %}
-    <div class="card" style="margin-bottom:1rem">
-      <div class="card-header">
-        <span>{{ step.label }}</span>
-        {% if step.step_type == "test" %}
-        <span class="badge badge-gray">Test</span>
-        {% else %}
-        <span class="badge badge-blue">Configuration</span>
-        {% endif %}
-      </div>
-      <div class="form-body">
-        {% if !step.description.is_empty() %}
-        <p style="color:var(--muted);margin-bottom:0.75rem">{{ step.description }}</p>
-        {% endif %}
+    <!-- Back link + Header -->
+    <div>
+      <a href="/agents" class="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Back to Agents
+      </a>
+      <h1 class="text-2xl font-bold text-white">Setup: {{ agent_name }}</h1>
+      <p class="text-sm text-slate-400 mt-1">Complete the following steps to finish installing this agent.</p>
+    </div>
 
-        {% if step.step_type == "input" %}
-          <div class="form-group">
+    <form method="POST" action="/agents/{{ agent_id }}/setup" id="setup-form" class="space-y-4">
+      {% for step in steps %}
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+          <span class="text-sm font-semibold text-white">{{ step.label }}</span>
+          {% if step.step_type == "test" %}
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-500">Test</span>
+          {% else %}
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-brand-500/15 text-brand-300">Configuration</span>
+          {% endif %}
+        </div>
+        <div class="p-5 space-y-3">
+          {% if !step.description.is_empty() %}
+          <p class="text-xs text-slate-400 leading-relaxed">{{ step.description }}</p>
+          {% endif %}
+
+          {% if step.step_type == "input" %}
+          <div>
             <input type="text" name="step_{{ step.id }}" id="step_{{ step.id }}"
                    value="{{ step.default_value }}"
                    placeholder="{{ step.label }}"
                    {% if step.validation == "url" %}type="url"{% endif %}
-                   style="width:100%" />
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
           </div>
-
-        {% else if step.step_type == "test" %}
-          <div style="display:flex;gap:0.5rem;align-items:center">
-            <button type="button" class="btn btn-primary btn-sm"
+          {% else if step.step_type == "test" %}
+          <div class="flex items-center gap-3">
+            <button type="button"
+                    class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer"
                     hx-post="/agents/{{ agent_id }}/setup/test/{{ step.id }}"
                     hx-target="#test-result-{{ step.id }}"
                     hx-swap="innerHTML"
                     hx-include="#setup-form">
               Run Test
             </button>
-            <span id="test-result-{{ step.id }}"></span>
+            <span id="test-result-{{ step.id }}" class="text-sm"></span>
           </div>
-        {% endif %}
+          {% endif %}
+        </div>
       </div>
-    </div>
-    {% endfor %}
+      {% endfor %}
 
-    {# ── Model Assignment ──────────────────────────────────────────────────── #}
-    <div class="card" style="margin-bottom:1rem">
-      <div class="card-header">
-        <span>Model Assignment</span>
-        <span class="badge badge-gray">Optional</span>
-      </div>
-      <div class="form-body">
-        <p style="color:var(--muted);margin-bottom:0.75rem">
-          Assign a specific provider and model to this agent, or leave blank to use the global default.
-        </p>
-        <div style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap">
-          <div class="form-group" style="flex:1;min-width:150px">
-            <label>Provider</label>
-            <select name="agent_provider_id"
-                    onchange="fetchModels(this.value, '#setup-model-select')">
-              <option value="">-- Use global default --</option>
-              {% for p in providers %}
-              <option value="{{ p.id }}">{{ p.display_name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group" style="flex:2;min-width:200px">
-            <label>Model</label>
-            <select name="agent_model_id" id="setup-model-select">
-              <option value="">-- Select a provider first --</option>
-            </select>
+      <!-- Model Assignment -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+          <span class="text-sm font-semibold text-white">Model Assignment</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-500">Optional</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-slate-400 leading-relaxed">Assign a specific provider and model to this agent, or leave blank to use the global default.</p>
+          <div class="flex items-end gap-3 flex-wrap">
+            <div class="flex-1 min-w-[150px]">
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">Provider</label>
+              <select name="agent_provider_id"
+                      onchange="fetchModels(this.value, '#setup-model-select')"
+                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                <option value="">-- Use global default --</option>
+                {% for p in providers %}
+                <option value="{{ p.id }}">{{ p.display_name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="flex-[2] min-w-[200px]">
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">Model</label>
+              <select name="agent_model_id" id="setup-model-select"
+                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                <option value="">-- Select a provider first --</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div style="display:flex;gap:0.5rem;justify-content:flex-end">
-      <a href="/agents" class="btn btn-sm">Cancel</a>
-      <button type="submit" class="btn btn-primary">Complete Setup</button>
-    </div>
-  </form>
+      <!-- Actions -->
+      <div class="flex items-center justify-end gap-3 pt-2">
+        <a href="/agents" class="text-sm text-slate-400 hover:text-slate-200 transition-colors">Cancel</a>
+        <button type="submit"
+                class="bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-5 py-2.5 rounded-lg transition-colors cursor-pointer">
+          Complete Setup
+        </button>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}

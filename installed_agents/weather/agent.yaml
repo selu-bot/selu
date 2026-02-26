@@ -1,0 +1,8 @@
+id: weather
+name: Weather Assistant
+session:
+  trigger: mention
+  idle_timeout_minutes: 15
+memory:
+  policy: none
+  top_k: 0

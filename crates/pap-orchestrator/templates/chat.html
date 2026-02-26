@@ -3,62 +3,100 @@
 {% block title %}Chat{% endblock %}
 
 {% block body %}
-<!-- Sidebar: pipe list -->
-<aside class="sidebar">
-  <div class="sidebar-header">Pipes</div>
-  {% for pipe in pipes %}
-  <a class="pipe-item {% if selected_pipe_id == pipe.id %}active{% endif %}"
-     href="/chat/{{ pipe.id }}">
-    <span class="pipe-name">{{ pipe.name }}</span>
-    <span class="pipe-meta">{{ pipe.transport }}</span>
-  </a>
-  {% endfor %}
-  {% if pipes.is_empty() %}
-  <div style="padding:1rem;color:var(--muted);font-size:0.85rem;">
-    No pipes yet. <a href="/pipes" style="color:var(--accent)">Add one</a>
+<!-- Chat has its own inner sidebar for pipe list -->
+<div class="flex flex-1 overflow-hidden">
+
+  <!-- Pipe sidebar -->
+  <aside class="w-56 bg-slate-900/50 border-r border-slate-800 flex flex-col flex-shrink-0">
+    <div class="px-4 py-3 border-b border-slate-800">
+      <span class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Conversations</span>
+    </div>
+    <div class="flex-1 overflow-y-auto py-1">
+      {% for pipe in pipes %}
+      <a href="/chat/{{ pipe.id }}"
+         class="block px-4 py-2.5 border-l-2 transition-colors {% if selected_pipe_id == pipe.id %}border-brand-500 bg-brand-600/10{% else %}border-transparent hover:bg-slate-800/60{% endif %}">
+        <div class="text-sm font-medium {% if selected_pipe_id == pipe.id %}text-white{% else %}text-slate-300{% endif %} truncate">{{ pipe.name }}</div>
+        <div class="text-xs text-slate-500 mt-0.5">{{ pipe.transport }}</div>
+      </a>
+      {% endfor %}
+      {% if pipes.is_empty() %}
+      <div class="px-4 py-6 text-center">
+        <p class="text-sm text-slate-500">No pipes yet.</p>
+        <a href="/pipes" class="text-sm text-brand-400 hover:text-brand-300 mt-1 inline-block">Create one</a>
+      </div>
+      {% endif %}
+    </div>
+  </aside>
+
+  {% if let Some(pipe) = selected_pipe %}
+  <!-- Chat area -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <!-- Chat header -->
+    <div class="h-14 px-5 flex items-center gap-3 border-b border-slate-800 bg-slate-900/30 flex-shrink-0">
+      <div>
+        <div class="text-sm font-semibold text-white">{{ pipe.name }}</div>
+        <div class="text-xs text-slate-500">{{ pipe.transport }}</div>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div id="messages" class="flex-1 overflow-y-auto px-5 py-5 space-y-3">
+      {% for msg in messages %}
+      {% if msg.role == "user" %}
+      <div class="flex justify-end">
+        <div class="max-w-[72%] bg-brand-600/20 border border-brand-500/20 rounded-2xl rounded-br-md px-4 py-2.5">
+          <p class="text-sm leading-relaxed whitespace-pre-wrap break-words">{{ msg.content }}</p>
+          <p class="text-[10px] text-slate-500 mt-1.5">{{ msg.created_at }}</p>
+        </div>
+      </div>
+      {% else if msg.role == "status" %}
+      <div class="flex justify-start">
+        <div class="tool-status">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
+          <span>{{ msg.content }}</span>
+        </div>
+      </div>
+      {% else %}
+      <div class="flex justify-start">
+        <div class="max-w-[72%] bg-slate-800 border border-slate-700 rounded-2xl rounded-bl-md px-4 py-2.5">
+          <div class="text-sm leading-relaxed break-words markdown-body md-source">{{ msg.content }}</div>
+          <p class="text-[10px] text-slate-500 mt-1.5">{{ msg.created_at }}</p>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <!-- Input bar -->
+    <div class="px-5 py-3 border-t border-slate-800 bg-slate-900/30 flex-shrink-0">
+      <form hx-post="/chat/{{ pipe.id }}/send"
+            hx-target="#messages"
+            hx-swap="beforeend scroll:#messages:bottom"
+            hx-on::after-request="this.reset(); document.getElementById('msg-input').style.height='42px'"
+            class="flex items-end gap-3">
+        <textarea id="msg-input"
+                  name="text"
+                  placeholder="Message... (Shift+Enter for newline)"
+                  rows="1"
+                  required
+                  class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 resize-none max-h-40 min-h-[42px] leading-relaxed focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition font-sans"></textarea>
+        <button type="submit"
+                class="bg-brand-600 hover:bg-brand-700 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors cursor-pointer flex items-center gap-1.5 flex-shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Send
+        </button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <!-- Empty state -->
+  <div class="flex-1 flex flex-col items-center justify-center gap-3">
+    <div class="w-16 h-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center">
+      <svg class="w-7 h-7 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </div>
+    <p class="text-sm text-slate-500">Select a conversation to start chatting</p>
   </div>
   {% endif %}
-</aside>
 
-{% if let Some(pipe) = selected_pipe %}
-<!-- Chat area -->
-<div class="chat-area">
-  <div class="chat-header">
-    <div>
-      <div class="pipe-title">{{ pipe.name }}</div>
-      <div class="pipe-subtitle">{{ pipe.transport }}</div>
-    </div>
-  </div>
-
-  <!-- Message history -->
-  <div id="messages">
-    {% for msg in messages %}
-    <div class="message {{ msg.role }}">
-      {{ msg.content }}
-      <div class="meta">{{ msg.created_at }}</div>
-    </div>
-    {% endfor %}
-  </div>
-
-  <!-- Input -->
-  <div class="input-bar">
-    <form hx-post="/chat/{{ pipe.id }}/send"
-          hx-target="#messages"
-          hx-swap="beforeend scroll:#messages:bottom"
-          hx-on::after-request="this.reset(); document.getElementById('msg-input').style.height='42px'">
-      <textarea id="msg-input"
-                name="text"
-                placeholder="Message… (Shift+Enter for newline)"
-                rows="1"
-                required></textarea>
-      <button type="submit">Send</button>
-    </form>
-  </div>
 </div>
-{% else %}
-<div class="empty-state">
-  <div class="big">💬</div>
-  <div>Select a pipe to start chatting</div>
-</div>
-{% endif %}
 {% endblock %}

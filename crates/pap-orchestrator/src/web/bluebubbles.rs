@@ -64,6 +64,7 @@ struct BlueBubblesTemplate {
     pipes: Vec<PipeOption>,
     users: Vec<UserOption>,
     flash: Option<String>,
+    error: Option<String>,
 }
 
 // ── Query / Form structs ──────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ struct BlueBubblesTemplate {
 #[derive(Debug, Deserialize)]
 pub struct BbQuery {
     pub msg: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,6 +111,7 @@ pub async fn bluebubbles_index(
         pipes,
         users,
         flash: q.msg,
+        error: q.error,
     }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
@@ -129,7 +132,7 @@ pub async fn bb_config_create(
         || form.chat_guid.trim().is_empty()
         || form.pipe_id.is_empty()
     {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Redirect::to("/bluebubbles?error=All+fields+are+required.").into_response();
     }
 
     let id = Uuid::new_v4().to_string();
@@ -153,7 +156,7 @@ pub async fn bb_config_create(
         Ok(_) => Redirect::to("/bluebubbles?msg=BlueBubbles+adapter+created.+Restart+to+activate.").into_response(),
         Err(e) => {
             error!("Failed to create BB config: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Redirect::to("/bluebubbles?error=Failed+to+create+adapter.+Please+try+again.").into_response()
         }
     }
 }
@@ -184,7 +187,7 @@ pub async fn sender_ref_create(
         || form.pipe_id.is_empty()
         || form.sender_ref.trim().is_empty()
     {
-        return StatusCode::BAD_REQUEST.into_response();
+        return Redirect::to("/bluebubbles?error=All+fields+are+required.").into_response();
     }
 
     let id = Uuid::new_v4().to_string();
@@ -202,11 +205,11 @@ pub async fn sender_ref_create(
     match result {
         Ok(_) => Redirect::to("/bluebubbles?msg=Sender+mapping+created").into_response(),
         Err(e) if e.to_string().contains("UNIQUE") => {
-            Redirect::to("/bluebubbles?msg=This+sender+is+already+mapped+for+this+pipe").into_response()
+            Redirect::to("/bluebubbles?error=This+sender+is+already+mapped+for+this+pipe.").into_response()
         }
         Err(e) => {
             error!("Failed to create sender ref: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Redirect::to("/bluebubbles?error=Failed+to+create+mapping.+Please+try+again.").into_response()
         }
     }
 }

@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
     Form,
@@ -75,6 +75,14 @@ struct AgentsTemplate {
     global_model_display_name: String,
     global_temperature: String,
     marketplace_error: String,
+    error: Option<String>,
+    success: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AgentsQuery {
+    pub error: Option<String>,
+    pub success: Option<String>,
 }
 
 #[derive(Template)]
@@ -122,7 +130,7 @@ pub struct SetupSubmitForm {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 /// Main agents page: installed agents + marketplace catalogue
-pub async fn agents_index(_user: AuthUser, State(state): State<AppState>) -> Response {
+pub async fn agents_index(_user: AuthUser, Query(q): Query<AgentsQuery>, State(state): State<AppState>) -> Response {
     // Installed agents from in-memory map + DB metadata
     let agents_map = state.agents.read().await;
     let mut agents: Vec<InstalledAgentView> = Vec::new();
@@ -236,6 +244,8 @@ pub async fn agents_index(_user: AuthUser, State(state): State<AppState>) -> Res
         global_model_display_name,
         global_temperature,
         marketplace_error,
+        error: q.error,
+        success: q.success,
     })
     .render()
     {
@@ -257,7 +267,7 @@ pub async fn install_agent(
         Ok(e) => e,
         Err(e) => {
             error!("Invalid entry JSON: {e}");
-            return StatusCode::BAD_REQUEST.into_response();
+            return Redirect::to("/agents?error=Invalid+agent+data.+Please+try+again.").into_response();
         }
     };
 
@@ -265,7 +275,7 @@ pub async fn install_agent(
         Ok(d) => d,
         Err(e) => {
             error!("Failed to connect to Docker: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return Redirect::to("/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F").into_response();
         }
     };
 
@@ -287,7 +297,9 @@ pub async fn install_agent(
         }
         Err(e) => {
             error!("Agent installation failed: {e}");
-            Redirect::to("/agents").into_response()
+            let text = format!("Agent installation failed: {e}");
+            let msg = urlencoding::encode(&text);
+            Redirect::to(&format!("/agents?error={msg}")).into_response()
         }
     }
 }
@@ -370,7 +382,9 @@ pub async fn setup_submit(
         Ok(a) => a,
         Err(e) => {
             error!("Failed to load agent for setup: {e}");
-            return StatusCode::NOT_FOUND.into_response();
+            let text = format!("Failed to load agent: {e}");
+            let msg = urlencoding::encode(&text);
+            return Redirect::to(&format!("/agents?error={msg}")).into_response();
         }
     };
 
@@ -391,7 +405,8 @@ pub async fn setup_submit(
                 Ok(e) => e,
                 Err(e) => {
                     error!("Failed to encrypt credential: {e}");
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    let msg = urlencoding::encode("Failed to encrypt credential. Please try again.");
+                    return Redirect::to(&format!("/agents/{agent_id}/setup?error={msg}")).into_response();
                 }
             };
 
@@ -410,7 +425,8 @@ pub async fn setup_submit(
                 .await
                 {
                     error!("Failed to store system credential: {e}");
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    let msg = urlencoding::encode("Failed to store credential. Please try again.");
+                    return Redirect::to(&format!("/agents/{agent_id}/setup?error={msg}")).into_response();
                 }
             }
         }
@@ -426,10 +442,13 @@ pub async fn setup_submit(
     .await
     {
         error!("Failed to complete setup: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        let text = format!("Failed to complete setup: {e}");
+        let msg = urlencoding::encode(&text);
+        return Redirect::to(&format!("/agents?error={msg}")).into_response();
     }
 
-    Redirect::to("/agents").into_response()
+    let msg = urlencoding::encode("Agent setup completed successfully.");
+    Redirect::to(&format!("/agents?success={msg}")).into_response()
 }
 
 /// Execute a test step during setup (HTMX endpoint)
@@ -446,7 +465,7 @@ pub async fn setup_test(
         Ok(a) => a,
         Err(e) => {
             return Html(format!(
-                r#"<span class="badge badge-red">Error: {e}</span>"#
+                r#"<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">Error: {e}</span>"#
             ))
             .into_response();
         }
@@ -455,7 +474,7 @@ pub async fn setup_test(
     let step = match agent_def.install_steps.iter().find(|s| s.id == step_id) {
         Some(s) => s,
         None => {
-            return Html(r#"<span class="badge badge-red">Step not found</span>"#.to_string())
+            return Html(r#"<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">Step not found</span>"#.to_string())
                 .into_response();
         }
     };
@@ -464,7 +483,7 @@ pub async fn setup_test(
         Some(r) => r,
         None => {
             return Html(
-                r#"<span class="badge badge-red">No test request defined</span>"#.to_string(),
+                r#"<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">No test request defined</span>"#.to_string(),
             )
             .into_response();
         }
@@ -487,7 +506,7 @@ pub async fn setup_test(
         "POST" => client.post(&url).send().await,
         _ => {
             return Html(format!(
-                r#"<span class="badge badge-red">Unsupported method: {}</span>"#,
+                r#"<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">Unsupported method: {}</span>"#,
                 request.method
             ))
             .into_response();
@@ -499,7 +518,7 @@ pub async fn setup_test(
             let status = resp.status().as_u16();
             if status == request.expect_status {
                 Html(format!(
-                    r#"<span class="badge badge-green">Success (HTTP {status})</span>"#
+                    r#"<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><span class="w-1 h-1 rounded-full bg-emerald-400"></span>Success (HTTP {status})</span>"#
                 ))
                 .into_response()
             } else {
@@ -510,13 +529,13 @@ pub async fn setup_test(
                     body
                 };
                 Html(format!(
-                    r#"<span class="badge badge-red">Failed: HTTP {status}</span><br><small style="color:var(--muted)">{truncated}</small>"#
+                    r#"<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">Failed: HTTP {status}</span><br><small class="text-xs text-slate-500">{truncated}</small>"#
                 ))
                 .into_response()
             }
         }
         Err(e) => Html(format!(
-            r#"<span class="badge badge-red">Connection failed: {e}</span>"#
+            r#"<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">Connection failed: {e}</span>"#
         ))
         .into_response(),
     }
@@ -541,10 +560,10 @@ pub async fn set_agent_model_handler(
     .await
     {
         error!("Failed to set agent model: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return Redirect::to("/agents?error=Failed+to+update+model+assignment.+Please+try+again.").into_response();
     }
 
-    Redirect::to("/agents").into_response()
+    Redirect::to("/agents?success=Model+updated+successfully.").into_response()
 }
 
 /// Uninstall an agent
@@ -562,9 +581,12 @@ pub async fn uninstall_agent(
     .await
     {
         error!("Failed to uninstall agent: {e}");
+        let text = format!("Failed to uninstall agent: {e}");
+        let msg = urlencoding::encode(&text);
+        return Redirect::to(&format!("/agents?error={msg}")).into_response();
     }
 
-    Redirect::to("/agents").into_response()
+    Redirect::to("/agents?success=Agent+uninstalled+successfully.").into_response()
 }
 
 /// Set the global default model
@@ -579,10 +601,10 @@ pub async fn set_default_model(
         .await
     {
         error!("Failed to set default model: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return Redirect::to("/agents?error=Failed+to+update+global+default+model.+Please+try+again.").into_response();
     }
 
-    Redirect::to("/agents").into_response()
+    Redirect::to("/agents?success=Global+default+model+updated.").into_response()
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -3,82 +3,93 @@
 {% block title %}Users{% endblock %}
 
 {% block body %}
-<div class="page-content">
-  <div class="page-header">
-    <h1>Users</h1>
-    <p>User accounts used by pipes, sessions, and credentials. Passwords are hashed with Argon2id.</p>
-  </div>
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6">
 
-  {% if let Some(err) = error %}
-  <div class="flash" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#f87171;">
-    {{ err }}
-  </div>
-  {% endif %}
-
-  <div class="card">
-    <div class="card-header">Users</div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Display Name</th>
-            <th>ID</th>
-            <th>Created</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for user in users %}
-          <tr>
-            <td class="mono">{{ user.username }}</td>
-            <td>{{ user.display_name }}</td>
-            <td class="mono" style="font-size:0.75rem;">{{ user.id }}</td>
-            <td class="mono">{{ user.created_at }}</td>
-            <td class="actions">
-              <button class="btn btn-danger btn-sm"
-                      hx-delete="/users/{{ user.id }}"
-                      hx-target="closest tr"
-                      hx-swap="outerHTML"
-                      hx-confirm="Delete user {{ user.username }}? This cannot be undone.">Delete</button>
-            </td>
-          </tr>
-          {% endfor %}
-          {% if users.is_empty() %}
-          <tr class="empty-row">
-            <td colspan="5">No users yet. Create one below — you'll need at least one user to create pipes.</td>
-          </tr>
-          {% endif %}
-        </tbody>
-      </table>
+    <!-- Header -->
+    <div>
+      <h1 class="text-2xl font-bold text-white">Users</h1>
+      <p class="text-sm text-slate-400 mt-1">User accounts used by pipes, sessions, and credentials. Passwords are hashed with Argon2id.</p>
     </div>
-  </div>
 
-  <div class="card">
-    <div class="card-header">Create User</div>
-    <form method="post" action="/users">
-      <div class="form-body">
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="u-username">Username</label>
-            <input id="u-username" name="username" type="text" placeholder="alice" required autocomplete="off" />
-            <span class="form-hint">Unique, lowercase, no spaces.</span>
-          </div>
-          <div class="form-group">
-            <label for="u-display">Display Name</label>
-            <input id="u-display" name="display_name" type="text" placeholder="Alice Smith" autocomplete="off" />
-            <span class="form-hint">Defaults to username if left blank.</span>
-          </div>
-          <div class="form-group">
-            <label for="u-password">Password</label>
-            <input id="u-password" name="password" type="password" required autocomplete="new-password" />
-          </div>
-        </div>
-        <div class="form-footer">
-          <button type="submit" class="btn btn-primary">Create User</button>
-        </div>
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+      {{ err }}
+    </div>
+    {% endif %}
+
+    <!-- Users Table -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-800">
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Username</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Display Name</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">ID</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Created</th>
+              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-widest text-slate-500"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {% for user in users %}
+            <tr class="hover:bg-slate-800/30 transition-colors">
+              <td class="px-5 py-3.5 font-mono text-sm text-slate-300">{{ user.username }}</td>
+              <td class="px-5 py-3.5 text-slate-200">{{ user.display_name }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ user.id }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ user.created_at }}</td>
+              <td class="px-5 py-3.5 text-right">
+                <button class="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        hx-delete="/users/{{ user.id }}"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete user {{ user.username }}? This cannot be undone.">Delete</button>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if users.is_empty() %}
+            <tr>
+              <td colspan="5" class="px-5 py-8 text-center text-slate-500 text-sm">No users yet. Create one below -- you'll need at least one user to create pipes.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
       </div>
-    </form>
+    </div>
+
+    <!-- Create User -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-800">
+        <span class="text-sm font-semibold text-white">Create User</span>
+      </div>
+      <form method="post" action="/users">
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label for="u-username" class="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
+              <input id="u-username" name="username" type="text" placeholder="alice" required autocomplete="off"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+              <p class="text-[11px] text-slate-500 mt-1">Unique, lowercase, no spaces.</p>
+            </div>
+            <div>
+              <label for="u-display" class="block text-xs font-medium text-slate-400 mb-1.5">Display Name</label>
+              <input id="u-display" name="display_name" type="text" placeholder="Alice Smith" autocomplete="off"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+              <p class="text-[11px] text-slate-500 mt-1">Defaults to username if left blank.</p>
+            </div>
+            <div>
+              <label for="u-password" class="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
+              <input id="u-password" name="password" type="password" required autocomplete="new-password"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button type="submit"
+                    class="bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-5 py-2.5 rounded-lg transition-colors cursor-pointer">Create User</button>
+          </div>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 {% endblock %}

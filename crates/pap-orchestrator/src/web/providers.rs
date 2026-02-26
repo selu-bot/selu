@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
     Form,
@@ -29,6 +29,14 @@ pub struct ProviderView {
 struct ProvidersTemplate {
     active_nav: &'static str,
     providers: Vec<ProviderView>,
+    error: Option<String>,
+    success: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ProvidersQuery {
+    pub error: Option<String>,
+    pub success: Option<String>,
 }
 
 // ── Form structs ──────────────────────────────────────────────────────────────
@@ -45,7 +53,7 @@ pub struct SetRegionForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn providers_index(_user: AuthUser, State(state): State<AppState>) -> Response {
+pub async fn providers_index(_user: AuthUser, Query(q): Query<ProvidersQuery>, State(state): State<AppState>) -> Response {
     let providers = sqlx::query!(
         "SELECT id, display_name, api_key_encrypted, base_url, active
          FROM llm_providers ORDER BY id"
@@ -66,6 +74,8 @@ pub async fn providers_index(_user: AuthUser, State(state): State<AppState>) -> 
     match (ProvidersTemplate {
         active_nav: "providers",
         providers,
+        error: q.error,
+        success: q.success,
     })
     .render()
     {
@@ -92,7 +102,7 @@ pub async fn providers_set_key(
         Ok(e) => e,
         Err(e) => {
             error!("Failed to encrypt API key: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            return Redirect::to("/providers?error=Failed+to+encrypt+API+key.+Please+try+again.").into_response();
         }
     };
 
@@ -105,10 +115,10 @@ pub async fn providers_set_key(
     .await
     {
         error!("Failed to update provider key: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return Redirect::to("/providers?error=Failed+to+save+API+key.+Please+try+again.").into_response();
     }
 
-    Redirect::to("/providers").into_response()
+    Redirect::to("/providers?success=API+key+updated+successfully.").into_response()
 }
 
 pub async fn providers_delete_key(
@@ -147,8 +157,8 @@ pub async fn providers_set_region(
     .await
     {
         error!("Failed to update provider region: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        return Redirect::to("/providers?error=Failed+to+save+settings.+Please+try+again.").into_response();
     }
 
-    Redirect::to("/providers").into_response()
+    Redirect::to("/providers?success=Settings+saved.").into_response()
 }

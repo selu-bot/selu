@@ -3,189 +3,223 @@
 {% block title %}BlueBubbles{% endblock %}
 
 {% block body %}
-<div class="page-content">
-  <div class="page-header">
-    <h1>BlueBubbles Integration</h1>
-    <p>Configure BlueBubbles iMessage adapters and sender-to-user mappings. Only mapped senders receive responses.</p>
-  </div>
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-4xl mx-auto px-6 py-8 space-y-6">
 
-  {% if let Some(msg) = flash %}
-  <div class="flash flash-success">
-    <strong>{{ msg }}</strong>
-  </div>
-  {% endif %}
-
-  <!-- Sender Mappings -->
-  <div class="card">
-    <div class="card-header">Sender Mappings</div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Sender Ref</th>
-            <th>User</th>
-            <th>Pipe</th>
-            <th>Created</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for sr in sender_refs %}
-          <tr>
-            <td class="mono">{{ sr.sender_ref }}</td>
-            <td>{{ sr.user_display }}</td>
-            <td>{{ sr.pipe_name }}</td>
-            <td class="mono">{{ sr.created_at }}</td>
-            <td class="actions">
-              <button class="btn btn-danger btn-sm"
-                      hx-delete="/bluebubbles/sender-refs/{{ sr.id }}"
-                      hx-target="closest tr"
-                      hx-swap="outerHTML"
-                      hx-confirm="Remove sender mapping?">Remove</button>
-            </td>
-          </tr>
-          {% endfor %}
-          {% if sender_refs.is_empty() %}
-          <tr class="empty-row">
-            <td colspan="5">No sender mappings configured. All senders will be accepted (using pipe owner). Add mappings below to restrict to specific senders.</td>
-          </tr>
-          {% endif %}
-        </tbody>
-      </table>
+    <!-- Header -->
+    <div>
+      <h1 class="text-2xl font-bold text-white">BlueBubbles Integration</h1>
+      <p class="text-sm text-slate-400 mt-1">Configure BlueBubbles iMessage adapters and sender-to-user mappings. Only mapped senders receive responses.</p>
     </div>
-  </div>
 
-  <div class="card">
-    <div class="card-header">Add Sender Mapping</div>
-    <form method="post" action="/bluebubbles/sender-refs">
-      <div class="form-body">
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="sr-sender">Sender Reference</label>
-            <input id="sr-sender" name="sender_ref" type="text" placeholder="+14155551234" required />
-            <span class="form-hint">Phone number or address as it appears in BlueBubbles.</span>
-          </div>
-          <div class="form-group">
-            <label for="sr-user">Map to User</label>
-            <select id="sr-user" name="user_id" required>
-              <option value="">— select user —</option>
-              {% for u in users %}
-              <option value="{{ u.id }}">{{ u.display }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="sr-pipe">For Pipe</label>
-            <select id="sr-pipe" name="pipe_id" required>
-              <option value="">— select pipe —</option>
-              {% for p in pipes %}
-              <option value="{{ p.id }}">{{ p.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div class="form-footer">
-          <button type="submit" class="btn btn-primary">Add Mapping</button>
-        </div>
-      </div>
-    </form>
-  </div>
-
-  <!-- BlueBubbles Adapters -->
-  <div class="card">
-    <div class="card-header">Adapters</div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Server</th>
-            <th>Chat GUID</th>
-            <th>Pipe</th>
-            <th>Poll (ms)</th>
-            <th>Status</th>
-            <th>Created</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for cfg in configs %}
-          <tr>
-            <td><strong>{{ cfg.name }}</strong></td>
-            <td class="mono">{{ cfg.server_url }}</td>
-            <td class="mono">{{ cfg.chat_guid }}</td>
-            <td>{{ cfg.pipe_name }}</td>
-            <td>{{ cfg.poll_interval_ms }}</td>
-            <td>
-              {% if cfg.active %}
-              <span class="badge badge-green">active</span>
-              {% else %}
-              <span class="badge badge-red">inactive</span>
-              {% endif %}
-            </td>
-            <td class="mono">{{ cfg.created_at }}</td>
-            <td class="actions">
-              {% if cfg.active %}
-              <button class="btn btn-danger btn-sm"
-                      hx-delete="/bluebubbles/configs/{{ cfg.id }}"
-                      hx-target="closest tr"
-                      hx-swap="outerHTML"
-                      hx-confirm="Deactivate adapter?">Deactivate</button>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-          {% if configs.is_empty() %}
-          <tr class="empty-row">
-            <td colspan="8">No BlueBubbles adapters configured. Add one below.</td>
-          </tr>
-          {% endif %}
-        </tbody>
-      </table>
+    {% if let Some(msg) = flash %}
+    <div class="px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+      {{ msg }}
     </div>
-  </div>
+    {% endif %}
 
-  <div class="card">
-    <div class="card-header">Add BlueBubbles Adapter</div>
-    <form method="post" action="/bluebubbles/configs">
-      <div class="form-body">
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="bb-name">Name</label>
-            <input id="bb-name" name="name" type="text" placeholder="Family Chat" required />
-          </div>
-          <div class="form-group">
-            <label for="bb-url">BB Server URL</label>
-            <input id="bb-url" name="server_url" type="text" placeholder="http://localhost:1234" required />
-          </div>
-          <div class="form-group">
-            <label for="bb-pass">BB Password</label>
-            <input id="bb-pass" name="server_password" type="password" required />
-          </div>
-          <div class="form-group">
-            <label for="bb-chat">Chat GUID</label>
-            <input id="bb-chat" name="chat_guid" type="text" placeholder="iMessage;+;chat..." required />
-            <span class="form-hint">The BlueBubbles chat GUID to monitor.</span>
-          </div>
-          <div class="form-group">
-            <label for="bb-pipe">Target Pipe</label>
-            <select id="bb-pipe" name="pipe_id" required>
-              <option value="">— select pipe —</option>
-              {% for p in pipes %}
-              <option value="{{ p.id }}">{{ p.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="bb-poll">Poll Interval (ms)</label>
-            <input id="bb-poll" name="poll_interval_ms" type="number" value="2000" min="500" />
-          </div>
-        </div>
-        <div class="form-footer">
-          <button type="submit" class="btn btn-primary">Create Adapter</button>
-        </div>
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+      {{ err }}
+    </div>
+    {% endif %}
+
+    <!-- Sender Mappings -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-800">
+        <span class="text-sm font-semibold text-white">Sender Mappings</span>
       </div>
-    </form>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-800">
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Sender Ref</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">User</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Pipe</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Created</th>
+              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-widest text-slate-500"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {% for sr in sender_refs %}
+            <tr class="hover:bg-slate-800/30 transition-colors">
+              <td class="px-5 py-3.5 font-mono text-sm text-slate-300">{{ sr.sender_ref }}</td>
+              <td class="px-5 py-3.5 text-slate-200">{{ sr.user_display }}</td>
+              <td class="px-5 py-3.5 text-slate-400">{{ sr.pipe_name }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ sr.created_at }}</td>
+              <td class="px-5 py-3.5 text-right">
+                <button class="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        hx-delete="/bluebubbles/sender-refs/{{ sr.id }}"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML"
+                        hx-confirm="Remove sender mapping?">Remove</button>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if sender_refs.is_empty() %}
+            <tr>
+              <td colspan="5" class="px-5 py-6 text-center text-slate-500 text-sm">No sender mappings configured. All senders will be accepted (using pipe owner). Add mappings below to restrict to specific senders.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Add Sender Mapping -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-800">
+        <span class="text-sm font-semibold text-white">Add Sender Mapping</span>
+      </div>
+      <form method="post" action="/bluebubbles/sender-refs">
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label for="sr-sender" class="block text-xs font-medium text-slate-400 mb-1.5">Sender Reference</label>
+              <input id="sr-sender" name="sender_ref" type="text" placeholder="+14155551234" required
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+              <p class="text-[11px] text-slate-500 mt-1">Phone number or address as it appears in BlueBubbles.</p>
+            </div>
+            <div>
+              <label for="sr-user" class="block text-xs font-medium text-slate-400 mb-1.5">Map to User</label>
+              <select id="sr-user" name="user_id" required
+                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                <option value="">-- select user --</option>
+                {% for u in users %}
+                <option value="{{ u.id }}">{{ u.display }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label for="sr-pipe" class="block text-xs font-medium text-slate-400 mb-1.5">For Pipe</label>
+              <select id="sr-pipe" name="pipe_id" required
+                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                <option value="">-- select pipe --</option>
+                {% for p in pipes %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button type="submit"
+                    class="bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-5 py-2.5 rounded-lg transition-colors cursor-pointer">Add Mapping</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Adapters -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-800">
+        <span class="text-sm font-semibold text-white">Adapters</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-800">
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Name</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Server</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Chat GUID</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Pipe</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Poll (ms)</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Status</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Created</th>
+              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-widest text-slate-500"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            {% for cfg in configs %}
+            <tr class="hover:bg-slate-800/30 transition-colors">
+              <td class="px-5 py-3.5 font-medium text-slate-200">{{ cfg.name }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ cfg.server_url }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ cfg.chat_guid }}</td>
+              <td class="px-5 py-3.5 text-slate-400">{{ cfg.pipe_name }}</td>
+              <td class="px-5 py-3.5 text-slate-400">{{ cfg.poll_interval_ms }}</td>
+              <td class="px-5 py-3.5">
+                {% if cfg.active %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
+                  Active
+                </span>
+                {% else %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ cfg.created_at }}</td>
+              <td class="px-5 py-3.5 text-right">
+                {% if cfg.active %}
+                <button class="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        hx-delete="/bluebubbles/configs/{{ cfg.id }}"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML"
+                        hx-confirm="Deactivate adapter?">Deactivate</button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            {% if configs.is_empty() %}
+            <tr>
+              <td colspan="8" class="px-5 py-6 text-center text-slate-500 text-sm">No BlueBubbles adapters configured. Add one below.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Add Adapter -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-800">
+        <span class="text-sm font-semibold text-white">Add BlueBubbles Adapter</span>
+      </div>
+      <form method="post" action="/bluebubbles/configs">
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label for="bb-name" class="block text-xs font-medium text-slate-400 mb-1.5">Name</label>
+              <input id="bb-name" name="name" type="text" placeholder="Family Chat" required
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+            </div>
+            <div>
+              <label for="bb-url" class="block text-xs font-medium text-slate-400 mb-1.5">BB Server URL</label>
+              <input id="bb-url" name="server_url" type="text" placeholder="http://localhost:1234" required
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+            </div>
+            <div>
+              <label for="bb-pass" class="block text-xs font-medium text-slate-400 mb-1.5">BB Password</label>
+              <input id="bb-pass" name="server_password" type="password" required
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+            </div>
+            <div>
+              <label for="bb-chat" class="block text-xs font-medium text-slate-400 mb-1.5">Chat GUID</label>
+              <input id="bb-chat" name="chat_guid" type="text" placeholder="iMessage;+;chat..." required
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+              <p class="text-[11px] text-slate-500 mt-1">The BlueBubbles chat GUID to monitor.</p>
+            </div>
+            <div>
+              <label for="bb-pipe" class="block text-xs font-medium text-slate-400 mb-1.5">Target Pipe</label>
+              <select id="bb-pipe" name="pipe_id" required
+                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                <option value="">-- select pipe --</option>
+                {% for p in pipes %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label for="bb-poll" class="block text-xs font-medium text-slate-400 mb-1.5">Poll Interval (ms)</label>
+              <input id="bb-poll" name="poll_interval_ms" type="number" value="2000" min="500"
+                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button type="submit"
+                    class="bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-5 py-2.5 rounded-lg transition-colors cursor-pointer">Create Adapter</button>
+          </div>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 {% endblock %}

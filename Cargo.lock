@@ -1961,21 +1961,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pap-bluebubbles"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "dotenvy",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "pap-core"
 version = "0.1.0"
 dependencies = [

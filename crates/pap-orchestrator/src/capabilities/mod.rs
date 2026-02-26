@@ -99,6 +99,23 @@ impl CapabilityEngine {
         }
     }
 
+    /// Shut down **all** active containers (used during graceful shutdown).
+    pub async fn close_all(&self) {
+        let mut active = self.active.write().await;
+        let count = active.len();
+        if count == 0 {
+            return;
+        }
+        info!("Shutting down {} active capability container(s)...", count);
+        let entries: Vec<(String, ActiveCapability)> = active.drain().collect();
+        // Drop the lock before doing potentially slow Docker calls
+        drop(active);
+        for (key, ac) in entries {
+            self.runner.stop(&ac.running).await;
+            info!(key = %key, capability = %ac.running.capability_id, "Stopped capability container (shutdown)");
+        }
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     async fn get_or_start(

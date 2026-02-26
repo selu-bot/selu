@@ -82,6 +82,7 @@ struct ImessageDetailTemplate {
     people: Vec<AllowedPerson>,
     users: Vec<UserOption>,
     flash: Option<String>,
+    error: Option<String>,
 }
 
 // ── Form structs ──────────────────────────────────────────────────────────────
@@ -461,6 +462,7 @@ pub async fn imessage_detail(
         people,
         users,
         flash: q.msg,
+        error: q.error,
     }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
@@ -478,7 +480,7 @@ pub async fn imessage_add_person(
 ) -> Response {
     if form.user_id.is_empty() || form.sender_ref.trim().is_empty() {
         return Redirect::to(&format!(
-            "/integrations/imessage/{}?msg=Please+fill+in+both+fields", config_id
+            "/integrations/imessage/{}?error=Please+fill+in+both+fields", config_id
         )).into_response();
     }
 
@@ -505,11 +507,13 @@ pub async fn imessage_add_person(
             "/integrations/imessage/{}?msg=Person+added", config_id
         )).into_response(),
         Err(e) if e.to_string().contains("UNIQUE") => Redirect::to(&format!(
-            "/integrations/imessage/{}?msg=This+phone+number+is+already+added", config_id
+            "/integrations/imessage/{}?error=This+phone+number+is+already+added", config_id
         )).into_response(),
         Err(e) => {
             error!("Failed to add person: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Redirect::to(&format!(
+                "/integrations/imessage/{}?error=Failed+to+add+person.+Please+try+again.", config_id
+            )).into_response()
         }
     }
 }
