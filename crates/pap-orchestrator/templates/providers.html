@@ -2,93 +2,89 @@
 {% block title %}LLM Providers{% endblock %}
 {% block body %}
 <div class="flex-1 overflow-y-auto">
-  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6">
+  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6 animate-fadein">
 
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-bold text-white">LLM Providers</h1>
-      <p class="text-sm text-slate-400 mt-1">Configure API keys and endpoints for LLM providers. Keys are encrypted at rest with AES-256-GCM.</p>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="providers.title">LLM Providers</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="providers.desc">Configure API keys and endpoints for LLM providers. Keys are encrypted at rest with AES-256-GCM.</p>
     </div>
 
     {% if let Some(err) = error %}
-    <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-      {{ err }}
-    </div>
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
     {% endif %}
 
     {% if let Some(msg) = success %}
-    <div class="px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
-      {{ msg }}
-    </div>
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{{ msg }}</div>
     {% endif %}
 
     {% for p in providers %}
-    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <span class="text-sm font-semibold text-white">{{ p.display_name }}</span>
+          <span class="text-sm font-semibold text-txt-heading">{{ p.display_name }}</span>
           {% if p.has_key %}
           <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
             Key Set
           </span>
           {% else %}
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">No Key</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-rosie/10 text-rosie border border-rosie/20">No Key</span>
           {% endif %}
           {% if p.active %}
           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
           {% else %}
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-500">Inactive</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-alt text-txt-muted">Inactive</span>
           {% endif %}
         </div>
-        <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-brand-500/15 text-brand-300 font-mono">{{ p.id }}</span>
+        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-coral/15 text-coral font-mono">{{ p.id }}</span>
       </div>
 
       <div class="p-5 space-y-5">
         <!-- API Key -->
         <form method="POST" action="/providers/{{ p.id }}/key">
-          <label class="block text-xs font-medium text-slate-400 mb-1.5">API Key</label>
+          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="providers.apikey">API Key</label>
           <div class="flex items-start gap-2">
             <input type="password" name="api_key"
                    placeholder="{% if p.has_key %}(encrypted key is set -- enter new value to replace){% else %}Paste your API key here{% endif %}"
-                   class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+                   class="flex-1 bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             <button type="submit"
-                    class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap">
-              {% if p.has_key %}Update{% else %}Set Key{% endif %}
+                    class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 whitespace-nowrap">
+              {% if p.has_key %}<span data-i18n="providers.update">Update</span>{% else %}<span data-i18n="providers.setkey">Set Key</span>{% endif %}
             </button>
             {% if p.has_key %}
             <button type="button"
-                    class="text-sm text-red-400 border border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5 px-4 py-2.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                    class="text-sm text-rosie border border-rosie/20 hover:border-rosie/40 hover:bg-rosie/5 px-4 py-2.5 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
                     hx-delete="/providers/{{ p.id }}/key"
-                    hx-target="closest .bg-slate-900"
+                    hx-target="closest .rounded-2xl"
                     hx-swap="outerHTML"
-                    hx-confirm="Remove the API key for {{ p.display_name }}?">
-              Remove
-            </button>
+                    hx-confirm="Remove the API key for {{ p.display_name }}?"
+                    data-i18n="providers.removekey">Remove</button>
             {% endif %}
           </div>
         </form>
 
         <!-- Region / Base URL -->
         <form method="POST" action="/providers/{{ p.id }}/region">
-          <label class="block text-xs font-medium text-slate-400 mb-1.5">
+          <label class="block text-xs font-medium text-txt-muted mb-1.5">
             {% if p.id == "bedrock" %}AWS Region{% else if p.id == "ollama" %}Ollama URL{% else %}Base URL{% endif %}
           </label>
           <div class="flex items-start gap-2">
             <input type="text" name="base_url"
                    value="{{ p.base_url }}"
                    placeholder="{% if p.id == "bedrock" %}us-east-1{% else if p.id == "ollama" %}http://localhost:11434{% else %}https://api.openai.com{% endif %}"
-                   class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+                   class="flex-1 bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             <button type="submit"
-                    class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors cursor-pointer">Save</button>
+                    class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    data-i18n="common.save">Save</button>
           </div>
-          <p class="text-[11px] text-slate-500 mt-1.5">
+          <p class="text-[11px] text-txt-faint mt-1.5">
             {% if p.id == "bedrock" %}
             AWS region where Bedrock is enabled (e.g. us-east-1, us-west-2, eu-west-1)
             {% else if p.id == "ollama" %}
-            URL of your Ollama instance. Append |model-name to override the default model (e.g. http://localhost:11434|llama3.2)
+            URL of your Ollama instance. Append |model-name to override the default model
             {% else if p.id == "openai" %}
-            Leave empty to use the default (https://api.openai.com). Set a custom URL for OpenAI-compatible APIs.
+            Leave empty to use the default. Set a custom URL for OpenAI-compatible APIs.
             {% else if p.id == "anthropic" %}
             Leave empty to use the default (https://api.anthropic.com).
             {% endif %}
@@ -99,8 +95,8 @@
     {% endfor %}
 
     {% if providers.is_empty() %}
-    <div class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
-      <p class="text-sm text-slate-500">No LLM providers configured. They are created automatically during first-run setup.</p>
+    <div class="bg-surface-raised border border-edge rounded-2xl p-8 text-center">
+      <p class="text-sm text-txt-muted">No LLM providers configured. They are created automatically during first-run setup.</p>
     </div>
     {% endif %}
   </div>

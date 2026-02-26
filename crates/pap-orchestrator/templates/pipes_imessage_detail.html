@@ -4,100 +4,93 @@
 
 {% block body %}
 <div class="flex-1 overflow-y-auto">
-  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6">
+  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6 animate-fadein">
 
     <!-- Back link -->
-    <a href="/pipes" class="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+    <a href="/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      Back to Pipes
+      <span data-i18n="pipes.back">Back to Pipes</span>
     </a>
 
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+        <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
           <svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </div>
         <div>
-          <h1 class="text-xl font-bold text-white">{{ config.name }}</h1>
-          <p class="text-sm text-slate-400">iMessage pipe via BlueBubbles</p>
+          <h1 class="text-xl font-black text-txt-heading font-heading">{{ config.name }}</h1>
+          <p class="text-sm text-txt-muted">iMessage pipe via BlueBubbles</p>
         </div>
       </div>
       {% if config.active %}
       <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
         <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-        Connected
+        <span data-i18n="pipes.connected">Connected</span>
       </span>
       {% else %}
-      <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
-        Inactive
-      </span>
+      <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-rosie/10 text-rosie border border-rosie/20">Inactive</span>
       {% endif %}
     </div>
 
     {% if let Some(msg) = flash %}
-    <div class="px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
-      {{ msg }}
-    </div>
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{{ msg }}</div>
     {% endif %}
 
     {% if let Some(err) = error %}
-    <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-      {{ err }}
-    </div>
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
     {% endif %}
 
     <!-- Connection Info -->
-    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-slate-800">
-        <span class="text-sm font-semibold text-white">Connection Details</span>
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading">Connection Details</span>
       </div>
       <div class="p-5">
         <div class="grid grid-cols-2 gap-5">
           <div>
-            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1">Server</p>
-            <p class="text-sm text-slate-300 font-mono">{{ config.server_url }}</p>
+            <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1">Server</p>
+            <p class="text-sm text-txt font-mono">{{ config.server_url }}</p>
           </div>
           <div>
-            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1">Agent</p>
-            <p class="text-sm text-slate-300">{{ config.agent_name }}</p>
+            <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1">Agent</p>
+            <p class="text-sm text-txt">{{ config.agent_name }}</p>
           </div>
           <div class="col-span-2">
-            <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1">Chat GUID</p>
-            <p class="text-sm text-slate-300 font-mono break-all">{{ config.chat_guid }}</p>
+            <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1">Chat GUID</p>
+            <p class="text-sm text-txt font-mono break-all">{{ config.chat_guid }}</p>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- People who can talk to PAP -->
-    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
-        <span class="text-sm font-semibold text-white">Allowed People</span>
-        <span class="text-xs text-slate-500">
+    <!-- People -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading">Allowed People</span>
+        <span class="text-xs text-txt-muted">
           {% if people.is_empty() %}Everyone (no restrictions){% else %}{{ people.len() }} configured{% endif %}
         </span>
       </div>
 
       {% if people.is_empty() %}
       <div class="p-5">
-        <p class="text-sm text-slate-400 leading-relaxed">
-          No sender restrictions configured. PAP will respond to <strong class="text-slate-300">all messages</strong> in this chat.
-          Add people below to only respond to specific senders.
+        <p class="text-sm text-txt-muted leading-relaxed">
+          No sender restrictions configured. Selu will respond to <strong class="text-txt">all messages</strong> in this chat.
         </p>
       </div>
       {% else %}
-      <div class="divide-y divide-slate-800">
+      <div class="divide-y divide-edge">
         {% for person in people %}
         <div class="flex items-center gap-3 px-5 py-3">
-          <div class="w-8 h-8 rounded-full bg-brand-600/20 flex items-center justify-center text-xs font-bold text-brand-300 flex-shrink-0">
+          <div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
             {{ person.initials }}
           </div>
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-medium text-slate-200">{{ person.display_name }}</div>
-            <div class="text-xs text-slate-500 font-mono">{{ person.sender_ref }}</div>
+            <div class="text-sm font-medium text-txt-heading">{{ person.display_name }}</div>
+            <div class="text-xs text-txt-muted font-mono">{{ person.sender_ref }}</div>
           </div>
-          <button class="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+          <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                   hx-delete="/pipes/imessage/{{ config.config_id }}/people/{{ person.ref_id }}"
                   hx-target="closest div"
                   hx-swap="outerHTML"
@@ -108,44 +101,43 @@
       {% endif %}
 
       <!-- Add person form -->
-      <div class="border-t border-slate-800 p-5">
+      <div class="border-t border-edge p-5">
         <form method="post" action="/pipes/imessage/{{ config.config_id }}/people"
               class="flex items-end gap-3">
           <div class="flex-1">
-            <label class="block text-xs font-medium text-slate-400 mb-1.5">Phone / Apple ID</label>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5">Phone / Apple ID</label>
             <input name="sender_ref" type="text" placeholder="+14155551234 or email@icloud.com" required
-                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           </div>
           <div class="flex-1">
-            <label class="block text-xs font-medium text-slate-400 mb-1.5">PAP User</label>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5">Selu User</label>
             <select name="user_id" required
-                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               {% for u in users %}
               <option value="{{ u.id }}">{{ u.display }}</option>
               {% endfor %}
             </select>
           </div>
           <button type="submit"
-                  class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap">
+                  class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 whitespace-nowrap">
             Add Person
           </button>
         </form>
-        <p class="text-[11px] text-slate-500 mt-2">The phone number or Apple ID must match exactly how it appears in BlueBubbles.</p>
       </div>
     </div>
 
     <!-- Danger zone -->
-    <div class="bg-slate-900 border border-red-500/20 rounded-xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-red-500/10">
-        <span class="text-sm font-semibold text-red-400">Danger Zone</span>
+    <div class="bg-surface-raised border border-rosie/20 rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-rosie/10">
+        <span class="text-sm font-semibold text-rosie">Danger Zone</span>
       </div>
       <div class="p-5">
-        <p class="text-sm text-slate-400 mb-4">
-          Removing this pipe will stop PAP from monitoring this chat. Messages already received are kept.
+        <p class="text-sm text-txt-muted mb-4">
+          Removing this pipe will stop Selu from monitoring this chat. Messages already received are kept.
         </p>
-        <button class="text-sm font-medium text-red-400 border border-red-500/30 hover:border-red-500/50 hover:bg-red-500/5 px-4 py-2 rounded-lg transition-colors cursor-pointer"
+        <button class="text-sm font-medium text-rosie border border-rosie/30 hover:border-rosie/50 hover:bg-rosie/5 px-4 py-2 rounded-xl transition-colors cursor-pointer"
                 hx-delete="/pipes/imessage/{{ config.config_id }}"
-                hx-confirm="Remove this iMessage pipe? PAP will stop monitoring this chat.">
+                hx-confirm="Remove this iMessage pipe? Selu will stop monitoring this chat.">
           Remove Pipe
         </button>
       </div>

@@ -3,80 +3,172 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PAP — First-Run Setup</title>
+  <title>selu. — First-Run Setup</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: { 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
-          },
-          fontFamily: {
-            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-          }
-        }
-      }
+      theme: { extend: { fontFamily: {
+        heading: ['Nunito', 'sans-serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+      }}}
     }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root, html.light {
+      --bg: #FFFFFF; --bg-card: #F7F5F3; --border: #E5E2DD;
+      --text: #3D3A50; --text-heading: #1E1B3A; --text-muted: #7A7890;
+      --input-bg: #F2F0EE; --input-border: #D0CCC6; --blur-c: rgba(255,107,90,0.08);
+    }
+    html.dark {
+      --bg: #151229; --bg-card: rgba(45,43,85,0.6); --border: #3D3A5C;
+      --text: #E0DDF0; --text-heading: #FFFFFF; --text-muted: #A09EB0;
+      --input-bg: rgba(21,18,41,0.8); --input-border: #514D75; --blur-c: rgba(255,107,90,0.05);
+    }
+    @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    .animate-float { animation: float 3s ease-in-out infinite; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fadein { animation: fadeIn 0.5s ease-out; }
+    @keyframes sparkle { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.6); } }
+    .sparkle { animation: sparkle 2s ease-in-out infinite; }
+  </style>
+  <script>(function(){var t=localStorage.getItem('selu-theme')||'dark';document.documentElement.classList.remove('dark','light');document.documentElement.classList.add(t)})()</script>
 </head>
-<body class="bg-slate-950 text-slate-200 font-sans min-h-dvh flex items-center justify-center antialiased">
-  <div class="w-full max-w-sm mx-4">
-    <!-- Logo -->
+<body style="background:var(--bg);color:var(--text)" class="font-sans min-h-dvh flex items-center justify-center antialiased">
+  <!-- Background decoration -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute -top-40 -right-40 w-96 h-96 rounded-full blur-3xl" style="background:var(--blur-c)"></div>
+    <div class="absolute -bottom-40 -left-40 w-96 h-96 rounded-full blur-3xl" style="background:rgba(255,126,179,0.05)"></div>
+  </div>
+
+  <div class="w-full max-w-sm mx-4 relative animate-fadein">
+    <!-- Logo + Celebrating Mascot -->
     <div class="text-center mb-8">
-      <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-brand-600 mb-4">
-        <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+      <div class="inline-block animate-float mb-4">
+        <svg class="w-24 h-24 mx-auto" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <defs><linearGradient id="sg" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0%" stop-color="#FF7EB3"/><stop offset="100%" stop-color="#FF6B5A"/></linearGradient></defs>
+          <circle cx="165" cy="90" r="50" fill="url(#sg)"/>
+          <circle cx="347" cy="90" r="50" fill="url(#sg)"/>
+          <circle cx="256" cy="272" r="190" fill="url(#sg)"/>
+          <path d="M 175,238 Q 200,215 225,238" stroke="#2D2B55" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <path d="M 287,238 Q 312,215 337,238" stroke="#2D2B55" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <ellipse cx="160" cy="270" rx="32" ry="16" fill="#FF4070" opacity="0.25"/>
+          <ellipse cx="352" cy="270" rx="32" ry="16" fill="#FF4070" opacity="0.25"/>
+          <path d="M 210,300 Q 256,355 302,300" stroke="#2D2B55" stroke-width="5" fill="none" stroke-linecap="round"/>
+          <circle cx="100" cy="170" r="6" fill="#FFD93D" class="sparkle"/>
+          <circle cx="412" cy="190" r="5" fill="#FFD93D" class="sparkle" style="animation-delay:0.5s"/>
+          <circle cx="380" cy="430" r="4" fill="#FFD93D" class="sparkle" style="animation-delay:1s"/>
+          <circle cx="130" cy="410" r="7" fill="#FFD93D" class="sparkle" style="animation-delay:0.7s"/>
         </svg>
       </div>
-      <h1 class="text-xl font-bold text-white">Welcome to PAP</h1>
-      <p class="text-sm text-slate-400 mt-1">Create your admin account to get started</p>
+      <h1 class="font-heading text-2xl font-black" id="setup-title" style="color:var(--text-heading)">Welcome to Selu</h1>
+      <p class="text-sm mt-1" id="setup-sub" style="color:var(--text-muted)">Create your admin account to get started</p>
     </div>
 
     <!-- Info banner -->
-    <div class="mb-4 px-4 py-3 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-300 text-sm leading-relaxed">
+    <div class="mb-4 px-4 py-3 rounded-xl bg-[#FF6B5A]/10 border border-[#FF6B5A]/20 text-[#FF6B5A] text-sm leading-relaxed" id="setup-banner">
       This page is only available during first-run setup when no users exist.
     </div>
 
     <!-- Error -->
     {% if let Some(err) = error %}
-    <div class="mb-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+    <div class="mb-4 px-4 py-3 rounded-xl bg-[#FF4070]/10 border border-[#FF4070]/20 text-[#FF4070] text-sm text-center">
       {{ err }}
     </div>
     {% endif %}
 
     <!-- Form -->
-    <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+    <div class="backdrop-blur-sm rounded-2xl p-6" style="background:var(--bg-card);border:1px solid var(--border)">
       <form method="POST" action="/setup" class="space-y-4">
         <div>
-          <label for="username" class="block text-xs font-medium text-slate-400 mb-1.5">Username</label>
+          <label for="username" class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Username</label>
           <input type="text" id="username" name="username" required autofocus
                  placeholder="admin"
-                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+                 class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#FF6B5A] focus:ring-1 focus:ring-[#FF6B5A]/50 transition"
+                 style="background:var(--input-bg);border:1px solid var(--input-border);color:var(--text-heading)" />
         </div>
         <div>
-          <label for="display_name" class="block text-xs font-medium text-slate-400 mb-1.5">Display Name</label>
+          <label for="display_name" class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Display Name</label>
           <input type="text" id="display_name" name="display_name"
                  placeholder="Jan"
-                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-          <p class="text-xs text-slate-500 mt-1">Defaults to username if left blank.</p>
+                 class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#FF6B5A] focus:ring-1 focus:ring-[#FF6B5A]/50 transition"
+                 style="background:var(--input-bg);border:1px solid var(--input-border);color:var(--text-heading)" />
+          <p class="text-xs mt-1" id="dn-hint" style="color:var(--text-muted)">Defaults to username if left blank.</p>
         </div>
         <div>
-          <label for="password" class="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
+          <label for="password" class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Password</label>
           <input type="password" id="password" name="password" required
                  placeholder="Choose a strong password"
-                 class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+                 class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#FF6B5A] focus:ring-1 focus:ring-[#FF6B5A]/50 transition"
+                 style="background:var(--input-bg);border:1px solid var(--input-border);color:var(--text-heading)" />
         </div>
-        <button type="submit"
-                class="w-full bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm py-2.5 rounded-lg transition-colors cursor-pointer">
+        <button type="submit" id="setup-btn"
+                class="w-full bg-gradient-to-r from-[#FF6B5A] to-[#FF9F67] hover:from-[#FF6B5A]/90 hover:to-[#FF9F67]/90 text-white font-semibold text-sm py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-[#FF6B5A]/20 hover:shadow-[#FF6B5A]/30">
           Create Account &amp; Start
         </button>
       </form>
     </div>
+
+    <!-- Theme + Language toggle -->
+    <div class="text-center mt-4 flex items-center justify-center gap-4">
+      <button onclick="toggleTheme()" class="text-xs hover:opacity-80 transition-opacity cursor-pointer" id="theme-btn" style="color:var(--text-muted)">Light mode</button>
+      <span style="color:var(--text-muted)">|</span>
+      <button onclick="toggleLang()" class="text-xs hover:opacity-80 transition-opacity cursor-pointer" id="lang-btn" style="color:var(--text-muted)">Deutsch</button>
+    </div>
   </div>
+
+  <script>
+    var setupLang = localStorage.getItem('selu-lang') || 'en';
+    function getTheme() { return localStorage.getItem('selu-theme') || 'dark'; }
+    function toggleTheme() {
+      var t = getTheme() === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('selu-theme', t);
+      document.documentElement.classList.remove('dark','light');
+      document.documentElement.classList.add(t);
+      updateThemeBtn();
+    }
+    function updateThemeBtn() {
+      var btn = document.getElementById('theme-btn');
+      if (!btn) return;
+      var isDark = getTheme() === 'dark';
+      btn.textContent = isDark ? (setupLang === 'de' ? 'Heller Modus' : 'Light mode') : (setupLang === 'de' ? 'Dunkler Modus' : 'Dark mode');
+    }
+    function toggleLang() {
+      setupLang = setupLang === 'en' ? 'de' : 'en';
+      localStorage.setItem('selu-lang', setupLang);
+      applySetupLang();
+    }
+    function applySetupLang() {
+      var btn = document.getElementById('lang-btn');
+      if (setupLang === 'de') {
+        document.getElementById('setup-title').textContent = 'Willkommen bei Selu';
+        document.getElementById('setup-sub').textContent = 'Erstelle dein Admin-Konto, um loszulegen';
+        document.getElementById('setup-banner').textContent = 'Diese Seite ist nur bei der Ersteinrichtung verf\u00fcgbar, wenn noch keine Benutzer existieren.';
+        document.querySelector('label[for=username]').textContent = 'Benutzername';
+        document.querySelector('label[for=display_name]').textContent = 'Anzeigename';
+        document.querySelector('label[for=password]').textContent = 'Passwort';
+        document.getElementById('dn-hint').textContent = 'Standardm\u00e4\u00dfig der Benutzername.';
+        document.querySelector('#password').placeholder = 'Sicheres Passwort w\u00e4hlen';
+        document.getElementById('setup-btn').innerHTML = 'Konto erstellen &amp; starten';
+        if (btn) btn.textContent = 'English';
+      } else {
+        document.getElementById('setup-title').textContent = 'Welcome to Selu';
+        document.getElementById('setup-sub').textContent = 'Create your admin account to get started';
+        document.getElementById('setup-banner').textContent = 'This page is only available during first-run setup when no users exist.';
+        document.querySelector('label[for=username]').textContent = 'Username';
+        document.querySelector('label[for=display_name]').textContent = 'Display Name';
+        document.querySelector('label[for=password]').textContent = 'Password';
+        document.getElementById('dn-hint').textContent = 'Defaults to username if left blank.';
+        document.querySelector('#password').placeholder = 'Choose a strong password';
+        document.getElementById('setup-btn').innerHTML = 'Create Account &amp; Start';
+        if (btn) btn.textContent = 'Deutsch';
+      }
+      updateThemeBtn();
+    }
+    document.addEventListener('DOMContentLoaded', function() { applySetupLang(); updateThemeBtn(); });
+  </script>
 </body>
 </html>

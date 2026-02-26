@@ -4,38 +4,38 @@
 
 {% block body %}
 <div class="flex-1 overflow-y-auto">
-  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6 animate-fadein">
 
     <!-- Back link + Header -->
     <div>
-      <a href="/pipes" class="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-3">
+      <a href="/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        Back to Pipes
+        <span data-i18n="pipes.back">Back to Pipes</span>
       </a>
-      <h1 class="text-2xl font-bold text-white">Set Up iMessage</h1>
-      <p class="text-sm text-slate-400 mt-1">Connect your iMessage to PAP. You'll need a <a href="https://bluebubbles.app" target="_blank" class="text-brand-400 hover:text-brand-300">BlueBubbles</a> server running on your Mac.</p>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="imsg.title">Set Up iMessage</h1>
+      <p class="text-sm text-txt-muted mt-1">Connect your iMessage to Selu. You'll need a <a href="https://bluebubbles.app" target="_blank" class="text-coral hover:text-amber transition-colors">BlueBubbles</a> server running on your Mac.</p>
     </div>
 
     <!-- Wizard steps indicator -->
     <div class="flex items-center gap-2">
-      <div id="ws-1" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-brand-600/15 text-brand-300 border border-brand-500/30">
-        <span class="w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center">1</span>
-        Connect Server
+      <div id="ws-1" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-coral/15 text-coral border border-coral/40">
+        <span class="w-5 h-5 rounded-full gradient-coral text-white text-[10px] font-bold flex items-center justify-center">1</span>
+        <span data-i18n="imsg.step1">Connect Server</span>
       </div>
-      <svg class="w-4 h-4 text-slate-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-      <div id="ws-2" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-800/50 text-slate-500 border border-slate-700">
-        <span class="w-5 h-5 rounded-full bg-slate-700 text-slate-400 text-[10px] font-bold flex items-center justify-center">2</span>
-        Pick Chat
+      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <div id="ws-2" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
+        <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">2</span>
+        <span data-i18n="imsg.step2">Pick Chat</span>
       </div>
-      <svg class="w-4 h-4 text-slate-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-      <div id="ws-3" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-800/50 text-slate-500 border border-slate-700">
-        <span class="w-5 h-5 rounded-full bg-slate-700 text-slate-400 text-[10px] font-bold flex items-center justify-center">3</span>
-        Add People
+      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <div id="ws-3" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
+        <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">3</span>
+        <span data-i18n="imsg.step3">Add People</span>
       </div>
     </div>
 
     {% if let Some(err) = error %}
-    <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
       {{ err }}
     </div>
     {% endif %}
@@ -43,31 +43,31 @@
     <form method="post" action="/pipes/imessage/setup" id="setup-form" class="space-y-4">
 
       <!-- Step 1: BlueBubbles Server -->
-      <div id="step-1" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-        <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
-          <span class="text-sm font-semibold text-white">Step 1: Connect to BlueBubbles</span>
+      <div id="step-1" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading">Step 1: Connect to BlueBubbles</span>
         </div>
         <div class="p-5 space-y-4">
-          <p class="text-xs text-slate-400 leading-relaxed">
-            Enter your BlueBubbles server details. You can find these in the BlueBubbles app under <strong class="text-slate-300">Settings &gt; Connection</strong>.
+          <p class="text-xs text-txt-muted leading-relaxed">
+            Enter your BlueBubbles server details. You can find these in the BlueBubbles app under <strong class="text-txt">Settings &gt; Connection</strong>.
           </p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label for="bb-url" class="block text-xs font-medium text-slate-400 mb-1.5">Server URL</label>
+              <label for="bb-url" class="block text-xs font-medium text-txt-muted mb-1.5">Server URL</label>
               <input id="bb-url" name="server_url" type="text" placeholder="http://host.docker.internal:1234" required
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-              <p class="text-[11px] text-slate-500 mt-1">If PAP runs in Docker on your Mac, use <strong class="text-slate-400">http://host.docker.internal:PORT</strong>.</p>
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+              <p class="text-[11px] text-txt-faint mt-1">If Selu runs in Docker on your Mac, use <strong class="text-txt-muted">http://host.docker.internal:PORT</strong>.</p>
             </div>
             <div>
-              <label for="bb-pass" class="block text-xs font-medium text-slate-400 mb-1.5">Server Password</label>
+              <label for="bb-pass" class="block text-xs font-medium text-txt-muted mb-1.5">Server Password</label>
               <input id="bb-pass" name="server_password" type="password" placeholder="Your BlueBubbles password" required
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-              <p class="text-[11px] text-slate-500 mt-1">Found in BlueBubbles &gt; Settings &gt; Server Password.</p>
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             </div>
           </div>
           <div class="flex items-center gap-3">
             <button type="button" id="btn-connect" onclick="testConnection()"
-                    class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer">
+                    class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    data-i18n="imsg.connect">
               Connect to BlueBubbles
             </button>
             <span id="connect-status" class="text-sm"></span>
@@ -75,100 +75,91 @@
         </div>
       </div>
 
-      <!-- Step 2: Chat Selection (hidden until step 1 completes) -->
-      <div id="step-2" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hidden">
-        <div class="px-5 py-3.5 border-b border-slate-800">
-          <span class="text-sm font-semibold text-white">Step 2: Pick a Chat</span>
+      <!-- Step 2: Chat Selection -->
+      <div id="step-2" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden hidden">
+        <div class="px-5 py-3.5 border-b border-edge">
+          <span class="text-sm font-semibold text-txt-heading">Step 2: Pick a Chat</span>
         </div>
         <div class="p-5 space-y-4">
-          <p class="text-xs text-slate-400 leading-relaxed">Choose which iMessage conversation PAP should monitor and respond in.</p>
+          <p class="text-xs text-txt-muted leading-relaxed">Choose which iMessage conversation Selu should monitor and respond in.</p>
 
-          <!-- Chat list (populated by JS) -->
           <div id="chat-list" class="hidden">
             <input id="chat-search" type="text" placeholder="Search chats..."
-                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition mb-3" />
-            <div id="chat-items" class="max-h-72 overflow-y-auto border border-slate-700 rounded-lg bg-slate-950">
-              <!-- JS fills this -->
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition mb-3" />
+            <div id="chat-items" class="max-h-72 overflow-y-auto border border-edge rounded-xl bg-surface-input">
             </div>
           </div>
 
           <input type="hidden" name="chat_guid" id="chat-guid-input" value="" required />
 
-          <!-- Selected chat display -->
-          <div id="selected-chat" class="hidden px-4 py-3 bg-brand-600/10 border border-brand-500/20 rounded-lg">
+          <div id="selected-chat" class="hidden px-4 py-3 bg-coral/10 border border-coral/20 rounded-xl">
             <div class="flex items-center justify-between">
               <div>
-                <div id="selected-chat-name" class="text-sm font-semibold text-white"></div>
-                <div id="selected-chat-detail" class="text-xs text-slate-400 mt-0.5"></div>
+                <div id="selected-chat-name" class="text-sm font-semibold text-txt-heading"></div>
+                <div id="selected-chat-detail" class="text-xs text-txt-muted mt-0.5"></div>
               </div>
               <button type="button" onclick="clearChatSelection()"
-                      class="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 px-2.5 py-1 rounded-lg transition-colors cursor-pointer">Change</button>
+                      class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer">Change</button>
             </div>
           </div>
 
           <div>
-            <label for="bb-name" class="block text-xs font-medium text-slate-400 mb-1.5">Pipe Name</label>
+            <label for="bb-name" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.pipename">Pipe Name</label>
             <input id="bb-name" name="name" type="text" placeholder="e.g. Family Chat" required
-                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-            <p class="text-[11px] text-slate-500 mt-1">A friendly name for this pipe.</p>
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           </div>
         </div>
       </div>
 
-      <!-- Step 3: People (hidden until step 2 completes) -->
-      <div id="step-3" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hidden">
-        <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
-          <span class="text-sm font-semibold text-white">Step 3: Who Can Talk to PAP?</span>
-          <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-500">Optional</span>
+      <!-- Step 3: People -->
+      <div id="step-3" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="imsg.whocan">Who Can Talk to Selu?</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-surface-alt text-txt-muted" data-i18n="common.optional">Optional</span>
         </div>
         <div class="p-5 space-y-4">
-          <p class="text-xs text-slate-400 leading-relaxed">
-            Restrict which people PAP responds to. If you skip this, PAP responds to <strong class="text-slate-300">everyone</strong> in the chat.
+          <p class="text-xs text-txt-muted leading-relaxed">
+            Restrict which people Selu responds to. If you skip this, Selu responds to <strong class="text-txt">everyone</strong> in the chat.
           </p>
 
-          <!-- Participant chips -->
           <div id="participant-suggestions" class="hidden">
-            <p class="text-xs font-medium text-slate-500 mb-2">People in this chat:</p>
-            <div id="participant-chips" class="flex flex-wrap gap-1.5">
-              <!-- JS fills chips -->
-            </div>
+            <p class="text-xs font-medium text-txt-muted mb-2">People in this chat:</p>
+            <div id="participant-chips" class="flex flex-wrap gap-1.5"></div>
           </div>
 
-          <div id="people-list" class="space-y-2">
-            <!-- JS adds person rows here -->
-          </div>
+          <div id="people-list" class="space-y-2"></div>
 
           <div class="flex items-end gap-3">
             <div class="flex-1">
-              <label class="block text-xs font-medium text-slate-400 mb-1.5">Phone / Apple ID</label>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5">Phone / Apple ID</label>
               <input id="add-phone" type="text" placeholder="+14155551234 or email@icloud.com"
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             </div>
             <div class="flex-1">
-              <label class="block text-xs font-medium text-slate-400 mb-1.5">PAP User</label>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5">Selu User</label>
               <select id="add-user"
-                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
                 {% for u in users %}
                 <option value="{{ u.id }}">{{ u.display }}</option>
                 {% endfor %}
               </select>
             </div>
             <button type="button" onclick="addPerson()"
-                    class="text-sm font-medium text-slate-300 border border-slate-700 hover:border-slate-500 px-3 py-2.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap">
+                    class="text-sm font-medium text-txt border border-edge hover:border-muted px-3 py-2.5 rounded-xl transition-colors cursor-pointer whitespace-nowrap">
               + Add
             </button>
           </div>
-          <p class="text-[11px] text-slate-500">The phone number or Apple ID must match exactly how it appears in BlueBubbles.</p>
 
           <input type="hidden" name="people" id="people-input" value="" />
         </div>
       </div>
 
-      <!-- Submit (hidden until chat is selected) -->
+      <!-- Submit -->
       <div id="submit-row" class="flex items-center justify-between pt-2 hidden">
-        <a href="/pipes" class="text-sm text-slate-400 hover:text-slate-200 transition-colors">Cancel</a>
+        <a href="/pipes" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="pipes.cancel">Cancel</a>
         <button type="submit" id="btn-submit" disabled
-                class="bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-lg transition-all cursor-pointer">
+                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                data-i18n="imsg.setup">
           Set Up iMessage
         </button>
       </div>
@@ -179,69 +170,51 @@
 
 {% block head %}
 <script>
-// ── State ─────────────────────────────────────────────────────────────────────
 let allChats = [];
 let selectedChat = null;
 let people = [];
 
-// ── Step 1: Test connection & fetch chats ─────────────────────────────────────
 async function testConnection() {
   const btn = document.getElementById('btn-connect');
   const status = document.getElementById('connect-status');
   const urlInput = document.getElementById('bb-url');
   const passInput = document.getElementById('bb-pass');
-
   const serverUrl = urlInput.value.trim();
   const password = passInput.value;
-
   if (!serverUrl || !password) {
-    status.innerHTML = '<span class="text-red-400">Please enter both URL and password.</span>';
+    status.innerHTML = '<span class="text-rosie">Please enter both URL and password.</span>';
     return;
   }
-
   btn.disabled = true;
   btn.textContent = 'Connecting...';
   btn.classList.add('opacity-60');
-  status.innerHTML = '<span class="text-slate-400">Reaching BlueBubbles server...</span>';
-
+   status.innerHTML = '<span class="text-txt-muted">Reaching BlueBubbles server...</span>';
   try {
     const resp = await fetch('/pipes/imessage/proxy/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ server_url: serverUrl, server_password: password }),
     });
-
     const data = await resp.json();
-
     if (!data.ok) {
-      status.innerHTML = `<span class="text-red-400">${escapeHtml(data.error || 'Connection failed')}</span>`;
-      btn.disabled = false;
-      btn.classList.remove('opacity-60');
-      btn.textContent = 'Retry';
+      status.innerHTML = '<span class="text-rosie">' + escapeHtml(data.error || 'Connection failed') + '</span>';
+      btn.disabled = false; btn.classList.remove('opacity-60'); btn.textContent = 'Retry';
       return;
     }
-
     allChats = data.chats || [];
-    status.innerHTML = `<span class="text-emerald-400">Connected! Found ${allChats.length} chat(s).</span>`;
+    status.innerHTML = '<span class="text-emerald-400">Connected! Found ' + allChats.length + ' chat(s).</span>';
     btn.textContent = 'Connected';
-    btn.classList.replace('bg-brand-600', 'bg-emerald-600');
-    btn.classList.replace('hover:bg-brand-700', 'hover:bg-emerald-700');
-
-    // Update wizard steps
+    btn.style.background = 'linear-gradient(135deg, #059669, #10b981)';
     setWizardStep(1, 'done');
     setWizardStep(2, 'active');
     unlockStep('step-2');
     renderChatList();
-
   } catch (e) {
-    status.innerHTML = `<span class="text-red-400">Network error. Is PAP running?</span>`;
-    btn.disabled = false;
-    btn.classList.remove('opacity-60');
-    btn.textContent = 'Retry';
+    status.innerHTML = '<span class="text-rosie">Network error. Is Selu running?</span>';
+    btn.disabled = false; btn.classList.remove('opacity-60'); btn.textContent = 'Retry';
   }
 }
 
-// ── Step 2: Chat picker ───────────────────────────────────────────────────────
 function renderChatList() {
   document.getElementById('chat-list').classList.remove('hidden');
   renderFilteredChats('');
@@ -258,24 +231,22 @@ function renderFilteredChats(query) {
       || c.participants.some(p => p.toLowerCase().includes(query))
       || c.guid.toLowerCase().includes(query);
   });
-
   if (filtered.length === 0) {
-    itemsEl.innerHTML = '<div class="p-4 text-center text-sm text-slate-500">No chats match your search.</div>';
+    itemsEl.innerHTML = '<div class="p-4 text-center text-sm text-txt-muted">No chats match your search.</div>';
     return;
   }
-
   itemsEl.innerHTML = filtered.map(c => `
     <div onclick="selectChat('${escapeAttr(c.guid)}')"
-         class="px-4 py-3 cursor-pointer border-b border-slate-800 last:border-0 hover:bg-brand-600/5 transition-colors">
+         class="px-4 py-3 cursor-pointer border-b border-edge last:border-0 hover:bg-coral/8 transition-colors">
       <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center flex-shrink-0">
-          <svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>${c.is_group ? '<path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' : ''}</svg>
+        <div class="w-8 h-8 rounded-full bg-surface-alt flex items-center justify-center flex-shrink-0">
+          <svg class="w-4 h-4 text-txt-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>${c.is_group ? '<path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' : ''}</svg>
         </div>
         <div class="min-w-0 flex-1">
-          <div class="text-sm font-medium text-slate-200 truncate">${escapeHtml(c.display_name)}</div>
-          <div class="text-xs text-slate-500 truncate">
+          <div class="text-sm font-medium text-txt-heading truncate">${escapeHtml(c.display_name)}</div>
+          <div class="text-xs text-txt-muted truncate">
             ${c.participants.length > 0 ? escapeHtml(c.participants.join(', ')) : ''}
-            ${c.last_message ? ' — ' + escapeHtml(c.last_message) : ''}
+            ${c.last_message ? ' \u2014 ' + escapeHtml(c.last_message) : ''}
           </div>
         </div>
       </div>
@@ -286,18 +257,13 @@ function renderFilteredChats(query) {
 function selectChat(guid) {
   selectedChat = allChats.find(c => c.guid === guid);
   if (!selectedChat) return;
-
   document.getElementById('chat-guid-input').value = guid;
   document.getElementById('chat-list').classList.add('hidden');
   document.getElementById('selected-chat').classList.remove('hidden');
   document.getElementById('selected-chat-name').textContent = selectedChat.display_name;
   document.getElementById('selected-chat-detail').textContent = selectedChat.participants.join(', ');
-
   const nameInput = document.getElementById('bb-name');
-  if (!nameInput.value.trim()) {
-    nameInput.value = selectedChat.display_name;
-  }
-
+  if (!nameInput.value.trim()) nameInput.value = selectedChat.display_name;
   setWizardStep(2, 'done');
   setWizardStep(3, 'active');
   unlockStep('step-3');
@@ -317,17 +283,14 @@ function clearChatSelection() {
   disableSubmit();
 }
 
-// ── Step 3: People management ─────────────────────────────────────────────────
 function showParticipantSuggestions(participants) {
   if (!participants || participants.length === 0) return;
-
   const container = document.getElementById('participant-suggestions');
   const chips = document.getElementById('participant-chips');
   container.classList.remove('hidden');
-
   chips.innerHTML = participants.map(p => `
     <button type="button" onclick="suggestPerson('${escapeAttr(p)}')"
-            class="bg-slate-800 border border-slate-700 hover:border-brand-500/40 text-slate-300 text-xs px-2.5 py-1 rounded-full transition-colors cursor-pointer">
+            class="bg-surface-alt border border-edge hover:border-coral/40 text-txt text-xs px-2.5 py-1 rounded-full transition-colors cursor-pointer">
       + ${escapeHtml(p)}
     </button>
   `).join('');
@@ -344,11 +307,9 @@ function addPerson() {
   const phoneVal = phone.value.trim();
   const userId = userSelect.value;
   const userLabel = userSelect.options[userSelect.selectedIndex]?.text || '';
-
   if (!phoneVal) { phone.focus(); return; }
   if (!userId) { userSelect.focus(); return; }
   if (people.some(p => p.phone === phoneVal)) { phone.value = ''; return; }
-
   people.push({ phone: phoneVal, userId: userId, userLabel: userLabel });
   phone.value = '';
   renderPeople();
@@ -362,63 +323,49 @@ function removePerson(idx) {
 function renderPeople() {
   const list = document.getElementById('people-list');
   const input = document.getElementById('people-input');
-
   if (people.length === 0) { list.innerHTML = ''; input.value = ''; return; }
-
   list.innerHTML = people.map((p, i) => `
-    <div class="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-lg px-4 py-3">
-      <div class="w-8 h-8 rounded-full bg-brand-600/20 flex items-center justify-center text-xs font-bold text-brand-300 flex-shrink-0">
+    <div class="flex items-center gap-3 bg-surface-input border border-edge rounded-xl px-4 py-3">
+      <div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
         ${p.userLabel.substring(0, 2).toUpperCase()}
       </div>
       <div class="flex-1 min-w-0">
-        <div class="text-sm font-medium text-slate-200">${escapeHtml(p.userLabel)}</div>
-        <div class="text-xs text-slate-500 font-mono">${escapeHtml(p.phone)}</div>
+        <div class="text-sm font-medium text-txt-heading">${escapeHtml(p.userLabel)}</div>
+        <div class="text-xs text-txt-muted font-mono">${escapeHtml(p.phone)}</div>
       </div>
       <button type="button" onclick="removePerson(${i})"
-              class="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2 py-1 rounded transition-colors cursor-pointer">Remove</button>
+              class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2 py-1 rounded transition-colors cursor-pointer">Remove</button>
     </div>
   `).join('');
-
   input.value = people.map(p => `${p.phone}:${p.userId}`).join(',');
 }
 
-// ── Wizard Helpers ────────────────────────────────────────────────────────────
 function setWizardStep(num, state) {
   const el = document.getElementById('ws-' + num);
   const dot = el.querySelector('span');
-  // Reset
   el.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all';
   if (state === 'active') {
-    el.classList.add('bg-brand-600/15', 'text-brand-300', 'border', 'border-brand-500/30');
-    dot.className = 'w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center';
+    el.classList.add('bg-coral/15', 'text-coral', 'border', 'border-coral/40');
+    dot.className = 'w-5 h-5 rounded-full gradient-coral text-white text-[10px] font-bold flex items-center justify-center';
   } else if (state === 'done') {
     el.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border', 'border-emerald-500/20');
     dot.className = 'w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center justify-center';
   } else {
-    el.classList.add('bg-slate-800/50', 'text-slate-500', 'border', 'border-slate-700');
-    dot.className = 'w-5 h-5 rounded-full bg-slate-700 text-slate-400 text-[10px] font-bold flex items-center justify-center';
+    el.classList.add('bg-surface-raised', 'text-txt-muted', 'border', 'border-edge');
+    dot.className = 'w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center';
   }
 }
 
 function unlockStep(id) {
   const el = document.getElementById(id);
   el.classList.remove('hidden');
-  // Trigger a smooth entrance: start transparent, animate in
-  el.style.opacity = '0';
-  el.style.transform = 'translateY(8px)';
+  el.style.opacity = '0'; el.style.transform = 'translateY(8px)';
   el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-  requestAnimationFrame(() => {
-    el.style.opacity = '1';
-    el.style.transform = 'translateY(0)';
-  });
-  // Scroll into view after a brief delay for the animation
+  requestAnimationFrame(() => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
   setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
 }
 
-function lockStep(id) {
-  const el = document.getElementById(id);
-  el.classList.add('hidden');
-}
+function lockStep(id) { document.getElementById(id).classList.add('hidden'); }
 
 function enableSubmit() {
   const row = document.getElementById('submit-row');
@@ -426,26 +373,17 @@ function enableSubmit() {
   btn.disabled = false;
   if (row.classList.contains('hidden')) {
     row.classList.remove('hidden');
-    row.style.opacity = '0';
-    row.style.transition = 'opacity 0.3s ease';
+    row.style.opacity = '0'; row.style.transition = 'opacity 0.3s ease';
     requestAnimationFrame(() => { row.style.opacity = '1'; });
   }
 }
 
 function disableSubmit() {
-  const row = document.getElementById('submit-row');
-  row.classList.add('hidden');
+  document.getElementById('submit-row').classList.add('hidden');
   document.getElementById('btn-submit').disabled = true;
 }
 
-function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-function escapeAttr(s) {
-  return s.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-}
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function escapeAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
 </script>
 {% endblock %}

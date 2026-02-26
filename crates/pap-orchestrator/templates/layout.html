@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PAP — {% block title %}Personal Agent Platform{% endblock %}</title>
+  <title>selu. — {% block title %}Your personal agent{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0.2' y1='0' x2='0.8' y2='1'%3E%3Cstop offset='0%25' stop-color='%23FF7EB3'/%3E%3Cstop offset='100%25' stop-color='%23FF6B5A'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='108' fill='url(%23g)'/%3E%3Cellipse cx='195' cy='222' rx='36' ry='44' fill='white'/%3E%3Ccircle cx='205' cy='214' r='21' fill='%232D2B55'/%3E%3Ccircle cx='213' cy='205' r='7.5' fill='white' opacity='0.9'/%3E%3Cellipse cx='317' cy='222' rx='36' ry='44' fill='white'/%3E%3Ccircle cx='327' cy='214' r='21' fill='%232D2B55'/%3E%3Ccircle cx='335' cy='205' r='7.5' fill='white' opacity='0.9'/%3E%3Cpath d='M 212,326 Q 256,370 300,326' stroke='%232D2B55' stroke-width='7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
   <script src="https://unpkg.com/htmx.org@2.0.3"></script>
   <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -15,19 +16,50 @@
         extend: {
           colors: {
             brand: {
-              50:  '#eef2ff',
-              100: '#e0e7ff',
-              200: '#c7d2fe',
-              300: '#a5b4fc',
-              400: '#818cf8',
-              500: '#6366f1',
-              600: '#4f46e5',
-              700: '#4338ca',
-              800: '#3730a3',
-              900: '#312e81',
-            }
+              50:  '#FFF5F3',
+              100: '#FFE8E4',
+              200: '#FFD0C9',
+              300: '#FFB0A3',
+              400: '#FF8D7D',
+              500: '#FF6B5A',
+              600: '#E85A4A',
+              700: '#CC4A3C',
+              800: '#A33B30',
+              900: '#7A2C24',
+            },
+            coral:  '#FF6B5A',
+            amber:  '#FF9F67',
+            blush:  '#FF7EB3',
+            navy:   '#2D2B55',
+            dark:   '#1E1B3A',
+            muted:  '#8E8AA0',
+            warm:   '#FFF8F5',
+            sunny:  '#FFD93D',
+            rosie:  '#FF4070',
+            /* Semantic colors via CSS vars */
+            surface: {
+              DEFAULT: 'var(--c-surface)',
+              alt:     'var(--c-surface-alt)',
+              raised:  'var(--c-surface-raised)',
+              input:   'var(--c-surface-input)',
+            },
+            edge: {
+              DEFAULT: 'var(--c-edge)',
+              strong:  'var(--c-edge-strong)',
+            },
+            txt: {
+              DEFAULT: 'var(--c-text)',
+              heading: 'var(--c-text-heading)',
+              muted:   'var(--c-text-muted)',
+              faint:   'var(--c-text-faint)',
+            },
+            sidebar: {
+              DEFAULT: 'var(--c-sidebar)',
+              hover:   'var(--c-sidebar-hover)',
+            },
           },
           fontFamily: {
+            heading: ['Nunito', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
             sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
             mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'monospace'],
           }
@@ -37,218 +69,296 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    /* Minimal custom styles for things Tailwind CDN can't easily do */
+    /* ══ Theme Variables ═══════════════════════════════════════════ */
+    :root, html.light {
+      --c-surface:       #FFFFFF;
+      --c-surface-alt:   #F7F5F3;
+      --c-surface-raised:#FFFFFF;
+      --c-surface-input: #F2F0EE;
+      --c-edge:          #E5E2DD;
+      --c-edge-strong:   #D0CCC6;
+      --c-text:          #3D3A50;
+      --c-text-heading:  #1E1B3A;
+      --c-text-muted:    #7A7890;
+      --c-text-faint:    #A09EB0;
+      --c-sidebar:       #F7F5F3;
+      --c-sidebar-hover: rgba(0,0,0,0.04);
+      --c-nav-active-bg: rgba(255,107,90,0.08);
+      --c-nav-text:      #5C596E;
+      --c-card-bg:       #FFFFFF;
+      --c-card-border:   #E5E2DD;
+      --c-input-border:  #D0CCC6;
+      --c-scrollbar:     #D0CCC6;
+      --c-scrollbar-h:   #B0ADA6;
+      --c-code-bg:       #F5F3F0;
+      --c-code-border:   #E5E2DD;
+      --c-pre-bg:        #F0EDEA;
+      --c-md-strong:     #1E1B3A;
+      --c-md-em:         #5C596E;
+      --c-table-header:  #F2F0EE;
+    }
+    html.dark {
+      --c-surface:       #151229;
+      --c-surface-alt:   #1A1735;
+      --c-surface-raised:#1E1B3A;
+      --c-surface-input: #151229;
+      --c-edge:          #3D3A5C;
+      --c-edge-strong:   #514D75;
+      --c-text:          #E0DDF0;
+      --c-text-heading:  #FFFFFF;
+      --c-text-muted:    #A09EB0;
+      --c-text-faint:    #706D88;
+      --c-sidebar:       rgba(45,43,85,0.7);
+      --c-sidebar-hover: rgba(255,255,255,0.06);
+      --c-nav-active-bg: rgba(255,107,90,0.12);
+      --c-nav-text:      #C0BDD0;
+      --c-card-bg:       #1E1B3A;
+      --c-card-border:   #3D3A5C;
+      --c-input-border:  #514D75;
+      --c-scrollbar:     #3D3A5C;
+      --c-scrollbar-h:   #514D75;
+      --c-code-bg:       rgba(45,43,85,0.5);
+      --c-code-border:   #3D3A5C;
+      --c-pre-bg:        #111024;
+      --c-md-strong:     #F0EDE8;
+      --c-md-em:         #D0CDE0;
+      --c-table-header:  #2D2B55;
+    }
+
+    /* ── Animations ──────────────────────────────────────────────── */
     @keyframes blink { 50% { opacity: 0; } }
     .streaming::after {
       content: "\25CB";
       animation: blink 1s step-end infinite;
-      color: #818cf8;
+      color: #FF6B5A;
       margin-left: 2px;
     }
-    /* Scrollbar */
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-float { animation: float 3s ease-in-out infinite; }
+    .animate-fadein { animation: fadeIn 0.3s ease-out; }
+
+    /* ── Scrollbar ───────────────────────────────────────────────── */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #475569; }
-    /* HTMX loading indicator */
+    ::-webkit-scrollbar-thumb { background: var(--c-scrollbar); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--c-scrollbar-h); }
+
+    /* ── HTMX ────────────────────────────────────────────────────── */
     .htmx-indicator { opacity: 0; transition: opacity 0.2s; }
     .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
 
-    /* ── Markdown prose inside chat bubbles ─────────────────────── */
+    /* ── Markdown prose ──────────────────────────────────────────── */
     .markdown-body { line-height: 1.65; word-wrap: break-word; }
     .markdown-body p { margin: 0.4em 0; }
     .markdown-body p:first-child { margin-top: 0; }
     .markdown-body p:last-child { margin-bottom: 0; }
-    .markdown-body strong { color: #e2e8f0; font-weight: 600; }
-    .markdown-body em { color: #cbd5e1; }
+    .markdown-body strong { color: var(--c-md-strong); font-weight: 600; }
+    .markdown-body em { color: var(--c-md-em); }
     .markdown-body ul, .markdown-body ol { margin: 0.4em 0; padding-left: 1.5em; }
     .markdown-body li { margin: 0.15em 0; }
-    .markdown-body li::marker { color: #64748b; }
+    .markdown-body li::marker { color: var(--c-text-muted); }
     .markdown-body code {
-      background: rgba(30, 41, 59, 0.8);
-      border: 1px solid #334155;
+      background: var(--c-code-bg);
+      border: 1px solid var(--c-code-border);
       border-radius: 4px;
       padding: 0.15em 0.35em;
-      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-family: 'JetBrains Mono', monospace;
       font-size: 0.85em;
-      color: #e2e8f0;
+      color: var(--c-text-heading);
     }
     .markdown-body pre {
-      background: #0f172a;
-      border: 1px solid #1e293b;
+      background: var(--c-pre-bg);
+      border: 1px solid var(--c-edge);
       border-radius: 8px;
       padding: 0.85em 1em;
       margin: 0.5em 0;
       overflow-x: auto;
     }
     .markdown-body pre code {
-      background: none;
-      border: none;
-      padding: 0;
-      font-size: 0.82em;
-      color: #cbd5e1;
+      background: none; border: none; padding: 0;
+      font-size: 0.82em; color: var(--c-text);
     }
     .markdown-body blockquote {
-      border-left: 3px solid #4f46e5;
+      border-left: 3px solid #FF6B5A;
       padding-left: 0.8em;
       margin: 0.5em 0;
-      color: #94a3b8;
+      color: var(--c-text-muted);
     }
     .markdown-body h1, .markdown-body h2, .markdown-body h3,
     .markdown-body h4, .markdown-body h5, .markdown-body h6 {
-      color: #f1f5f9;
-      font-weight: 600;
-      margin: 0.6em 0 0.3em;
+      color: var(--c-text-heading); font-weight: 600; margin: 0.6em 0 0.3em;
+      font-family: 'Nunito', sans-serif;
     }
     .markdown-body h1 { font-size: 1.3em; }
     .markdown-body h2 { font-size: 1.15em; }
     .markdown-body h3 { font-size: 1.05em; }
-    .markdown-body hr { border: none; border-top: 1px solid #334155; margin: 0.8em 0; }
-    .markdown-body a { color: #818cf8; text-decoration: underline; text-underline-offset: 2px; }
-    .markdown-body a:hover { color: #a5b4fc; }
+    .markdown-body hr { border: none; border-top: 1px solid var(--c-edge); margin: 0.8em 0; }
+    .markdown-body a { color: #FF6B5A; text-decoration: underline; text-underline-offset: 2px; }
+    .markdown-body a:hover { color: #FF9F67; }
     .markdown-body table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }
     .markdown-body th, .markdown-body td {
-      border: 1px solid #334155;
-      padding: 0.35em 0.6em;
-      font-size: 0.9em;
+      border: 1px solid var(--c-edge); padding: 0.35em 0.6em; font-size: 0.9em;
     }
-    .markdown-body th { background: #1e293b; color: #e2e8f0; font-weight: 600; }
+    .markdown-body th { background: var(--c-table-header); color: var(--c-text-heading); font-weight: 600; }
 
-    /* ── Tool-call / capability status pill ─────────────────────── */
+    /* ── Tool-call pill ──────────────────────────────────────────── */
     .tool-status {
-      display: flex;
-      align-items: center;
-      gap: 0.5em;
+      display: flex; align-items: center; gap: 0.5em;
       padding: 0.4em 0.8em;
-      background: rgba(30, 41, 59, 0.6);
-      border: 1px solid #1e293b;
+      background: var(--c-surface-raised);
+      border: 1px solid var(--c-edge);
       border-radius: 9999px;
-      font-size: 0.75rem;
-      color: #94a3b8;
-      width: fit-content;
+      font-size: 0.75rem; color: var(--c-text-muted); width: fit-content;
     }
     .tool-status svg { flex-shrink: 0; }
-    .tool-status.active { color: #818cf8; border-color: rgba(99, 102, 241, 0.3); background: rgba(79, 70, 229, 0.1); }
+    .tool-status.active { color: #FF6B5A; border-color: rgba(255, 107, 90, 0.3); background: rgba(255, 107, 90, 0.08); }
     .tool-status.active svg { animation: spin 2s linear infinite; }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-    /* ── Confirmation card ──────────────────────────────────────── */
+    /* ── Confirmation card ───────────────────────────────────────── */
     .confirm-card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 1em;
-      margin: 0.5em 0;
-      max-width: 72%;
+      background: var(--c-card-bg); border: 1px solid var(--c-card-border);
+      border-radius: 12px; padding: 1em; margin: 0.5em 0; max-width: 72%;
     }
     .confirm-card pre {
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      border-radius: 6px;
-      padding: 0.6em 0.8em;
-      font-size: 0.78em;
-      color: #94a3b8;
-      overflow-x: auto;
-      margin: 0.5em 0;
+      background: var(--c-surface); border: 1px solid var(--c-edge);
+      border-radius: 6px; padding: 0.6em 0.8em;
+      font-size: 0.78em; color: var(--c-text-muted); overflow-x: auto; margin: 0.5em 0;
     }
-    .confirm-card .confirm-actions {
-      display: flex;
-      gap: 0.5em;
-      margin-top: 0.6em;
-    }
+    .confirm-card .confirm-actions { display: flex; gap: 0.5em; margin-top: 0.6em; }
     .confirm-card .btn-approve {
-      background: #065f46;
-      color: #6ee7b7;
-      border: 1px solid #059669;
-      padding: 0.35em 1em;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s;
+      background: #065f46; color: #6ee7b7; border: 1px solid #059669;
+      padding: 0.35em 1em; border-radius: 8px; font-size: 0.8rem; font-weight: 500;
+      cursor: pointer; transition: background 0.15s;
     }
     .confirm-card .btn-approve:hover { background: #047857; }
     .confirm-card .btn-deny {
-      background: #7f1d1d;
-      color: #fca5a5;
-      border: 1px solid #dc2626;
-      padding: 0.35em 1em;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s;
+      background: #7f1d1d; color: #fca5a5; border: 1px solid #dc2626;
+      padding: 0.35em 1em; border-radius: 8px; font-size: 0.8rem; font-weight: 500;
+      cursor: pointer; transition: background 0.15s;
     }
     .confirm-card .btn-deny:hover { background: #991b1b; }
+
+    /* ── Gradient accents ────────────────────────────────────────── */
+    .gradient-coral { background: linear-gradient(135deg, #FF6B5A, #FF9F67); }
+    .gradient-blush { background: linear-gradient(135deg, #FF7EB3, #FF6B5A); }
+    .text-gradient-coral {
+      background: linear-gradient(135deg, #FF6B5A, #FF9F67);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    /* ── Sidebar active indicator ────────────────────────────────── */
+    .nav-active {
+      background: var(--c-nav-active-bg);
+      border-left: 3px solid #FF6B5A;
+    }
+
+    /* ── Card component ──────────────────────────────────────────── */
+    .selu-card {
+      background: var(--c-card-bg);
+      border: 1px solid var(--c-card-border);
+    }
+
+    /* ── Theme transition ────────────────────────────────────────── */
+    html { transition: background-color 0.2s ease, color 0.2s ease; }
+    html * { transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+    html svg, html img, html .animate-float, html .animate-fadein { transition: none; }
   </style>
   {% block head %}{% endblock %}
 </head>
-<body class="bg-slate-950 text-slate-200 font-sans h-dvh flex overflow-hidden antialiased">
+<body class="bg-surface text-txt font-sans h-dvh flex overflow-hidden antialiased">
 
   <!-- Sidebar Navigation -->
-  <aside class="w-[220px] bg-slate-900 border-r border-slate-800 flex flex-col flex-shrink-0">
+  <aside class="w-[230px] bg-sidebar backdrop-blur-sm border-r border-edge flex flex-col flex-shrink-0">
     <!-- Logo -->
-    <div class="px-5 h-14 flex items-center border-b border-slate-800">
-      <a href="/chat" class="flex items-center gap-2.5 group">
-        <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
-          <svg class="w-4.5 h-4.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-          </svg>
-        </div>
-        <span class="text-[15px] font-bold text-white tracking-tight">PAP</span>
+    <div class="px-5 h-16 flex items-center border-b border-edge">
+      <a href="/chat" class="flex items-center gap-3 group">
+        <svg class="w-9 h-9 flex-shrink-0 animate-float" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <defs><linearGradient id="selu-g" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0%" stop-color="#FF7EB3"/><stop offset="100%" stop-color="#FF6B5A"/></linearGradient></defs>
+          <circle cx="165" cy="90" r="50" fill="url(#selu-g)"/>
+          <circle cx="347" cy="90" r="50" fill="url(#selu-g)"/>
+          <circle cx="256" cy="272" r="190" fill="url(#selu-g)"/>
+          <ellipse cx="200" cy="242" rx="30" ry="36" fill="white"/>
+          <circle cx="208" cy="235" r="17" fill="#2D2B55"/>
+          <circle cx="215" cy="227" r="6" fill="white" opacity="0.9"/>
+          <ellipse cx="312" cy="242" rx="30" ry="36" fill="white"/>
+          <circle cx="320" cy="235" r="17" fill="#2D2B55"/>
+          <circle cx="327" cy="227" r="6" fill="white" opacity="0.9"/>
+          <ellipse cx="160" cy="292" rx="28" ry="14" fill="#FF4070" opacity="0.2"/>
+          <ellipse cx="352" cy="292" rx="28" ry="14" fill="#FF4070" opacity="0.2"/>
+          <path d="M 222,312 Q 256,344 290,312" stroke="#2D2B55" stroke-width="5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <span class="font-heading text-xl font-black text-txt-heading tracking-tight">selu<span class="text-coral">.</span></span>
       </a>
     </div>
 
     <!-- Nav Links -->
-    <nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-      <div class="px-2 pb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Main</div>
+    <nav class="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
+      <div class="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-faint" data-i18n="nav.main">Main</div>
 
-      <a href="/chat" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors {% if active_nav == "chat" %}bg-brand-600/15 text-brand-300 font-medium{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800{% endif %}">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        Chat
+      <a href="/chat" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "chat" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span data-i18n="nav.chat">Chat</span>
       </a>
 
-      <a href="/pipes" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors {% if active_nav == "pipes" %}bg-brand-600/15 text-brand-300 font-medium{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800{% endif %}">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        Pipes
+      <a href="/pipes" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "pipes" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span data-i18n="nav.pipes">Pipes</span>
       </a>
 
-      <a href="/agents" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors {% if active_nav == "agents" %}bg-brand-600/15 text-brand-300 font-medium{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800{% endif %}">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
-        Agents
+      <a href="/agents" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "agents" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
+        <span data-i18n="nav.agents">Agents</span>
       </a>
 
-      <a href="/providers" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors {% if active_nav == "providers" %}bg-brand-600/15 text-brand-300 font-medium{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800{% endif %}">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-        Providers
+      <a href="/providers" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "providers" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        <span data-i18n="nav.providers">Providers</span>
       </a>
 
-      <a href="/users" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors {% if active_nav == "users" %}bg-brand-600/15 text-brand-300 font-medium{% else %}text-slate-400 hover:text-slate-200 hover:bg-slate-800{% endif %}">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Users
+      <a href="/users" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "users" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span data-i18n="nav.users">Users</span>
       </a>
 
-      <div class="px-2 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Advanced</div>
+      <div class="px-3 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-faint" data-i18n="nav.advanced">Advanced</div>
 
-      <a href="/credentials" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors {% if active_nav == "credentials" %}bg-brand-600/15 text-brand-300 font-medium{% else %}text-slate-500 hover:text-slate-300 hover:bg-slate-800{% endif %}">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        Credentials
+      <a href="/credentials" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "credentials" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span data-i18n="nav.credentials">Credentials</span>
       </a>
 
-      <a href="/subscriptions" class="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors {% if active_nav == "subscriptions" %}bg-brand-600/15 text-brand-300 font-medium{% else %}text-slate-500 hover:text-slate-300 hover:bg-slate-800{% endif %}">
-        <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        Events
+      <a href="/subscriptions" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "subscriptions" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span data-i18n="nav.events">Events</span>
       </a>
     </nav>
 
-    <!-- User / Logout -->
-    <div class="px-3 py-3 border-t border-slate-800">
+    <!-- Theme + Language + Logout -->
+    <div class="px-3 py-3 border-t border-edge space-y-1">
+      <!-- Theme Toggle -->
+      <button onclick="toggleTheme()" id="theme-toggle"
+              class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover transition-all cursor-pointer">
+        <!-- Sun icon (shown in dark mode) -->
+        <svg id="theme-icon-sun" class="w-[18px] h-[18px] flex-shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <!-- Moon icon (shown in light mode) -->
+        <svg id="theme-icon-moon" class="w-[18px] h-[18px] flex-shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <span id="theme-label">Light mode</span>
+      </button>
+      <!-- Language Toggle -->
+      <button onclick="toggleLang()" id="lang-toggle"
+              class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover transition-all cursor-pointer">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span id="lang-label">EN</span>
+      </button>
+      <!-- Logout -->
       <form method="POST" action="/logout">
-        <button type="submit" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer">
-          <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          Sign out
+        <button type="submit" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-rosie hover:bg-rosie/5 transition-all cursor-pointer">
+          <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span data-i18n="nav.signout">Sign out</span>
         </button>
       </form>
     </div>
@@ -260,56 +370,307 @@
   </main>
 
   <script>
-    // Configure marked for safe rendering
-    marked.setOptions({
-      breaks: true,
-      gfm: true,
-    });
+    // ── Theme System ───────────────────────────────────────────────
+    function getTheme() {
+      return localStorage.getItem('selu-theme') || 'dark';
+    }
+    function applyTheme(theme) {
+      var html = document.documentElement;
+      html.classList.remove('dark', 'light');
+      html.classList.add(theme);
+      localStorage.setItem('selu-theme', theme);
+      var sun = document.getElementById('theme-icon-sun');
+      var moon = document.getElementById('theme-icon-moon');
+      var label = document.getElementById('theme-label');
+      if (sun && moon && label) {
+        if (theme === 'dark') {
+          sun.classList.remove('hidden');
+          moon.classList.add('hidden');
+          label.textContent = getCurrentLang() === 'de' ? 'Heller Modus' : 'Light mode';
+        } else {
+          sun.classList.add('hidden');
+          moon.classList.remove('hidden');
+          label.textContent = getCurrentLang() === 'de' ? 'Dunkler Modus' : 'Dark mode';
+        }
+      }
+    }
+    function toggleTheme() {
+      applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
+    }
 
-    // Render markdown in an element, replacing its text content
+    // ── I18n System ────────────────────────────────────────────────
+    const translations = {
+      en: {
+        'nav.main': 'Main',
+        'nav.chat': 'Chat',
+        'nav.pipes': 'Pipes',
+        'nav.agents': 'Agents',
+        'nav.providers': 'Providers',
+        'nav.users': 'Users',
+        'nav.advanced': 'Advanced',
+        'nav.credentials': 'Credentials',
+        'nav.events': 'Events',
+        'nav.signout': 'Sign out',
+        'chat.conversations': 'Conversations',
+        'chat.new': 'New conversation',
+        'chat.nopipes': 'No pipes yet.',
+        'chat.createone': 'Create one',
+        'chat.noconversations': 'No conversations yet',
+        'chat.start': 'Start a conversation',
+        'chat.select': 'Select a conversation from the sidebar',
+        'chat.selectpipe': 'Select a conversation to start chatting',
+        'chat.placeholder': 'Message... (Shift+Enter for newline)',
+        'chat.send': 'Send',
+        'pipes.title': 'Pipes',
+        'pipes.desc': 'Pipes connect the outside world to your agents. Add a pipe for each way you want to talk to Selu.',
+        'pipes.active': 'Active Pipes',
+        'pipes.addnew': 'Add New Pipe',
+        'pipes.webui': 'Web UI',
+        'pipes.webui.desc': 'Chat with your agents directly in the Selu web interface.',
+        'pipes.imessage': 'iMessage',
+        'pipes.imessage.desc': 'Connect your Mac\'s iMessage via BlueBubbles. Your agents can receive and reply to iMessages.',
+        'pipes.whatsapp': 'WhatsApp',
+        'pipes.whatsapp.desc': 'Connect WhatsApp via Baileys adapter.',
+        'pipes.webhook': 'Webhook',
+        'pipes.webhook.desc': 'For developers: connect any external service via HTTP.',
+        'pipes.setup': 'Set up',
+        'pipes.comingsoon': 'Coming Soon',
+        'pipes.remove': 'Remove',
+        'pipes.connected': 'Connected',
+        'pipes.active_status': 'Active',
+        'pipes.back': 'Back to Pipes',
+        'pipes.web.title': 'New Web UI Pipe',
+        'pipes.web.desc': 'Create a pipe for chatting with your agents through the Selu web interface. Once created, it will appear in the Chat sidebar.',
+        'pipes.web.config': 'Web UI Configuration',
+        'pipes.webhook.title': 'New Webhook Pipe',
+        'pipes.webhook.desc': 'Connect an external service to Selu via HTTP. The service POSTs messages to Selu\'s inbound URL, and Selu POSTs agent replies back to your callback URL.',
+        'pipes.webhook.config': 'Webhook Configuration',
+        'pipes.name': 'Name',
+        'pipes.owner': 'Owner',
+        'pipes.cancel': 'Cancel',
+        'pipes.create.web': 'Create Web Pipe',
+        'pipes.create.webhook': 'Create Webhook Pipe',
+        'pipes.callbackurl': 'Callback URL',
+        'pipes.callbackauth': 'Callback Auth Header',
+        'imsg.title': 'Set Up iMessage',
+        'imsg.desc': 'Connect your iMessage to Selu.',
+        'imsg.step1': 'Connect Server',
+        'imsg.step2': 'Pick Chat',
+        'imsg.step3': 'Add People',
+        'imsg.connect': 'Connect to BlueBubbles',
+        'imsg.pipename': 'Pipe Name',
+        'imsg.whocan': 'Who Can Talk to Selu?',
+        'imsg.setup': 'Set Up iMessage',
+        'agents.title': 'Agents',
+        'agents.desc': 'Install agents from the marketplace and configure their LLM provider and model.',
+        'agents.globalmodel': 'Global Default Model',
+        'agents.installed': 'Installed Agents',
+        'agents.marketplace': 'Marketplace',
+        'agents.install': 'Install',
+        'agents.uninstall': 'Uninstall',
+        'agents.setup': 'Setup',
+        'agents.model': 'Model',
+        'agents.save': 'Save',
+        'agents.complete': 'Complete Setup',
+        'agents.noagents': 'No agents installed. Visit the Marketplace tab to install agents.',
+        'providers.title': 'LLM Providers',
+        'providers.desc': 'Configure API keys and endpoints for LLM providers. Keys are encrypted at rest with AES-256-GCM.',
+        'providers.setkey': 'Set Key',
+        'providers.update': 'Update',
+        'providers.removekey': 'Remove',
+        'providers.apikey': 'API Key',
+        'users.title': 'Users',
+        'users.desc': 'User accounts used by pipes, sessions, and credentials.',
+        'users.create': 'Create User',
+        'users.username': 'Username',
+        'users.displayname': 'Display Name',
+        'users.password': 'Password',
+        'users.delete': 'Delete',
+        'creds.title': 'Credentials',
+        'creds.desc': 'Encrypted secrets passed to capability containers. All values are AES-256-GCM encrypted at rest.',
+        'creds.system': 'System Credentials',
+        'creds.user': 'User Credentials',
+        'creds.set.system': 'Set System Credential',
+        'creds.set.user': 'Set User Credential',
+        'subs.title': 'Event Subscriptions',
+        'subs.desc': 'Trigger outbound notifications or agent invocations when agent events match a CEL filter expression.',
+        'subs.create': 'Create Subscription',
+        'subs.deactivate': 'Deactivate',
+        'common.optional': 'Optional',
+        'common.delete': 'Delete',
+        'common.cancel': 'Cancel',
+        'common.save': 'Save',
+        'common.back': 'Back',
+      },
+      de: {
+        'nav.main': 'Haupt',
+        'nav.chat': 'Chat',
+        'nav.pipes': 'Pipes',
+        'nav.agents': 'Agenten',
+        'nav.providers': 'Anbieter',
+        'nav.users': 'Benutzer',
+        'nav.advanced': 'Erweitert',
+        'nav.credentials': 'Zugangsdaten',
+        'nav.events': 'Ereignisse',
+        'nav.signout': 'Abmelden',
+        'chat.conversations': 'Unterhaltungen',
+        'chat.new': 'Neue Unterhaltung',
+        'chat.nopipes': 'Noch keine Pipes.',
+        'chat.createone': 'Erstellen',
+        'chat.noconversations': 'Noch keine Unterhaltungen',
+        'chat.start': 'Unterhaltung starten',
+        'chat.select': 'Unterhaltung aus der Seitenleiste ausw\u00e4hlen',
+        'chat.selectpipe': 'W\u00e4hle eine Unterhaltung zum Chatten',
+        'chat.placeholder': 'Nachricht... (Shift+Enter f\u00fcr Zeilenumbruch)',
+        'chat.send': 'Senden',
+        'pipes.title': 'Pipes',
+        'pipes.desc': 'Pipes verbinden die Au\u00dfenwelt mit deinen Agenten. F\u00fcge f\u00fcr jeden Kommunikationsweg eine Pipe hinzu.',
+        'pipes.active': 'Aktive Pipes',
+        'pipes.addnew': 'Neue Pipe hinzuf\u00fcgen',
+        'pipes.webui': 'Web UI',
+        'pipes.webui.desc': 'Chatte direkt \u00fcber die Selu-Weboberfl\u00e4che mit deinen Agenten.',
+        'pipes.imessage': 'iMessage',
+        'pipes.imessage.desc': 'Verbinde iMessage deines Mac \u00fcber BlueBubbles.',
+        'pipes.whatsapp': 'WhatsApp',
+        'pipes.whatsapp.desc': 'WhatsApp \u00fcber Baileys-Adapter verbinden.',
+        'pipes.webhook': 'Webhook',
+        'pipes.webhook.desc': 'F\u00fcr Entwickler: Externen Dienst via HTTP anbinden.',
+        'pipes.setup': 'Einrichten',
+        'pipes.comingsoon': 'Bald verf\u00fcgbar',
+        'pipes.remove': 'Entfernen',
+        'pipes.connected': 'Verbunden',
+        'pipes.active_status': 'Aktiv',
+        'pipes.back': 'Zur\u00fcck zu Pipes',
+        'pipes.web.title': 'Neue Web UI Pipe',
+        'pipes.web.desc': 'Erstelle eine Pipe f\u00fcr den Chat mit deinen Agenten \u00fcber die Selu-Weboberfl\u00e4che.',
+        'pipes.web.config': 'Web UI Konfiguration',
+        'pipes.webhook.title': 'Neue Webhook Pipe',
+        'pipes.webhook.desc': 'Verbinde einen externen Dienst mit Selu via HTTP.',
+        'pipes.webhook.config': 'Webhook Konfiguration',
+        'pipes.name': 'Name',
+        'pipes.owner': 'Eigent\u00fcmer',
+        'pipes.cancel': 'Abbrechen',
+        'pipes.create.web': 'Web Pipe erstellen',
+        'pipes.create.webhook': 'Webhook Pipe erstellen',
+        'pipes.callbackurl': 'R\u00fcckruf-URL',
+        'pipes.callbackauth': 'R\u00fcckruf Auth-Header',
+        'imsg.title': 'iMessage einrichten',
+        'imsg.desc': 'Verbinde iMessage mit Selu.',
+        'imsg.step1': 'Server verbinden',
+        'imsg.step2': 'Chat ausw\u00e4hlen',
+        'imsg.step3': 'Personen hinzuf\u00fcgen',
+        'imsg.connect': 'Mit BlueBubbles verbinden',
+        'imsg.pipename': 'Pipe-Name',
+        'imsg.whocan': 'Wer darf mit Selu sprechen?',
+        'imsg.setup': 'iMessage einrichten',
+        'agents.title': 'Agenten',
+        'agents.desc': 'Installiere Agenten vom Marketplace und konfiguriere deren LLM-Anbieter und Modell.',
+        'agents.globalmodel': 'Globales Standardmodell',
+        'agents.installed': 'Installierte Agenten',
+        'agents.marketplace': 'Marketplace',
+        'agents.install': 'Installieren',
+        'agents.uninstall': 'Deinstallieren',
+        'agents.setup': 'Einrichten',
+        'agents.model': 'Modell',
+        'agents.save': 'Speichern',
+        'agents.complete': 'Einrichtung abschlie\u00dfen',
+        'agents.noagents': 'Keine Agenten installiert. Besuche den Marketplace.',
+        'providers.title': 'LLM-Anbieter',
+        'providers.desc': 'API-Schl\u00fcssel und Endpunkte f\u00fcr LLM-Anbieter konfigurieren. Schl\u00fcssel werden mit AES-256-GCM verschl\u00fcsselt.',
+        'providers.setkey': 'Schl\u00fcssel setzen',
+        'providers.update': 'Aktualisieren',
+        'providers.removekey': 'Entfernen',
+        'providers.apikey': 'API-Schl\u00fcssel',
+        'users.title': 'Benutzer',
+        'users.desc': 'Benutzerkonten f\u00fcr Pipes, Sitzungen und Zugangsdaten.',
+        'users.create': 'Benutzer erstellen',
+        'users.username': 'Benutzername',
+        'users.displayname': 'Anzeigename',
+        'users.password': 'Passwort',
+        'users.delete': 'L\u00f6schen',
+        'creds.title': 'Zugangsdaten',
+        'creds.desc': 'Verschl\u00fcsselte Geheimnisse f\u00fcr Capability-Container. AES-256-GCM verschl\u00fcsselt.',
+        'creds.system': 'System-Zugangsdaten',
+        'creds.user': 'Benutzer-Zugangsdaten',
+        'creds.set.system': 'System-Zugangsdaten setzen',
+        'creds.set.user': 'Benutzer-Zugangsdaten setzen',
+        'subs.title': 'Ereignis-Abonnements',
+        'subs.desc': 'L\u00f6se Benachrichtigungen oder Agenten-Aufrufe aus, wenn Agenten-Ereignisse einem CEL-Filter entsprechen.',
+        'subs.create': 'Abonnement erstellen',
+        'subs.deactivate': 'Deaktivieren',
+        'common.optional': 'Optional',
+        'common.delete': 'L\u00f6schen',
+        'common.cancel': 'Abbrechen',
+        'common.save': 'Speichern',
+        'common.back': 'Zur\u00fcck',
+      }
+    };
+
+    function getCurrentLang() {
+      return localStorage.getItem('selu-lang') || 'en';
+    }
+    function setLang(lang) {
+      localStorage.setItem('selu-lang', lang);
+      document.documentElement.lang = lang;
+      applyTranslations(lang);
+      var label = document.getElementById('lang-label');
+      if (label) label.textContent = lang.toUpperCase();
+      // Also update theme label to match language
+      applyTheme(getTheme());
+    }
+    function toggleLang() {
+      setLang(getCurrentLang() === 'en' ? 'de' : 'en');
+    }
+    function t(key) {
+      var lang = getCurrentLang();
+      return (translations[lang] && translations[lang][key]) || (translations.en[key]) || key;
+    }
+    function applyTranslations(lang) {
+      document.querySelectorAll('[data-i18n]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n');
+        var val = (translations[lang] && translations[lang][key]) || translations.en[key];
+        if (val) el.textContent = val;
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n-placeholder');
+        var val = (translations[lang] && translations[lang][key]) || translations.en[key];
+        if (val) el.placeholder = val;
+      });
+    }
+
+    // ── Markdown rendering ─────────────────────────────────────────
+    marked.setOptions({ breaks: true, gfm: true });
     function renderMarkdown(el) {
       if (!el || el.dataset.mdRendered) return;
-      const raw = el.textContent || '';
+      var raw = el.textContent || '';
       el.innerHTML = marked.parse(raw);
       el.dataset.mdRendered = '1';
     }
-
-    // Render all assistant messages that haven't been rendered yet
     function renderAllMarkdown() {
       document.querySelectorAll('.md-source:not([data-md-rendered])').forEach(renderMarkdown);
     }
-
-    // For streaming: collect raw tokens in a data attribute, re-render markdown
     function appendStreamToken(el, tokenText) {
       if (!el) return;
-      const raw = (el.dataset.rawContent || '') + tokenText;
+      var raw = (el.dataset.rawContent || '') + tokenText;
       el.dataset.rawContent = raw;
       el.innerHTML = marked.parse(raw);
     }
-
-    // Finalize a streaming message: remove streaming class, final render
     function finalizeStream(streamId) {
       var el = document.getElementById('stream-' + streamId);
       if (el) {
         el.classList.remove('streaming');
-        // Final markdown render from accumulated raw content
         var raw = el.dataset.rawContent || el.textContent || '';
-        if (raw.trim()) {
-          el.innerHTML = marked.parse(raw);
-        }
+        if (raw.trim()) { el.innerHTML = marked.parse(raw); }
         el.dataset.mdRendered = '1';
-        // If the streaming div is empty (no content), remove its parent bubble wrapper
         if (!raw.trim()) {
           var bubble = el.closest('.flex.justify-start');
           if (bubble) bubble.remove();
         }
       }
-      // Remove tool-status pills once the stream is done
       document.querySelectorAll('.tool-status').forEach(function(pill) {
         var wrapper = pill.closest('.flex.justify-start');
         if (wrapper) wrapper.remove();
       });
-      // Also finalize any continuation divs
       document.querySelectorAll('[id^="cont-"]').forEach(function(contEl) {
         contEl.classList.remove('streaming');
         var contRaw = contEl.dataset.rawContent || '';
@@ -317,34 +678,45 @@
           contEl.innerHTML = marked.parse(contRaw);
           contEl.dataset.mdRendered = '1';
         } else {
-          // Remove empty continuation bubbles
           var contBubble = contEl.closest('.flex.justify-start');
           if (contBubble) contBubble.remove();
         }
       });
     }
 
-    // Auto-resize textarea
-    document.addEventListener('input', e => {
+    // ── Auto-resize textarea ────────────────────────────────────────
+    document.addEventListener('input', function(e) {
       if (e.target.tagName === 'TEXTAREA') {
         e.target.style.height = 'auto';
         e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
       }
     });
-    // Submit textarea on Enter (Shift+Enter = newline)
-    document.addEventListener('keydown', e => {
+    document.addEventListener('keydown', function(e) {
       if (e.target.tagName === 'TEXTAREA' && e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        e.target.closest('form')?.requestSubmit();
+        var form = e.target.closest('form');
+        if (form) form.requestSubmit();
       }
     });
 
-    // Render markdown on page load and scroll messages to bottom
+    // ── Init ────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', function() {
       renderAllMarkdown();
       var msgs = document.getElementById('messages');
       if (msgs) msgs.scrollTop = msgs.scrollHeight;
+      var lang = getCurrentLang();
+      document.documentElement.lang = lang;
+      var label = document.getElementById('lang-label');
+      if (label) label.textContent = lang.toUpperCase();
+      applyTranslations(lang);
+      applyTheme(getTheme());
     });
+    // Apply theme immediately to prevent flash
+    (function() {
+      var t = localStorage.getItem('selu-theme') || 'dark';
+      document.documentElement.classList.remove('dark','light');
+      document.documentElement.classList.add(t);
+    })();
   </script>
 </body>
 </html>

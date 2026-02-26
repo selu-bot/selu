@@ -4,39 +4,35 @@
 
 {% block body %}
 <div class="flex-1 overflow-y-auto">
-  <div class="max-w-5xl mx-auto px-6 py-8 space-y-8">
+  <div class="max-w-5xl mx-auto px-6 py-8 space-y-8 animate-fadein">
 
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-bold text-white">Agents</h1>
-      <p class="text-sm text-slate-400 mt-1">Install agents from the marketplace and configure their LLM provider and model.</p>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="agents.title">Agents</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="agents.desc">Install agents from the marketplace and configure their LLM provider and model.</p>
     </div>
 
     {% if let Some(err) = error %}
-    <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-      {{ err }}
-    </div>
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
     {% endif %}
 
     {% if let Some(msg) = success %}
-    <div class="px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
-      {{ msg }}
-    </div>
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{{ msg }}</div>
     {% endif %}
 
     <!-- Global Default Model -->
-    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
-        <span class="text-sm font-semibold text-white">Global Default Model</span>
-        <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-500">Used when no per-agent model is set</span>
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.globalmodel">Global Default Model</span>
+        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted">Used when no per-agent model is set</span>
       </div>
       <div class="p-5">
         <form method="POST" action="/agents/default-model" class="flex items-end gap-3 flex-wrap">
           <div class="flex-1 min-w-[150px]">
-            <label class="block text-xs font-medium text-slate-400 mb-1.5">Provider</label>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5">Provider</label>
             <select name="provider_id" id="global-provider-select"
                     onchange="fetchModels(this.value, '#global-model-select')"
-                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               <option value="">-- Select provider --</option>
               {% for p in providers %}
               <option value="{{ p.id }}" {% if p.id == global_provider %}selected{% endif %}>{{ p.display_name }}</option>
@@ -44,9 +40,9 @@
             </select>
           </div>
           <div class="flex-[2] min-w-[200px]">
-            <label class="block text-xs font-medium text-slate-400 mb-1.5">Model</label>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.model">Model</label>
             <select name="model_id" id="global-model-select" data-current="{{ global_model }}"
-                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               {% if global_model.is_empty() %}
               <option value="">-- Select a provider first --</option>
               {% else %}
@@ -55,61 +51,64 @@
             </select>
           </div>
           <div class="w-20">
-            <label class="block text-xs font-medium text-slate-400 mb-1.5">Temp</label>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5">Temp</label>
             <input type="text" name="temperature" value="{{ global_temperature }}" placeholder="0.7"
-                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           </div>
           <button type="submit"
-                  class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors cursor-pointer">Save</button>
+                  class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                  data-i18n="agents.save">Save</button>
         </form>
         {% if providers.is_empty() %}
-        <p class="text-xs text-slate-500 mt-3">No providers configured. Go to <a href="/providers" class="text-brand-400 hover:text-brand-300">Providers</a> to set up an API key first.</p>
+        <p class="text-xs text-txt-muted mt-3">No providers configured. Go to <a href="/providers" class="text-coral hover:text-amber transition-colors">Providers</a> to set up an API key first.</p>
         {% endif %}
       </div>
     </div>
 
     <!-- Tabs -->
-    <div class="flex items-center gap-1 border-b border-slate-800">
+    <div class="flex items-center gap-1 border-b border-edge">
       <button id="tab-installed" onclick="showTab('installed')"
-              class="px-4 py-2.5 text-sm font-medium border-b-2 border-brand-500 text-white transition-colors cursor-pointer">Installed Agents</button>
+              class="px-4 py-2.5 text-sm font-medium border-b-2 border-coral text-txt-heading transition-colors cursor-pointer"
+              data-i18n="agents.installed">Installed Agents</button>
       <button id="tab-marketplace" onclick="showTab('marketplace')"
-              class="px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-300 transition-colors cursor-pointer">Marketplace</button>
+              class="px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-txt-muted hover:text-txt transition-colors cursor-pointer"
+              data-i18n="agents.marketplace">Marketplace</button>
     </div>
 
     <!-- Installed Agents Tab -->
     <div id="panel-installed">
-      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="border-b border-slate-800">
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">ID</th>
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Name</th>
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Provider / Model</th>
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Capabilities</th>
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Status</th>
-                <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-widest text-slate-500">Actions</th>
+              <tr class="border-b border-edge">
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">ID</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Name</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Provider / Model</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Capabilities</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Status</th>
+                <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Actions</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-800">
+            <tbody class="divide-y divide-edge">
               {% for agent in agents %}
-              <tr class="hover:bg-slate-800/30 transition-colors">
-                <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ agent.id }}</td>
+              <tr class="hover:bg-sidebar-hover transition-colors">
+                <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ agent.id }}</td>
                 <td class="px-5 py-3.5">
-                  <span class="font-medium text-slate-200">{{ agent.name }}</span>
+                  <span class="font-medium text-txt-heading">{{ agent.name }}</span>
                   {% if agent.is_bundled %}
-                  <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-500/15 text-brand-300">Bundled</span>
+                  <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral">Bundled</span>
                   {% endif %}
                 </td>
                 <td class="px-5 py-3.5">
                   {% if !agent.provider_id.is_empty() %}
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-500/15 text-brand-300">{{ agent.provider_id }}</span>
-                  <span class="text-slate-400 ml-1">{{ agent.model_display_name }}</span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral">{{ agent.provider_id }}</span>
+                  <span class="text-txt ml-1">{{ agent.model_display_name }}</span>
                   {% else %}
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-500">Global default</span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-alt text-txt-muted">Global default</span>
                   {% endif %}
                 </td>
-                <td class="px-5 py-3.5 text-slate-400">{{ agent.capability_count }}</td>
+                <td class="px-5 py-3.5 text-txt">{{ agent.capability_count }}</td>
                 <td class="px-5 py-3.5">
                   {% if agent.setup_complete %}
                   <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -117,27 +116,26 @@
                     Active
                   </span>
                   {% else %}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">Setup pending</span>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber/10 text-amber border border-amber/20">Setup pending</span>
                   {% endif %}
                 </td>
                 <td class="px-5 py-3.5 text-right">
                   <div class="flex items-center justify-end gap-2">
                     {% if !agent.setup_complete %}
                     <a href="/agents/{{ agent.id }}/setup"
-                       class="text-xs font-medium text-brand-400 hover:text-brand-300 bg-brand-600/10 border border-brand-500/20 hover:border-brand-500/40 px-2.5 py-1 rounded-lg transition-colors">Setup</a>
+                       class="text-xs font-medium text-coral hover:text-amber bg-coral/10 border border-coral/20 hover:border-coral/40 px-2.5 py-1 rounded-lg transition-colors"
+                       data-i18n="agents.setup">Setup</a>
                     {% endif %}
-
                     <button onclick="toggleModelPopover(this)"
-                            class="text-xs text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-500 px-2.5 py-1 rounded-lg transition-colors cursor-pointer">
-                      Model
-                    </button>
-                    <div class="hidden absolute z-20 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl p-4 min-w-[320px] shadow-xl shadow-black/40">
+                            class="text-xs text-txt hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                            data-i18n="agents.model">Model</button>
+                    <div class="hidden absolute z-20 right-0 mt-1 bg-surface-alt border border-edge rounded-2xl p-4 min-w-[320px] shadow-xl shadow-black/40">
                       <form method="POST" action="/agents/{{ agent.id }}/model" class="space-y-3">
                         <div>
-                          <label class="block text-xs font-medium text-slate-400 mb-1.5">Provider</label>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5">Provider</label>
                           <select name="provider_id"
                                   onchange="fetchModels(this.value, this.closest('form').querySelector('select[name=model_id]'))"
-                                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500 transition">
+                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
                             <option value="">-- Global default --</option>
                             {% for p in providers %}
                             <option value="{{ p.id }}" {% if p.id == agent.provider_id %}selected{% endif %}>{{ p.display_name }}</option>
@@ -145,9 +143,9 @@
                           </select>
                         </div>
                         <div>
-                          <label class="block text-xs font-medium text-slate-400 mb-1.5">Model</label>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.model">Model</label>
                           <select name="model_id" data-current="{{ agent.model_id }}"
-                                  class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500 transition">
+                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
                             {% if agent.model_id.is_empty() %}
                             <option value="">-- Select a provider first --</option>
                             {% else %}
@@ -156,20 +154,21 @@
                           </select>
                         </div>
                         <div>
-                          <label class="block text-xs font-medium text-slate-400 mb-1.5">Temperature</label>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5">Temperature</label>
                           <input type="text" name="temperature" value="0.7" placeholder="0.7"
-                                 class="w-20 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500 transition" />
+                                 class="w-20 bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition" />
                         </div>
                         <button type="submit"
-                                class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer">Save</button>
+                                class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+                                data-i18n="agents.save">Save</button>
                       </form>
                     </div>
-
                     {% if !agent.is_bundled %}
                     <form method="POST" action="/agents/{{ agent.id }}/uninstall" class="inline"
                           onsubmit="return confirm('Uninstall {{ agent.name }}? This will remove all agent files.')">
                       <button type="submit"
-                              class="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer">Uninstall</button>
+                              class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              data-i18n="agents.uninstall">Uninstall</button>
                     </form>
                     {% endif %}
                   </div>
@@ -178,7 +177,7 @@
               {% endfor %}
               {% if agents.is_empty() %}
               <tr>
-                <td colspan="6" class="px-5 py-8 text-center text-slate-500 text-sm">No agents installed. Visit the Marketplace tab to install agents.</td>
+                <td colspan="6" class="px-5 py-8 text-center text-txt-muted text-sm" data-i18n="agents.noagents">No agents installed. Visit the Marketplace tab to install agents.</td>
               </tr>
               {% endif %}
             </tbody>
@@ -190,28 +189,26 @@
     <!-- Marketplace Tab -->
     <div id="panel-marketplace" class="hidden">
       {% if !marketplace_error.is_empty() %}
-      <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-        {{ marketplace_error }}
-      </div>
+      <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ marketplace_error }}</div>
       {% endif %}
 
       {% if marketplace_agents.is_empty() && marketplace_error.is_empty() %}
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
-        <p class="text-sm text-slate-500">No agents available in the marketplace.</p>
+      <div class="bg-surface-raised border border-edge rounded-2xl p-8 text-center">
+        <p class="text-sm text-txt-muted">No agents available in the marketplace.</p>
       </div>
       {% endif %}
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for agent in marketplace_agents %}
-        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
-          <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
-            <span class="text-sm font-semibold text-white">{{ agent.name }}</span>
-            <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-500">v{{ agent.version }}</span>
+        <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden flex flex-col">
+          <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+            <span class="text-sm font-semibold text-txt-heading">{{ agent.name }}</span>
+            <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted">v{{ agent.version }}</span>
           </div>
           <div class="p-5 flex flex-col flex-1">
-            <p class="text-xs text-slate-400 leading-relaxed flex-1">{{ agent.description }}</p>
+            <p class="text-xs text-txt-muted leading-relaxed flex-1">{{ agent.description }}</p>
             {% if !agent.author.is_empty() %}
-            <p class="text-[11px] text-slate-500 mt-2">By {{ agent.author }}</p>
+            <p class="text-[11px] text-txt-faint mt-2">By {{ agent.author }}</p>
             {% endif %}
             <div class="mt-4">
               {% if agent.is_installed %}
@@ -223,7 +220,8 @@
               <form method="POST" action="/agents/install">
                 <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
                 <button type="submit"
-                        class="bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer">Install</button>
+                        class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
+                        data-i18n="agents.install">Install</button>
               </form>
               {% endif %}
             </div>
@@ -239,34 +237,30 @@
 function showTab(tab) {
   document.getElementById('panel-installed').classList.toggle('hidden', tab !== 'installed');
   document.getElementById('panel-marketplace').classList.toggle('hidden', tab !== 'marketplace');
-
-  const tabInstalled = document.getElementById('tab-installed');
-  const tabMarketplace = document.getElementById('tab-marketplace');
-
+  var tabInstalled = document.getElementById('tab-installed');
+  var tabMarketplace = document.getElementById('tab-marketplace');
   if (tab === 'installed') {
-    tabInstalled.classList.add('border-brand-500', 'text-white');
-    tabInstalled.classList.remove('border-transparent', 'text-slate-500');
-    tabMarketplace.classList.remove('border-brand-500', 'text-white');
-    tabMarketplace.classList.add('border-transparent', 'text-slate-500');
+    tabInstalled.classList.add('border-coral', 'text-txt-heading');
+    tabInstalled.classList.remove('border-transparent', 'text-txt-muted');
+    tabMarketplace.classList.remove('border-coral', 'text-txt-heading');
+    tabMarketplace.classList.add('border-transparent', 'text-txt-muted');
   } else {
-    tabMarketplace.classList.add('border-brand-500', 'text-white');
-    tabMarketplace.classList.remove('border-transparent', 'text-slate-500');
-    tabInstalled.classList.remove('border-brand-500', 'text-white');
-    tabInstalled.classList.add('border-transparent', 'text-slate-500');
+    tabMarketplace.classList.add('border-coral', 'text-txt-heading');
+    tabMarketplace.classList.remove('border-transparent', 'text-txt-muted');
+    tabInstalled.classList.remove('border-coral', 'text-txt-heading');
+    tabInstalled.classList.add('border-transparent', 'text-txt-muted');
   }
 }
 
 function toggleModelPopover(btn) {
-  const popover = btn.nextElementSibling;
-  const isHidden = popover.classList.contains('hidden');
-  // Close all other popovers
-  document.querySelectorAll('[data-popover]').forEach(el => el.classList.add('hidden'));
+  var popover = btn.nextElementSibling;
+  var isHidden = popover.classList.contains('hidden');
+  document.querySelectorAll('[data-popover]').forEach(function(el) { el.classList.add('hidden'); });
   if (isHidden) {
     popover.classList.remove('hidden');
     popover.setAttribute('data-popover', '');
-    // Fetch models if provider is already selected
-    const provSelect = popover.querySelector('select[name=provider_id]');
-    const modelSelect = popover.querySelector('select[name=model_id]');
+    var provSelect = popover.querySelector('select[name=provider_id]');
+    var modelSelect = popover.querySelector('select[name=model_id]');
     if (provSelect.value && modelSelect.options.length <= 1) {
       fetchModels(provSelect.value, modelSelect);
     }
@@ -275,20 +269,16 @@ function toggleModelPopover(btn) {
   }
 }
 
-// Close popovers when clicking outside
-document.addEventListener('click', (e) => {
+document.addEventListener('click', function(e) {
   if (!e.target.closest('[data-popover]') && !e.target.closest('button')) {
-    document.querySelectorAll('[data-popover]').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('[data-popover]').forEach(function(el) { el.classList.add('hidden'); });
   }
 });
 
 function fetchModels(providerId, target) {
   var sel = (typeof target === 'string') ? document.querySelector(target) : target;
   if (!sel) return;
-  if (!providerId) {
-    sel.innerHTML = '<option value="">-- Select a provider first --</option>';
-    return;
-  }
+  if (!providerId) { sel.innerHTML = '<option value="">-- Select a provider first --</option>'; return; }
   sel.innerHTML = '<option value="">Loading models...</option>';
   fetch('/agents/models/' + providerId, { credentials: 'same-origin' })
     .then(function(r) { return r.text(); })
@@ -297,23 +287,16 @@ function fetchModels(providerId, target) {
       var cur = sel.dataset.current;
       if (cur) {
         for (var i = 0; i < sel.options.length; i++) {
-          if (sel.options[i].value === cur) {
-            sel.selectedIndex = i;
-            break;
-          }
+          if (sel.options[i].value === cur) { sel.selectedIndex = i; break; }
         }
       }
     })
-    .catch(function() {
-      sel.innerHTML = '<option value="">Failed to load models</option>';
-    });
+    .catch(function() { sel.innerHTML = '<option value="">Failed to load models</option>'; });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
   var gp = document.getElementById('global-provider-select');
-  if (gp && gp.value) {
-    fetchModels(gp.value, '#global-model-select');
-  }
+  if (gp && gp.value) fetchModels(gp.value, '#global-model-select');
 });
 </script>
 {% endblock %}

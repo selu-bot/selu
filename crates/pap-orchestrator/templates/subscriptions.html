@@ -4,52 +4,48 @@
 
 {% block body %}
 <div class="flex-1 overflow-y-auto">
-  <div class="max-w-4xl mx-auto px-6 py-8 space-y-6">
+  <div class="max-w-4xl mx-auto px-6 py-8 space-y-6 animate-fadein">
 
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-bold text-white">Event Subscriptions</h1>
-      <p class="text-sm text-slate-400 mt-1">Trigger outbound notifications or agent invocations when agent events match a CEL filter expression.</p>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="subs.title">Event Subscriptions</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="subs.desc">Trigger outbound notifications or agent invocations when agent events match a CEL filter expression.</p>
     </div>
 
     {% if let Some(err) = error %}
-    <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-      {{ err }}
-    </div>
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
     {% endif %}
 
     {% if let Some(msg) = success %}
-    <div class="px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
-      {{ msg }}
-    </div>
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{{ msg }}</div>
     {% endif %}
 
     <!-- Subscriptions Table -->
-    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="border-b border-slate-800">
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">User</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Event Type</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Reaction</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Config</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Filter</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Status</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Created</th>
-              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-widest text-slate-500"></th>
+            <tr class="border-b border-edge">
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">User</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Event Type</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Reaction</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Config</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Filter</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Status</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Created</th>
+              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted"></th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-800">
+          <tbody class="divide-y divide-edge">
             {% for sub in subs %}
-            <tr class="hover:bg-slate-800/30 transition-colors">
-              <td class="px-5 py-3.5 text-slate-200">{{ sub.username }}</td>
-              <td class="px-5 py-3.5 font-mono text-xs text-slate-400">{{ sub.event_type }}</td>
+            <tr class="hover:bg-sidebar-hover transition-colors">
+              <td class="px-5 py-3.5 text-txt-heading">{{ sub.username }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ sub.event_type }}</td>
               <td class="px-5 py-3.5">
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-500/15 text-brand-300">{{ sub.reaction_type }}</span>
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral">{{ sub.reaction_type }}</span>
               </td>
-              <td class="px-5 py-3.5 font-mono text-xs text-slate-500 max-w-[180px] truncate" title="{{ sub.reaction_config }}">{{ sub.reaction_config }}</td>
-              <td class="px-5 py-3.5 font-mono text-xs text-slate-500 max-w-[160px] truncate" title="{{ sub.filter_expression }}">{{ sub.filter_expression }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-txt-muted max-w-[180px] truncate" title="{{ sub.reaction_config }}">{{ sub.reaction_config }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-txt-muted max-w-[160px] truncate" title="{{ sub.filter_expression }}">{{ sub.filter_expression }}</td>
               <td class="px-5 py-3.5">
                 {% if sub.active %}
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -57,24 +53,25 @@
                   Active
                 </span>
                 {% else %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">Inactive</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-rosie/10 text-rosie border border-rosie/20">Inactive</span>
                 {% endif %}
               </td>
-              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ sub.created_at }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ sub.created_at }}</td>
               <td class="px-5 py-3.5 text-right">
                 {% if sub.active %}
-                <button class="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                         hx-delete="/subscriptions/{{ sub.id }}"
                         hx-target="closest tr"
                         hx-swap="outerHTML"
-                        hx-confirm="Deactivate this subscription?">Deactivate</button>
+                        hx-confirm="Deactivate this subscription?"
+                        data-i18n="subs.deactivate">Deactivate</button>
                 {% endif %}
               </td>
             </tr>
             {% endfor %}
             {% if subs.is_empty() %}
             <tr>
-              <td colspan="8" class="px-5 py-8 text-center text-slate-500 text-sm">No subscriptions yet. Create one below.</td>
+              <td colspan="8" class="px-5 py-8 text-center text-txt-muted text-sm">No subscriptions yet. Create one below.</td>
             </tr>
             {% endif %}
           </tbody>
@@ -83,23 +80,23 @@
     </div>
 
     <!-- Create Subscription -->
-    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-slate-800">
-        <span class="text-sm font-semibold text-white">Create Subscription</span>
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="subs.create">Create Subscription</span>
       </div>
       <form method="post" action="/subscriptions">
         <div class="p-5 space-y-4">
           {% if users.is_empty() %}
-          <div class="px-4 py-3 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-300 text-sm">
+          <div class="px-4 py-3 rounded-xl bg-coral/10 border border-coral/20 text-coral text-sm">
             <p class="font-semibold">No users found.</p>
             <p><a href="/users" class="underline hover:no-underline">Create a user</a> before adding subscriptions.</p>
           </div>
           {% endif %}
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label class="block text-xs font-medium text-slate-400 mb-1.5">User</label>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5">User</label>
               <select name="user_id" required {% if users.is_empty() %}disabled{% endif %}
-                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition disabled:opacity-50">
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition disabled:opacity-50">
                 <option value="">-- select user --</option>
                 {% for u in users %}
                 <option value="{{ u.id }}">{{ u.display }}</option>
@@ -107,43 +104,44 @@
               </select>
             </div>
             <div>
-              <label class="block text-xs font-medium text-slate-400 mb-1.5">Event Type</label>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5">Event Type</label>
               <input name="event_type" type="text" placeholder="e.g. task.completed" required
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-              <p class="text-[11px] text-slate-500 mt-1">The event type emitted by the agent via the emit_event tool.</p>
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+              <p class="text-[11px] text-txt-faint mt-1">The event type emitted by the agent via the emit_event tool.</p>
             </div>
             <div>
-              <label class="block text-xs font-medium text-slate-400 mb-1.5">Reaction Type</label>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5">Reaction Type</label>
               <select name="reaction_type" required
-                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
                 <option value="pipe_notification">pipe_notification</option>
                 <option value="agent_invocation">agent_invocation</option>
               </select>
             </div>
             <div>
-              <label class="block text-xs font-medium text-slate-400 mb-1.5">CEL Filter Expression</label>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5">CEL Filter Expression</label>
               <input name="filter_expression" type="text" placeholder='e.g. event.payload.priority == "high"'
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-              <p class="text-[11px] text-slate-500 mt-1">Optional. Leave blank to match all events of this type.</p>
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+              <p class="text-[11px] text-txt-faint mt-1">Optional. Leave blank to match all events of this type.</p>
             </div>
             <div>
-              <label class="block text-xs font-medium text-slate-400 mb-1.5">Filter Description</label>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5">Filter Description</label>
               <input name="filter_description" type="text" placeholder="Human-readable description of the filter"
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             </div>
           </div>
           <div>
-            <label class="block text-xs font-medium text-slate-400 mb-1.5">Reaction Config (JSON)</label>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5">Reaction Config (JSON)</label>
             <textarea name="reaction_config" rows="4" required
-                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 font-mono focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition resize-y min-h-[80px]">{}</textarea>
-            <p class="text-[11px] text-slate-500 mt-1">
-              <strong class="text-slate-400">pipe_notification:</strong> <code class="font-mono bg-black/25 px-1 py-0.5 rounded">{"pipe_id": "&lt;id&gt;", "message": "Event received"}</code><br/>
-              <strong class="text-slate-400">agent_invocation:</strong> <code class="font-mono bg-black/25 px-1 py-0.5 rounded">{"agent_id": "&lt;id&gt;", "pipe_id": "&lt;id&gt;"}</code>
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint font-mono focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition resize-y min-h-[80px]">{}</textarea>
+            <p class="text-[11px] text-txt-faint mt-1">
+              <strong class="text-txt-muted">pipe_notification:</strong> <code class="font-mono bg-surface-alt px-1 py-0.5 rounded">{"pipe_id": "&lt;id&gt;", "message": "Event received"}</code><br/>
+              <strong class="text-txt-muted">agent_invocation:</strong> <code class="font-mono bg-surface-alt px-1 py-0.5 rounded">{"agent_id": "&lt;id&gt;", "pipe_id": "&lt;id&gt;"}</code>
             </p>
           </div>
           <div class="flex justify-end">
             <button type="submit" {% if users.is_empty() %}disabled{% endif %}
-                    class="bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-5 py-2.5 rounded-lg transition-colors cursor-pointer">Create Subscription</button>
+                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    data-i18n="subs.create">Create Subscription</button>
           </div>
         </div>
       </form>
