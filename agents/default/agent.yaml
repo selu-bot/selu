@@ -1,5 +1,5 @@
 id: default
-name: PAP Assistant
+name: Selu Assistant
 model:
   provider: bedrock
   model_id: us.anthropic.claude-sonnet-4-20250514-v1:0

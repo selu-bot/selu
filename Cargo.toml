@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "crates/pap-core",
-    "crates/pap-orchestrator",
+    "crates/selu-core",
+    "crates/selu-orchestrator",
 ]
 resolver = "2"
 

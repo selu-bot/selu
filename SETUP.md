@@ -1,4 +1,4 @@
-# PAP – Setup Guide
+# Selu – Setup Guide
 
 ## Prerequisites
 
@@ -28,8 +28,8 @@ cargo install sqlx-cli --no-default-features --features sqlite
 ### 1. Clone the repository
 
 ```bash
-git clone git@github.com:<your-org>/pap.git
-cd pap
+git clone git@github.com:selu-bot/selu.git
+cd selu
 ```
 
 ### 2. Create a `.env` file
@@ -43,27 +43,27 @@ Required variables:
 ```env
 # 32-byte base64-encoded key for credential encryption
 # Generate: openssl rand -base64 32
-PAP__ENCRYPTION_KEY=<base64-key>
+SELU__ENCRYPTION_KEY=<base64-key>
 
 # Optional: semantic memory (requires OpenAI API key)
-# PAP__EMBEDDING__API_KEY=sk-...
+# SELU__EMBEDDING__API_KEY=sk-...
 ```
 
 Defaults that work out of the box (override if needed):
 
 ```env
-PAP__SERVER__HOST=0.0.0.0
-PAP__SERVER__PORT=3000
-PAP__DATABASE__URL=sqlite://pap.db?mode=rwc
-PAP__MARKETPLACE_URL=https://test.doko-ost.de/agents.json
-PAP__INSTALLED_AGENTS_DIR=./installed_agents
-PAP__EGRESS_PROXY_ADDR=0.0.0.0:8888
+SELU__SERVER__HOST=0.0.0.0
+SELU__SERVER__PORT=3000
+SELU__DATABASE__URL=sqlite://selu.db?mode=rwc
+SELU__MARKETPLACE_URL=https://test.doko-ost.de/agents.json
+SELU__INSTALLED_AGENTS_DIR=./installed_agents
+SELU__EGRESS_PROXY_ADDR=0.0.0.0:8888
 ```
 
 ### 3. Run locally
 
 ```bash
-cargo run --bin pap-orchestrator
+cargo run --bin selu-orchestrator
 ```
 
 The web UI is at `http://localhost:3000`. On first launch you'll be guided through initial setup (admin user creation, provider configuration).
@@ -82,35 +82,35 @@ cargo test --workspace
 
 ```bash
 # Latest release
-docker pull ghcr.io/<your-org>/pap:latest
+docker pull ghcr.io/selu-bot/selu:latest
 
 # Specific version
-docker pull ghcr.io/<your-org>/pap:1.0.0
+docker pull ghcr.io/selu-bot/selu:1.0.0
 
 # Latest dev build from main
-docker pull ghcr.io/<your-org>/pap:dev_20260225_143000
+docker pull ghcr.io/selu-bot/selu:dev_20260225_143000
 ```
 
 ### Run with Docker
 
-PAP needs access to the Docker socket (it manages capability containers). The default assistant agent is bundled into the binary. Additional agents (weather, homekit, etc.) are installed at runtime from the marketplace via the web UI:
+Selu needs access to the Docker socket (it manages capability containers). The default assistant agent is bundled into the binary. Additional agents (weather, homekit, etc.) are installed at runtime from the marketplace via the web UI:
 
 ```bash
 docker run -d \
-  --name pap \
+  --name selu \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v pap-data:/app/data \
-  -v pap-agents:/app/installed_agents \
-  -e PAP__ENCRYPTION_KEY="$(openssl rand -base64 32)" \
-  ghcr.io/<your-org>/pap:latest
+  -v selu-data:/app/data \
+  -v selu-agents:/app/installed_agents \
+  -e SELU__ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  ghcr.io/selu-bot/selu:latest
 ```
 
 #### Volume breakdown
 
 | Mount | Purpose |
 |-------|---------|
-| `/var/run/docker.sock` | Required -- PAP manages capability containers via the Docker API |
+| `/var/run/docker.sock` | Required -- Selu manages capability containers via the Docker API |
 | `/app/installed_agents` | Persistent storage for agents installed from the marketplace |
 | `/app/data` | SQLite database (persistent state) |
 
@@ -120,24 +120,24 @@ Create a `docker-compose.yml`:
 
 ```yaml
 services:
-  pap:
-    image: ghcr.io/<your-org>/pap:latest
+  selu:
+    image: ghcr.io/selu-bot/selu:latest
     ports:
       - "3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - pap-data:/app/data
-      - pap-agents:/app/installed_agents
+      - selu-data:/app/data
+      - selu-agents:/app/installed_agents
     environment:
-      - PAP__ENCRYPTION_KEY=${PAP__ENCRYPTION_KEY}
-      - PAP__EMBEDDING__API_KEY=${PAP__EMBEDDING__API_KEY:-}
+      - SELU__ENCRYPTION_KEY=${SELU__ENCRYPTION_KEY}
+      - SELU__EMBEDDING__API_KEY=${SELU__EMBEDDING__API_KEY:-}
       # Optional: override marketplace URL
-      # - PAP__MARKETPLACE_URL=https://test.doko-ost.de/agents.json
+      # - SELU__MARKETPLACE_URL=https://test.doko-ost.de/agents.json
     restart: unless-stopped
 
 volumes:
-  pap-data:
-  pap-agents:
+  selu-data:
+  selu-agents:
 ```
 
 Then:
@@ -170,7 +170,7 @@ The Docker build uses `SQLX_OFFLINE=true` so it doesn't need a live database at 
 ```bash
 # Ensure you have a local database with all migrations applied
 cargo sqlx database create
-cargo sqlx migrate run --source crates/pap-orchestrator/migrations
+cargo sqlx migrate run --source crates/selu-orchestrator/migrations
 
 # Generate offline metadata
 cargo sqlx prepare --workspace
@@ -207,7 +207,7 @@ No additional secrets are needed. The workflow uses the built-in `GITHUB_TOKEN` 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                   PAP Orchestrator                       │
+│                   Selu Orchestrator                       │
 │  ┌──────────┐  ┌────────────┐  ┌─────────────────────┐  │
 │  │ Web UI   │  │ REST API   │  │ Pipe Inbound        │  │
 │  │ (Askama) │  │ /api/*     │  │ /api/pipes/:id/in   │  │
@@ -242,14 +242,14 @@ No additional secrets are needed. The workflow uses the built-in `GITHUB_TOKEN` 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PAP__SERVER__HOST` | `0.0.0.0` | Bind address |
-| `PAP__SERVER__PORT` | `3000` | HTTP port |
-| `PAP__DATABASE__URL` | `sqlite://pap.db?mode=rwc` | SQLite connection string |
-| `PAP__MARKETPLACE_URL` | `https://test.doko-ost.de/agents.json` | Agent marketplace catalogue URL |
-| `PAP__INSTALLED_AGENTS_DIR` | `./installed_agents` | Directory for marketplace-installed agents |
-| `PAP__ENCRYPTION_KEY` | *(required)* | Base64-encoded 32-byte AES key |
-| `PAP__EGRESS_PROXY_ADDR` | `0.0.0.0:8888` | Egress proxy listen address |
-| `PAP__MAX_CHAIN_DEPTH` | `3` | Max event chain depth |
-| `PAP__EMBEDDING__API_KEY` | *(empty)* | OpenAI API key for semantic memory |
-| `PAP__EMBEDDING__BASE_URL` | `https://api.openai.com` | Embedding API base URL |
-| `PAP__EMBEDDING__MODEL` | `text-embedding-3-small` | Embedding model name |
+| `SELU__SERVER__HOST` | `0.0.0.0` | Bind address |
+| `SELU__SERVER__PORT` | `3000` | HTTP port |
+| `SELU__DATABASE__URL` | `sqlite://selu.db?mode=rwc` | SQLite connection string |
+| `SELU__MARKETPLACE_URL` | `https://test.doko-ost.de/agents.json` | Agent marketplace catalogue URL |
+| `SELU__INSTALLED_AGENTS_DIR` | `./installed_agents` | Directory for marketplace-installed agents |
+| `SELU__ENCRYPTION_KEY` | *(required)* | Base64-encoded 32-byte AES key |
+| `SELU__EGRESS_PROXY_ADDR` | `0.0.0.0:8888` | Egress proxy listen address |
+| `SELU__MAX_CHAIN_DEPTH` | `3` | Max event chain depth |
+| `SELU__EMBEDDING__API_KEY` | *(empty)* | OpenAI API key for semantic memory |
+| `SELU__EMBEDDING__BASE_URL` | `https://api.openai.com` | Embedding API base URL |
+| `SELU__EMBEDDING__MODEL` | `text-embedding-3-small` | Embedding model name |

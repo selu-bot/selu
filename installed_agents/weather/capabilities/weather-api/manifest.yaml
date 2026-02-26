@@ -1,6 +1,6 @@
 id: weather-api
 class: tool
-image: ghcr.io/jwthewes/pap-cap-weather-api:0.0.1
+image: ghcr.io/selu-bot/selu-cap-weather-api:0.0.1
 
 tools:
   - name: get_forecast

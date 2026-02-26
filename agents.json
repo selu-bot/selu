@@ -6,11 +6,11 @@
       "name": "Weather Assistant",
       "description": "Real-time weather forecasts via Open-Meteo.",
       "version": "0.0.1",
-      "author": "PAP Team",
-      "archive_url": "https://github.com/JWThewes/pap-agent-weather/releases/download/v0.0.1/agent.tar.gz",
+      "author": "Selu Team",
+      "archive_url": "https://github.com/selu-bot/selu-agent-weather/releases/download/v0.0.1/agent.tar.gz",
       "archive_sha256": "8d11b73e46689419a3c50b0932253e2245f1e76567aa388984329ac03ce8a4a2",
       "capability_images": [
-        "ghcr.io/jwthewes/pap-cap-weather-api:0.0.1"
+        "ghcr.io/selu-bot/selu-cap-weather-api:0.0.1"
       ]
     }
   ]
