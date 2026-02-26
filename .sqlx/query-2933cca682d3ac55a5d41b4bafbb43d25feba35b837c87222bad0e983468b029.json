@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT pipe_id FROM bluebubbles_configs WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "pipe_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2933cca682d3ac55a5d41b4bafbb43d25feba35b837c87222bad0e983468b029"
+}

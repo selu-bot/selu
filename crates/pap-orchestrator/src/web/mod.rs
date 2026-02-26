@@ -27,8 +27,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         // Chat
         .route("/chat", get(chat::chat_index))
         .route("/chat/{pipe_id}", get(chat::chat_pipe))
+        .route("/chat/{pipe_id}/t/new", post(chat::chat_new_thread))
+        .route("/chat/{pipe_id}/t/{thread_id}", get(chat::chat_thread))
+        .route("/chat/{pipe_id}/t/{thread_id}/send", post(chat::chat_send))
         .route("/chat/{pipe_id}/stream/{stream_id}", get(chat::chat_stream))
-        .route("/chat/{pipe_id}/send", post(chat::chat_send))
         .route("/chat/confirm/{confirmation_id}", post(chat::chat_confirm))
         // Integrations (user-friendly flow)
         .route("/integrations", get(integrations::integrations_index))

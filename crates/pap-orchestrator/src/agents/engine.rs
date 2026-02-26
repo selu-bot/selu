@@ -12,9 +12,10 @@ use uuid::Uuid;
 
 use pap_core::types::Role;
 
-use crate::agents::{context, delegation, router as agent_router, session as session_mgr};
+use crate::agents::{context, delegation, router as agent_router, session as session_mgr, thread as thread_mgr};
 use crate::capabilities::build_tool_specs;
 use crate::llm::{registry::load_provider, tool_loop::{run_loop, LoopEvent, LoopSender}};
+use crate::llm::provider::{ChatMessage, LlmResponse};
 use crate::state::AppState;
 
 /// Parameters for a single agent turn.
@@ -198,9 +199,72 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                 }
             });
         }
+
+        // ── Auto-generate thread title (first reply only) ────────────────────
+        if let Some(ref tid) = thread_id {
+            let title_needed = sqlx::query!(
+                "SELECT title FROM threads WHERE id = ?", tid
+            )
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .map(|r| r.title.is_none())
+            .unwrap_or(false);
+
+            if title_needed {
+                let db = state.db.clone();
+                let creds = state.credentials.clone();
+                let tid = tid.clone();
+                let msg = effective_text.clone();
+                let agent_id = agent.id.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = generate_thread_title(&db, &creds, &tid, &msg, &agent_id).await {
+                        debug!("Failed to generate thread title: {e}");
+                    }
+                });
+            }
+        }
     }
 
     Ok(reply)
+}
+
+/// Generate a short title for a thread by asking the LLM.
+///
+/// Called as a background task after the first assistant reply in a thread.
+/// Fails silently — title generation is cosmetic and non-essential.
+async fn generate_thread_title(
+    db: &sqlx::SqlitePool,
+    creds: &crate::permissions::store::CredentialStore,
+    thread_id: &str,
+    first_message: &str,
+    agent_id: &str,
+) -> Result<()> {
+    let resolved = crate::agents::model::resolve_model(db, agent_id).await?;
+    let provider = load_provider(db, &resolved.provider_id, &resolved.model_id, creds).await?;
+
+    let messages = vec![
+        ChatMessage::system(
+            "Generate a very short title (3-5 words) for a conversation that starts with the following message. \
+             Return ONLY the title, nothing else. No quotes, no punctuation at the end."
+        ),
+        ChatMessage::user(first_message),
+    ];
+
+    let response = provider.chat(&messages, &[], 0.3).await?;
+
+    let title = match response {
+        LlmResponse::Text(t) => t.trim().trim_matches('"').trim_matches('\'').to_string(),
+        _ => return Ok(()), // Unexpected tool call response, skip
+    };
+
+    if !title.is_empty() && title.len() < 100 {
+        thread_mgr::set_title(db, thread_id, &title).await?;
+        debug!(thread_id = %thread_id, title = %title, "Generated thread title");
+    }
+
+    Ok(())
 }
 
 /// Dispatch a `delegate_to_agent` tool call by running a nested agent turn.

@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, name, transport, outbound_url, default_agent_id, active, created_at\n         FROM pipes ORDER BY created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "transport",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "outbound_url",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "default_agent_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "active",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "cc74d44a7b49ee6306c63a6622ee9eb860cda9b2c55b109fc33801a89b874db3"
+}

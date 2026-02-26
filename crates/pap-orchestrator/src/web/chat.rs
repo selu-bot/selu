@@ -2,7 +2,7 @@ use askama::Template;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::{Html, IntoResponse, Response, Sse},
+    response::{Html, IntoResponse, Redirect, Response, Sse},
     Form,
 };
 use futures::StreamExt;
@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::agents::engine::{run_turn, TurnParams};
 use crate::agents::router as agent_router;
+use crate::agents::thread as thread_mgr;
 use crate::llm::tool_loop::LoopEvent;
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
@@ -28,6 +29,15 @@ pub struct PipeView {
     pub id: String,
     pub name: String,
     pub transport: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ThreadView {
+    pub id: String,
+    pub pipe_id: String,
+    pub title: String,
+    pub status: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +56,8 @@ struct ChatTemplate {
     pipes: Vec<PipeView>,
     selected_pipe_id: String,
     selected_pipe: Option<PipeView>,
+    threads: Vec<ThreadView>,
+    selected_thread_id: String,
     messages: Vec<MessageView>,
 }
 
@@ -65,10 +77,45 @@ async fn fetch_pipes(db: &sqlx::SqlitePool) -> Vec<PipeView> {
         .collect()
 }
 
-async fn fetch_messages(db: &sqlx::SqlitePool, pipe_id: &str) -> Vec<MessageView> {
+async fn fetch_threads(db: &sqlx::SqlitePool, pipe_id: &str, user_id: &str) -> Vec<ThreadView> {
     sqlx::query!(
-        "SELECT role, content, created_at FROM messages WHERE pipe_id = ? ORDER BY created_at LIMIT 100",
-        pipe_id
+        r#"SELECT t.id, t.pipe_id, t.title, t.status, t.created_at,
+                  (SELECT content FROM messages WHERE thread_id = t.id ORDER BY created_at ASC LIMIT 1) as first_msg
+           FROM threads t
+           WHERE t.pipe_id = ? AND t.user_id = ?
+           ORDER BY t.created_at DESC"#,
+        pipe_id,
+        user_id,
+    )
+    .fetch_all(db)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .map(|r| {
+        let title = r.title.unwrap_or_else(|| {
+            // Fall back to truncated first message
+            let msg = &r.first_msg;
+            if msg.is_empty() {
+                "New conversation".to_string()
+            } else {
+                msg.chars().take(40).collect::<String>()
+            }
+        });
+        ThreadView {
+            id: r.id.unwrap_or_default(),
+            pipe_id: r.pipe_id,
+            title,
+            status: r.status,
+            created_at: r.created_at,
+        }
+    })
+    .collect()
+}
+
+async fn fetch_thread_messages(db: &sqlx::SqlitePool, thread_id: &str) -> Vec<MessageView> {
+    sqlx::query!(
+        "SELECT role, content, created_at FROM messages WHERE thread_id = ? ORDER BY created_at LIMIT 100",
+        thread_id
     )
     .fetch_all(db)
     .await
@@ -94,40 +141,107 @@ fn render_template(tmpl: ChatTemplate) -> Response {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
+/// GET /chat — chat index (no pipe selected)
 pub async fn chat_index(_user: AuthUser, State(state): State<AppState>) -> Response {
     let pipes = fetch_pipes(&state.db).await;
     render_template(ChatTemplate {
         active_nav: "chat",
         selected_pipe_id: String::new(),
         selected_pipe: None,
+        threads: vec![],
+        selected_thread_id: String::new(),
         messages: vec![],
         pipes,
     })
 }
 
+/// GET /chat/{pipe_id} — pipe selected, show thread list
 pub async fn chat_pipe(
-    _user: AuthUser,
+    user: AuthUser,
     Path(pipe_id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> Response {
     let pipe_id_str = pipe_id.to_string();
     let pipes = fetch_pipes(&state.db).await;
-    let messages = fetch_messages(&state.db, &pipe_id_str).await;
+    let threads = fetch_threads(&state.db, &pipe_id_str, &user.user_id).await;
     let selected = pipes.iter().find(|p| p.id == pipe_id_str).cloned();
 
     render_template(ChatTemplate {
         active_nav: "chat",
         selected_pipe_id: pipe_id_str,
         selected_pipe: selected,
+        threads,
+        selected_thread_id: String::new(),
+        messages: vec![],
+        pipes,
+    })
+}
+
+/// GET /chat/{pipe_id}/t/{thread_id} — specific thread selected
+pub async fn chat_thread(
+    user: AuthUser,
+    Path((pipe_id, thread_id)): Path<(Uuid, Uuid)>,
+    State(state): State<AppState>,
+) -> Response {
+    let pipe_id_str = pipe_id.to_string();
+    let thread_id_str = thread_id.to_string();
+    let pipes = fetch_pipes(&state.db).await;
+    let threads = fetch_threads(&state.db, &pipe_id_str, &user.user_id).await;
+    let selected = pipes.iter().find(|p| p.id == pipe_id_str).cloned();
+    let messages = fetch_thread_messages(&state.db, &thread_id_str).await;
+
+    render_template(ChatTemplate {
+        active_nav: "chat",
+        selected_pipe_id: pipe_id_str,
+        selected_pipe: selected,
+        threads,
+        selected_thread_id: thread_id_str,
         messages,
         pipes,
     })
 }
 
-/// POST /chat/{pipe_id}/send — returns HTMX fragment: user bubble + streaming assistant bubble
-pub async fn chat_send(
-    _user: AuthUser,
+/// POST /chat/{pipe_id}/t/new — create a new thread and redirect to it
+pub async fn chat_new_thread(
+    user: AuthUser,
     Path(pipe_id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> Response {
+    let pipe_id_str = pipe_id.to_string();
+
+    // Determine the agent for this pipe
+    let default_agent_id = sqlx::query!(
+        "SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id_str
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|r| r.default_agent_id)
+    .unwrap_or_else(|| "default".to_string());
+
+    match thread_mgr::create_thread(
+        &state.db,
+        &pipe_id_str,
+        &user.user_id,
+        &default_agent_id,
+        None,
+    ).await {
+        Ok(thread) => {
+            let url = format!("/chat/{}/t/{}", pipe_id_str, thread.id);
+            Redirect::to(&url).into_response()
+        }
+        Err(e) => {
+            error!("Failed to create thread: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// POST /chat/{pipe_id}/t/{thread_id}/send — returns HTMX fragment: user bubble + streaming assistant bubble
+pub async fn chat_send(
+    user: AuthUser,
+    Path((pipe_id, thread_id)): Path<(Uuid, Uuid)>,
     State(state): State<AppState>,
     Form(form): Form<HashMap<String, String>>,
 ) -> Response {
@@ -137,6 +251,7 @@ pub async fn chat_send(
     };
 
     let pipe_id_str = pipe_id.to_string();
+    let thread_id_str = thread_id.to_string();
 
     // Create a Notify so the background task waits for the SSE client to connect
     let stream_id = Uuid::new_v4().to_string();
@@ -154,8 +269,16 @@ pub async fn chat_send(
         notifies.insert(stream_id.clone(), notify.clone());
     }
 
-    // Kick off LLM in background
-    tokio::spawn(process_message(state.clone(), pipe_id_str.clone(), text.clone(), stream_id.clone(), notify));
+    // Kick off LLM in background — use the logged-in user's identity
+    tokio::spawn(process_message(
+        state.clone(),
+        pipe_id_str.clone(),
+        thread_id_str.clone(),
+        user.user_id.clone(),
+        text.clone(),
+        stream_id.clone(),
+        notify,
+    ));
 
     let html = format!(
         r#"<div class="flex justify-end">
@@ -324,6 +447,8 @@ pub async fn chat_confirm(
 async fn process_message(
     state: AppState,
     pipe_id: String,
+    thread_id: String,
+    user_id: String,
     text: String,
     stream_id: String,
     notify: Arc<Notify>,
@@ -336,20 +461,17 @@ async fn process_message(
         }
     }
 
-    let pipe = sqlx::query!(
-        "SELECT user_id, default_agent_id FROM pipes WHERE id = ?", pipe_id
+    // Fetch pipe's default agent
+    let default_agent_id = sqlx::query!(
+        "SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id
     )
     .fetch_optional(&state.db)
     .await
     .ok()
-    .flatten();
+    .flatten()
+    .and_then(|r| r.default_agent_id);
 
-    let (user_id, default_agent_id) = match pipe {
-        Some(p) => (p.user_id, p.default_agent_id),
-        None => { error!(pipe_id = %pipe_id, "Pipe not found"); return; }
-    };
-
-    // Route to determine agent_id (for display purposes; run_turn also routes internally)
+    // Route to determine agent_id
     let agents_snapshot = state.agents.read().await.clone();
     let (agent_id, effective_text) = agent_router::route(
         &text,
@@ -372,7 +494,7 @@ async fn process_message(
         user_id,
         agent_id: Some(agent_id),
         message: effective_text,
-        thread_id: None, // Web chat doesn't use threads (yet)
+        thread_id: Some(thread_id),
         chain_depth: 0,
     };
 

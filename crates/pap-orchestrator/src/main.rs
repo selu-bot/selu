@@ -158,6 +158,22 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Thread idle cleanup: close threads with no activity for 48 hours
+    let thread_db = state.db.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            match agents::thread::close_idle_threads(&thread_db, 48).await {
+                Ok(count) if count > 0 => {
+                    tracing::info!(count = count, "Closed idle threads (48h)");
+                }
+                Err(e) => tracing::error!("Thread idle cleanup error: {e}"),
+                _ => {}
+            }
+        }
+    });
+
     let shutdown_state = state.clone();
 
     let app = axum::Router::new()

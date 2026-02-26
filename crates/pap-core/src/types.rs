@@ -101,9 +101,14 @@ pub struct Thread {
     pub session_id: Uuid,
     pub user_id: Uuid,
     pub status: ThreadStatus,
+    /// Human-readable title for the UI sidebar (LLM-generated from first message).
+    pub title: Option<String>,
     /// The adapter-side message reference that started this thread (e.g. BB message GUID).
     /// Used for reply-to correlation on outbound.
     pub origin_message_ref: Option<String>,
+    /// The GUID of PAP's last outbound reply in this thread.
+    /// Used to match incoming iMessage replies back to this thread.
+    pub last_reply_guid: Option<String>,
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
 }

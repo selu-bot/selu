@@ -46,6 +46,9 @@ struct BbMessage {
     handle: Option<BbHandle>,
     guid: Option<String>,
     date_created: Option<i64>,
+    /// If this message is a reply to another message, this is the GUID of
+    /// the original message. Used to route replies into existing threads.
+    thread_origin_guid: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -253,6 +256,7 @@ async fn poll_once(instance: &AdapterInstance, state: &AppState, after_ts: i64) 
             .unwrap_or_else(|| "self".into());
 
         let message_guid = msg.guid.clone();
+        let thread_origin_guid = msg.thread_origin_guid.clone();
 
         // ── Sender resolution ─────────────────────────────────────────────
         let resolved_user_id = match resolve_sender(state, &instance.pipe_id, &sender_ref).await {
@@ -291,6 +295,7 @@ async fn poll_once(instance: &AdapterInstance, state: &AppState, after_ts: i64) 
                 sender_ref,
                 text,
                 message_guid,
+                thread_origin_guid,
                 chat_guid,
                 server_url,
                 server_password,
@@ -344,7 +349,7 @@ async fn resolve_sender(state: &AppState, pipe_id: &str, sender_ref: &str) -> Op
     }
 }
 
-/// Process a single inbound message: create thread, run agent, send reply.
+/// Process a single inbound message: find/create thread, run agent, send reply.
 #[allow(clippy::too_many_arguments)]
 async fn dispatch_message(
     state: AppState,
@@ -353,6 +358,7 @@ async fn dispatch_message(
     _sender_ref: String,
     text: String,
     message_guid: Option<String>,
+    thread_origin_guid: Option<String>,
     chat_guid: String,
     server_url: String,
     server_password: String,
@@ -376,17 +382,18 @@ async fn dispatch_message(
         &agents_snapshot,
     );
 
-    // Create thread
-    let thread = match thread_mgr::create_thread(
+    // Find existing thread (reply-to chain) or create a new one
+    let thread = match thread_mgr::find_or_create_thread(
         &state.db,
         &pipe_id,
         &user_id,
         &agent_id,
         message_guid.as_deref(),
+        thread_origin_guid.as_deref(),
     ).await {
         Ok(t) => t,
         Err(e) => {
-            error!("Failed to create thread: {e}");
+            error!("Failed to find/create thread: {e}");
             return;
         }
     };
@@ -407,7 +414,7 @@ async fn dispatch_message(
     let reply_text = match reply {
         Ok(t) if !t.is_empty() => t,
         Ok(_) => {
-            let _ = thread_mgr::complete_thread(&state.db, &thread_id).await;
+            // Empty reply — thread stays active for future messages
             return;
         }
         Err(e) => {
@@ -419,7 +426,7 @@ async fn dispatch_message(
 
     // Send reply via BlueBubbles
     let clean_text = strip_markdown(&reply_text);
-    send_bb_reply(
+    let sent_guid = send_bb_reply(
         &http,
         &server_url,
         &server_password,
@@ -429,7 +436,11 @@ async fn dispatch_message(
         &sent_guids,
     ).await;
 
-    let _ = thread_mgr::complete_thread(&state.db, &thread_id).await;
+    // Store PAP's reply GUID so future incoming replies can be matched
+    // back to this thread.
+    if let Some(guid) = sent_guid {
+        let _ = thread_mgr::update_reply_guid(&state.db, &thread_id, &guid).await;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -437,6 +448,7 @@ async fn dispatch_message(
 // ---------------------------------------------------------------------------
 
 /// Send a message via the BlueBubbles API, optionally as a reply to a specific message.
+/// Returns the sent message GUID if available (for thread reply-to tracking).
 async fn send_bb_reply(
     http: &Client,
     server_url: &str,
@@ -445,7 +457,7 @@ async fn send_bb_reply(
     text: &str,
     reply_to_guid: Option<&str>,
     sent_guids: &SentGuids,
-) {
+) -> Option<String> {
     let url = format!("{}/api/v1/message/text", server_url);
 
     let temp_guid = format!("pap-{}", current_epoch_ms());
@@ -475,18 +487,23 @@ async fn send_bb_reply(
                     // Prune if set gets too large
                     if sent.len() > 500 {
                         sent.clear();
-                        sent.insert(guid);
+                        sent.insert(guid.clone());
                     }
+
+                    return Some(guid);
                 }
             }
+            None
         }
         Ok(r) => {
             let status = r.status();
             let body = r.text().await.unwrap_or_default();
             error!(%status, %body, "BlueBubbles rejected send");
+            None
         }
         Err(e) => {
             error!("Failed to reach BlueBubbles: {e}");
+            None
         }
     }
 }
