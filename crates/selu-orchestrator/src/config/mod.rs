@@ -66,7 +66,7 @@ impl AppConfig {
             .set_default("server.host", "0.0.0.0")?
             .set_default("server.port", 3000)?
             .set_default("database.url", "sqlite://selu.db?mode=rwc")?
-            .set_default("marketplace_url", "https://test.doko-ost.de/agents.json")?
+            .set_default("marketplace_url", "https://selu.bot/api/marketplace/agents")?
             .set_default("installed_agents_dir", "./installed_agents")?
             .set_default("egress_proxy_addr", "0.0.0.0:8888")?
             .set_default("max_chain_depth", 3)?

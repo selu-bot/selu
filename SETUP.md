@@ -55,7 +55,7 @@ Defaults that work out of the box (override if needed):
 SELU__SERVER__HOST=0.0.0.0
 SELU__SERVER__PORT=3000
 SELU__DATABASE__URL=sqlite://selu.db?mode=rwc
-SELU__MARKETPLACE_URL=https://test.doko-ost.de/agents.json
+SELU__MARKETPLACE_URL=https://selu.bot/api/marketplace/agents
 SELU__INSTALLED_AGENTS_DIR=./installed_agents
 SELU__EGRESS_PROXY_ADDR=0.0.0.0:8888
 ```
@@ -132,7 +132,7 @@ services:
       - SELU__ENCRYPTION_KEY=${SELU__ENCRYPTION_KEY}
       - SELU__EMBEDDING__API_KEY=${SELU__EMBEDDING__API_KEY:-}
       # Optional: override marketplace URL
-      # - SELU__MARKETPLACE_URL=https://test.doko-ost.de/agents.json
+      # - SELU__MARKETPLACE_URL=https://selu.bot/api/marketplace/agents
     restart: unless-stopped
 
 volumes:
@@ -245,7 +245,7 @@ No additional secrets are needed. The workflow uses the built-in `GITHUB_TOKEN` 
 | `SELU__SERVER__HOST` | `0.0.0.0` | Bind address |
 | `SELU__SERVER__PORT` | `3000` | HTTP port |
 | `SELU__DATABASE__URL` | `sqlite://selu.db?mode=rwc` | SQLite connection string |
-| `SELU__MARKETPLACE_URL` | `https://test.doko-ost.de/agents.json` | Agent marketplace catalogue URL |
+| `SELU__MARKETPLACE_URL` | `https://selu.bot/api/marketplace/agents` | Agent marketplace catalogue URL |
 | `SELU__INSTALLED_AGENTS_DIR` | `./installed_agents` | Directory for marketplace-installed agents |
 | `SELU__ENCRYPTION_KEY` | *(required)* | Base64-encoded 32-byte AES key |
 | `SELU__EGRESS_PROXY_ADDR` | `0.0.0.0:8888` | Egress proxy listen address |
