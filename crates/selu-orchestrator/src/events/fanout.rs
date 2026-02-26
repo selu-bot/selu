@@ -17,7 +17,7 @@ use tracing::{debug, error, info, warn};
 
 use selu_core::types::AgentEvent;
 
-use crate::agents::engine::{noop_sender, run_turn, TurnParams};
+use crate::agents::engine::{noop_sender, run_turn, ChannelKind, TurnParams};
 use crate::events::cel;
 use crate::pipes::outbound::OutboundSender;
 use crate::state::AppState;
@@ -215,6 +215,7 @@ async fn dispatch_agent_invocation(
         message,
         thread_id: None, // Event fanout doesn't use threads
         chain_depth: event.chain_depth + 1,
+        channel_kind: ChannelKind::NonInteractive,
     };
 
     // Clone for the log lines below (config is moved into the spawn)

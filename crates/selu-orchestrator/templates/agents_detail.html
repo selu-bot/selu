@@ -1,0 +1,138 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ agent_name }}{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <!-- Back link -->
+    <a href="/agents" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors">
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span>Back to Agents</span>
+    </a>
+
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-coral/10 border border-coral/20 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-coral" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
+        </div>
+        <div>
+          <h1 class="text-xl font-black text-txt-heading font-heading">{{ agent_name }}</h1>
+          <p class="text-sm text-txt-muted">{{ agent_id }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Capabilities -->
+    {% for cap in capabilities %}
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading">{{ cap.id }}</span>
+        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full
+          {% if cap.network_mode == "none" %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+          {% else if cap.network_mode == "allowlist" %}bg-amber-500/10 text-amber-400 border border-amber-500/20
+          {% else %}bg-red-500/10 text-red-400 border border-red-500/20{% endif %}">
+          Network: {{ cap.network_mode }}
+        </span>
+      </div>
+      <div class="p-5 space-y-4">
+        <!-- Network allowlist -->
+        {% if !cap.allowed_hosts.is_empty() %}
+        <div>
+          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">Allowed Hosts</p>
+          <div class="flex flex-wrap gap-1.5">
+            {% for host in cap.allowed_hosts %}
+            <span class="inline-flex px-2 py-0.5 rounded-md bg-surface-alt text-xs text-txt font-mono">{{ host }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Resources -->
+        <div>
+          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">Resources</p>
+          <div class="flex gap-3 text-xs text-txt-muted">
+            <span>Memory: {{ cap.max_memory_mb }}MB</span>
+            <span>CPU: {{ cap.max_cpu_fraction }}</span>
+            <span>PIDs: {{ cap.pids_limit }}</span>
+            <span>FS: {{ cap.filesystem }}</span>
+          </div>
+        </div>
+
+        <!-- Tools -->
+        {% if !cap.tools.is_empty() %}
+        <div>
+          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">Tools</p>
+          <div class="space-y-1.5">
+            {% for tool in cap.tools %}
+            <div class="flex items-center justify-between py-1.5 px-3 bg-surface-alt/30 rounded-lg">
+              <div class="min-w-0">
+                <span class="text-sm text-txt-heading font-medium">{{ tool.name }}</span>
+                <span class="text-xs text-txt-muted ml-2">{{ tool.description }}</span>
+              </div>
+              <span class="text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0
+                {% if tool.policy == "allow" %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+                {% else if tool.policy == "ask" %}bg-amber-500/10 text-amber-400 border border-amber-500/20
+                {% else %}bg-red-500/10 text-red-400 border border-red-500/20{% endif %}">
+                {{ tool.policy }}
+              </span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+    <!-- Egress Log -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading">Network Activity</span>
+        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted">Last 100 requests</span>
+      </div>
+      {% if egress_entries.is_empty() %}
+      <div class="p-5">
+        <p class="text-sm text-txt-muted text-center py-6">No network requests recorded yet.</p>
+      </div>
+      {% else %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="border-b border-edge text-left">
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Time</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Capability</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Method</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Host</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Port</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in egress_entries %}
+            <tr class="border-b border-edge/50 hover:bg-surface-alt/20">
+              <td class="px-5 py-2 text-txt-muted whitespace-nowrap">{{ entry.created_at }}</td>
+              <td class="px-5 py-2 text-txt font-mono">{{ entry.capability_id }}</td>
+              <td class="px-5 py-2 text-txt">{{ entry.method }}</td>
+              <td class="px-5 py-2 text-txt font-mono">{{ entry.host }}</td>
+              <td class="px-5 py-2 text-txt-muted">{{ entry.port }}</td>
+              <td class="px-5 py-2">
+                {% if entry.allowed %}
+                <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Allowed</span>
+                {% else %}
+                <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">Denied</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}

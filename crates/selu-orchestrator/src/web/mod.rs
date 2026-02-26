@@ -48,6 +48,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/agents", get(agents::agents_index))
         .route("/agents/install", post(agents::install_agent))
         .route("/agents/default-model", post(agents::set_default_model))
+        .route("/agents/{agent_id}", get(agents::agent_detail))
         .route("/agents/{agent_id}/setup", get(agents::setup_wizard).post(agents::setup_submit))
         .route("/agents/{agent_id}/setup/test/{step_id}", post(agents::setup_test))
         .route("/agents/{agent_id}/model", post(agents::set_agent_model_handler))

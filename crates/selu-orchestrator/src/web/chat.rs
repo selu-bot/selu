@@ -15,7 +15,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use crate::agents::engine::{run_turn, TurnParams};
+use crate::agents::engine::{run_turn, ChannelKind, TurnParams};
 use crate::agents::router as agent_router;
 use crate::agents::thread as thread_mgr;
 use crate::llm::tool_loop::LoopEvent;
@@ -391,6 +391,23 @@ pub async fn chat_stream(
                     err = escaped,
                 )
             }
+            LoopEvent::ApprovalQueued { tool_name, approval_id } => {
+                let display = tool_name.split("__").last().unwrap_or(&tool_name);
+                format!(
+                    r#"<script>
+(function(){{
+  var msgs = document.getElementById('messages');
+  var statusDiv = document.createElement('div');
+  statusDiv.className = 'flex justify-start';
+  statusDiv.innerHTML = '<div class="tool-status active"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg><span>Approval queued for {display} (id: {id})</span></div>';
+  msgs.appendChild(statusDiv);
+  msgs.scrollTop = msgs.scrollHeight;
+}})();
+</script>"#,
+                    display = html_escape(display),
+                    id = html_escape(&approval_id),
+                )
+            }
         };
         Ok::<_, Infallible>(axum::response::sse::Event::default().event("token").data(data))
     });
@@ -492,6 +509,7 @@ async fn process_message(
         message: effective_text,
         thread_id: Some(thread_id),
         chain_depth: 0,
+        channel_kind: ChannelKind::Interactive,
     };
 
     if let Err(e) = run_turn(&state, params, tx).await {

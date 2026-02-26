@@ -5,11 +5,14 @@ use axum::{
     response::IntoResponse,
     routing::post,
 };
+use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::agents::{engine::{noop_sender, run_turn, TurnParams}, router as agent_router};
+use crate::agents::{engine::{noop_sender, run_turn, ChannelKind, TurnParams}, router as agent_router};
 use crate::agents::thread as thread_mgr;
+use crate::channels::WebhookSender;
+use crate::permissions::approval_queue;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -118,9 +121,16 @@ async fn handle_inbound(
         "Inbound message (sender resolved)"
     );
 
-    // ── Extract origin message ref from metadata ──────────────────────────────
+    // ── Extract message refs from metadata ────────────────────────────────────
     let origin_message_ref = envelope.metadata.as_ref()
         .and_then(|m: &serde_json::Value| m.get("message_guid"))
+        .and_then(|v: &serde_json::Value| v.as_str())
+        .map(|s: &str| s.to_string());
+
+    // reply_to_ref: if the adapter provides threading info, use it to
+    // continue an existing thread (same as the BB adapter does).
+    let reply_to_ref = envelope.metadata.as_ref()
+        .and_then(|m: &serde_json::Value| m.get("reply_to_ref"))
         .and_then(|v: &serde_json::Value| v.as_str())
         .map(|s: &str| s.to_string());
 
@@ -136,25 +146,56 @@ async fn handle_inbound(
     let outbound_auth = pipe.outbound_auth.clone();
     let recipient_ref = envelope.sender_ref.clone();
 
+    // Register a webhook channel sender for this pipe (if outbound is configured).
+    // This allows the approval queue to send prompts back through the pipe.
+    if !outbound_url.is_empty() {
+        let sender = Arc::new(WebhookSender::new(
+            outbound_url.clone(),
+            outbound_auth.clone(),
+            recipient_ref.clone(),
+        ));
+        state.channel_registry.register(&pipe_id_str, sender).await;
+    }
+
     tokio::spawn(async move {
-        // ── Create thread ─────────────────────────────────────────────────────
-        // Each inbound message starts a new thread. If the user sends another
-        // message while the agent is still processing, it becomes a separate thread.
-        let thread = match thread_mgr::create_thread(
+        // ── Find or create thread ─────────────────────────────────────────────
+        // If the adapter provides a reply_to_ref, try to continue an existing
+        // thread. Otherwise create a new one.
+        let thread = match thread_mgr::find_or_create_thread(
             &state.db,
             &pipe_id_str,
             &resolved_user_id,
             &agent_id,
             origin_message_ref.as_deref(),
+            reply_to_ref.as_deref(),
         ).await {
             Ok(t) => t,
             Err(e) => {
-                error!("Failed to create thread: {e}");
+                error!("Failed to find/create thread: {e}");
                 return;
             }
         };
 
         let thread_id = thread.id.to_string();
+
+        // ── Approval interception ─────────────────────────────────────────────
+        // If this thread has a pending tool approval, the user's reply resolves
+        // it instead of starting a new agent turn.
+        if approval_queue::try_resolve_pending(&state, &thread_id).await {
+            info!(thread_id = %thread_id, "Message consumed as tool approval response (webhook)");
+            return;
+        }
+
+        // Determine channel kind based on whether outbound is configured
+        // and the adapter supports threading (has reply_to_ref).
+        let channel_kind = if !outbound_url.is_empty() && reply_to_ref.is_some() {
+            ChannelKind::ThreadedNonInteractive {
+                pipe_id: pipe_id_str.clone(),
+                thread_id: thread_id.clone(),
+            }
+        } else {
+            ChannelKind::NonInteractive
+        };
 
         let params = TurnParams {
             pipe_id: pipe_id_str,
@@ -163,6 +204,7 @@ async fn handle_inbound(
             message: effective_text,
             thread_id: Some(thread_id.clone()),
             chain_depth: 0,
+            channel_kind,
         };
 
         let reply = run_turn(&state, params, noop_sender()).await;

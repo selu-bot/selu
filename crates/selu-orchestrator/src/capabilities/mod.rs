@@ -176,14 +176,14 @@ fn resolve_tool(
 /// Build `ToolSpec` objects from all capability manifests, with tool names
 /// namespaced as `"{cap_id}__{tool_name}"`.
 ///
-/// Also returns the set of namespaced tool names that require explicit user
-/// confirmation before dispatch (declared via `requires_confirmation: true`
-/// in the capability manifest).
+/// Tool-call authorization (allow / ask / block) is now handled by the
+/// per-user tool policy system rather than the manifest's
+/// `requires_confirmation` flag. This function only builds the specs
+/// that are exposed to the LLM.
 pub fn build_tool_specs(
     manifests: &HashMap<String, CapabilityManifest>,
-) -> (Vec<crate::llm::provider::ToolSpec>, std::collections::HashSet<String>) {
+) -> Vec<crate::llm::provider::ToolSpec> {
     let mut specs = Vec::new();
-    let mut confirmation_tools = std::collections::HashSet::new();
     for (cap_id, manifest) in manifests {
         for tool in &manifest.tools {
             let namespaced = format!("{}__{}", cap_id, tool.name);
@@ -192,12 +192,9 @@ pub fn build_tool_specs(
                 description: tool.description.clone(),
                 parameters: tool.input_schema.clone(),
             });
-            if tool.requires_confirmation {
-                confirmation_tools.insert(namespaced);
-            }
         }
     }
-    (specs, confirmation_tools)
+    specs
 }
 
 /// Clean up expired workspace volumes.

@@ -57,6 +57,20 @@ pub struct SetupStepView {
     pub validation: String,
 }
 
+/// A tool that needs a permission policy during agent setup.
+#[derive(Debug, Clone)]
+pub struct ToolPolicyView {
+    /// Unique key for form field names (capability_id + "__" + tool_name, sanitized)
+    pub key: String,
+    pub capability_id: String,
+    pub tool_name: String,
+    /// Human-readable tool name (bare, without capability prefix)
+    pub display_name: String,
+    pub description: String,
+    /// The agent author's recommended policy: "allow", "ask", or "block"
+    pub recommended: String,
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 #[derive(Template)]
@@ -88,7 +102,49 @@ struct AgentSetupTemplate {
     agent_id: String,
     agent_name: String,
     steps: Vec<SetupStepView>,
+    tool_policies: Vec<ToolPolicyView>,
     providers: Vec<ProviderOption>,
+}
+
+// ── Agent detail page ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct CapabilityView {
+    pub id: String,
+    pub network_mode: String,
+    pub allowed_hosts: Vec<String>,
+    pub filesystem: String,
+    pub max_memory_mb: u32,
+    pub max_cpu_fraction: String,
+    pub pids_limit: u32,
+    pub tools: Vec<ToolView>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ToolView {
+    pub name: String,
+    pub description: String,
+    pub policy: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct EgressEntryView {
+    pub capability_id: String,
+    pub method: String,
+    pub host: String,
+    pub port: i32,
+    pub allowed: bool,
+    pub created_at: String,
+}
+
+#[derive(Template)]
+#[template(path = "agents_detail.html")]
+struct AgentDetailTemplate {
+    active_nav: &'static str,
+    agent_id: String,
+    agent_name: String,
+    capabilities: Vec<CapabilityView>,
+    egress_entries: Vec<EgressEntryView>,
 }
 
 // ── Form structs ──────────────────────────────────────────────────────────────
@@ -280,7 +336,10 @@ pub async fn install_agent(
     .await
     {
         Ok(agent_def) => {
-            if agent_def.install_steps.is_empty() {
+            // Always redirect to setup if there are install steps or tools that need policies
+            let has_tools = agent_def.capability_manifests.values()
+                .any(|m| !m.tools.is_empty());
+            if agent_def.install_steps.is_empty() && !has_tools {
                 Redirect::to("/agents").into_response()
             } else {
                 Redirect::to(&format!("/agents/{}/setup", entry.id)).into_response()
@@ -330,6 +389,39 @@ pub async fn setup_wizard(
 
     let providers = load_provider_options(&state).await;
 
+    // Build tool policy views from capability manifests
+    let mut tool_policies: Vec<ToolPolicyView> = Vec::new();
+    for (cap_id, manifest) in &agent_def.capability_manifests {
+        for tool in &manifest.tools {
+            let key = format!("{}_{}", cap_id, tool.name).replace('-', "_");
+            tool_policies.push(ToolPolicyView {
+                key,
+                capability_id: cap_id.clone(),
+                tool_name: tool.name.clone(),
+                display_name: tool.name.replace('_', " "),
+                description: tool.description.clone(),
+                recommended: tool.effective_recommended_policy().to_string(),
+            });
+        }
+    }
+    // Add built-in tools
+    tool_policies.push(ToolPolicyView {
+        key: "__builtin___emit_event".to_string(),
+        capability_id: "__builtin__".to_string(),
+        tool_name: "emit_event".to_string(),
+        display_name: "Emit Event".to_string(),
+        description: "Allows the agent to emit events that can trigger other agents or notifications.".to_string(),
+        recommended: "ask".to_string(),
+    });
+    tool_policies.push(ToolPolicyView {
+        key: "__builtin___delegate_to_agent".to_string(),
+        capability_id: "__builtin__".to_string(),
+        tool_name: "delegate_to_agent".to_string(),
+        display_name: "Delegate to Agent".to_string(),
+        description: "Allows the agent to hand off tasks to other specialist agents.".to_string(),
+        recommended: "ask".to_string(),
+    });
+
     let name = sqlx::query_as::<_, (String,)>(
         "SELECT display_name FROM agents WHERE id = ?",
     )
@@ -346,6 +438,7 @@ pub async fn setup_wizard(
         agent_id,
         agent_name: name,
         steps,
+        tool_policies,
         providers,
     })
     .render()
@@ -360,7 +453,7 @@ pub async fn setup_wizard(
 
 /// Submit setup wizard values
 pub async fn setup_submit(
-    _user: AuthUser,
+    user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
     Form(form): Form<SetupSubmitForm>,
@@ -418,6 +511,52 @@ pub async fn setup_submit(
                     let msg = urlencoding::encode("Failed to store credential. Please try again.");
                     return Redirect::to(&format!("/agents/{agent_id}/setup?error={msg}")).into_response();
                 }
+            }
+        }
+    }
+
+    // Process tool policies: extract policy_cap_*, policy_tool_*, policy_val_* fields
+    {
+        use crate::permissions::tool_policy::{self, ToolPolicy};
+
+        let mut policies: Vec<(String, String, ToolPolicy)> = Vec::new();
+
+        // Collect all unique keys from form values that match the pattern
+        let keys: Vec<String> = form.values.keys()
+            .filter(|k| k.starts_with("policy_val_"))
+            .map(|k| k.strip_prefix("policy_val_").unwrap().to_string())
+            .collect();
+
+        for key in &keys {
+            let cap_id = match form.values.get(&format!("policy_cap_{key}")) {
+                Some(v) => v.clone(),
+                None => continue,
+            };
+            let tool_name = match form.values.get(&format!("policy_tool_{key}")) {
+                Some(v) => v.clone(),
+                None => continue,
+            };
+            let policy_str = match form.values.get(&format!("policy_val_{key}")) {
+                Some(v) => v.clone(),
+                None => continue,
+            };
+            let policy = match ToolPolicy::from_str(&policy_str) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            policies.push((cap_id, tool_name, policy));
+        }
+
+        if !policies.is_empty() {
+            if let Err(e) = tool_policy::set_policies(
+                &state.db,
+                &user.user_id,
+                &agent_id,
+                &policies,
+            ).await {
+                error!("Failed to save tool policies: {e}");
+                let msg = urlencoding::encode("Failed to save tool permissions. Please try again.");
+                return Redirect::to(&format!("/agents/{agent_id}/setup?error={msg}")).into_response();
             }
         }
     }
@@ -528,6 +667,143 @@ pub async fn setup_test(
             r#"<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">Connection failed: {e}</span>"#
         ))
         .into_response(),
+    }
+}
+
+/// Agent detail page: capabilities, network policy, tools, egress log
+pub async fn agent_detail(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    State(state): State<AppState>,
+) -> Response {
+    // Load agent definition
+    let agents_map = state.agents.read().await;
+    let agent = match agents_map.get(&agent_id) {
+        Some(a) => a.clone(),
+        None => return StatusCode::NOT_FOUND.into_response(),
+    };
+    drop(agents_map);
+
+    let agent_name = sqlx::query("SELECT display_name FROM agents WHERE id = ?")
+        .bind(&agent_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|r| {
+            use sqlx::Row;
+            r.try_get::<String, _>("display_name").ok()
+        })
+        .unwrap_or_else(|| agent.name.clone());
+
+    // Build capability views
+    let mut capabilities: Vec<CapabilityView> = Vec::new();
+
+    // Get user's tool policies for this agent
+    let user_policies = crate::permissions::tool_policy::get_policies_for_agent(
+        &state.db,
+        &user.user_id,
+        &agent_id,
+    )
+    .await
+    .unwrap_or_default();
+
+    let policy_map: std::collections::HashMap<(String, String), String> = user_policies
+        .into_iter()
+        .map(|p| ((p.capability_id, p.tool_name), p.policy.as_str().to_string()))
+        .collect();
+
+    for (cap_id, manifest) in &agent.capability_manifests {
+        let network_mode = match manifest.network.mode {
+            crate::capabilities::manifest::NetworkMode::None => "none",
+            crate::capabilities::manifest::NetworkMode::Allowlist => "allowlist",
+            crate::capabilities::manifest::NetworkMode::Any => "any",
+        };
+
+        let filesystem = match manifest.filesystem {
+            crate::capabilities::manifest::FilesystemPolicy::None => "none",
+            crate::capabilities::manifest::FilesystemPolicy::Temp => "temp",
+            crate::capabilities::manifest::FilesystemPolicy::Workspace => "workspace",
+        };
+
+        let tools: Vec<ToolView> = manifest.tools.iter().map(|t| {
+            let policy = policy_map
+                .get(&(cap_id.clone(), t.name.clone()))
+                .cloned()
+                .unwrap_or_else(|| "not set".to_string());
+            let desc = if t.description.len() > 120 {
+                format!("{}...", &t.description[..117])
+            } else {
+                t.description.clone()
+            };
+            ToolView {
+                name: t.name.clone(),
+                description: desc,
+                policy,
+            }
+        }).collect();
+
+        capabilities.push(CapabilityView {
+            id: cap_id.clone(),
+            network_mode: network_mode.to_string(),
+            allowed_hosts: manifest.network.hosts.clone(),
+            filesystem: filesystem.to_string(),
+            max_memory_mb: manifest.resources.max_memory_mb,
+            max_cpu_fraction: format!("{:.0}%", manifest.resources.max_cpu_fraction * 100.0),
+            pids_limit: manifest.resources.pids_limit,
+            tools,
+        });
+    }
+
+    // Fetch egress log entries for this agent's capabilities
+    let cap_ids: Vec<String> = agent.capability_manifests.keys().cloned().collect();
+    let mut egress_entries: Vec<EgressEntryView> = Vec::new();
+
+    // Query egress log for all capabilities of this agent (last 100)
+    for cap_id in &cap_ids {
+        let rows = sqlx::query(
+            "SELECT capability_id, method, host, port, allowed, created_at
+             FROM egress_log
+             WHERE capability_id = ?
+             ORDER BY created_at DESC
+             LIMIT 100"
+        )
+        .bind(cap_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
+        for row in rows {
+            use sqlx::Row;
+            egress_entries.push(EgressEntryView {
+                capability_id: row.get("capability_id"),
+                method: row.get("method"),
+                host: row.get("host"),
+                port: row.get("port"),
+                allowed: row.get::<i32, _>("allowed") == 1,
+                created_at: row.try_get::<String, _>("created_at").unwrap_or_default(),
+            });
+        }
+    }
+
+    // Sort by timestamp descending and limit to 100 total
+    egress_entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    egress_entries.truncate(100);
+
+    match (AgentDetailTemplate {
+        active_nav: "agents",
+        agent_id,
+        agent_name,
+        capabilities,
+        egress_entries,
+    })
+    .render()
+    {
+        Ok(html) => Html(html).into_response(),
+        Err(e) => {
+            error!("Template render error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 

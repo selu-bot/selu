@@ -8,6 +8,7 @@
 ///   - Extracts the Proxy-Authorization header to identify the container
 ///   - Looks up the capability's declared network allow-list by token
 ///   - Allows or denies each connection
+///   - Logs every request (allowed + denied) via an mpsc channel
 ///   - For HTTPS (CONNECT): tunnels bytes after checking hostname
 ///   - For HTTP: forwards the request after checking Host header
 use anyhow::Result;
@@ -16,7 +17,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, info, warn};
 
 use crate::capabilities::manifest::NetworkMode;
@@ -72,16 +73,98 @@ pub async fn deregister(registry: &EgressRegistry, token: &str) {
     debug!("Removed egress policy");
 }
 
+// ── Egress log ────────────────────────────────────────────────────────────────
+
+/// A single egress request log entry, emitted by the proxy and persisted
+/// to the `egress_log` table by a background drain task.
+#[derive(Debug, Clone)]
+pub struct EgressLogEntry {
+    pub capability_id: String,
+    pub method: String,
+    pub host: String,
+    pub port: u16,
+    pub allowed: bool,
+}
+
+/// Sender half — passed into the proxy. Receiver half is drained by
+/// `drain_egress_log` in a background task.
+pub type EgressLogSender = mpsc::Sender<EgressLogEntry>;
+pub type EgressLogReceiver = mpsc::Receiver<EgressLogEntry>;
+
+/// Create a new egress log channel.
+pub fn new_log_channel(capacity: usize) -> (EgressLogSender, EgressLogReceiver) {
+    mpsc::channel(capacity)
+}
+
+/// Background task: drains the egress log channel into the database.
+///
+/// Batches writes for efficiency — accumulates up to 50 entries or 1 second,
+/// whichever comes first.
+pub async fn drain_egress_log(db: sqlx::SqlitePool, mut rx: EgressLogReceiver) {
+    let mut batch: Vec<EgressLogEntry> = Vec::with_capacity(50);
+
+    loop {
+        // Wait for the first entry or channel close
+        match rx.recv().await {
+            Some(entry) => batch.push(entry),
+            None => {
+                // Channel closed — flush remaining and exit
+                if !batch.is_empty() {
+                    flush_batch(&db, &batch).await;
+                }
+                return;
+            }
+        }
+
+        // Drain any additional entries that are immediately available
+        while batch.len() < 50 {
+            match rx.try_recv() {
+                Ok(entry) => batch.push(entry),
+                Err(_) => break,
+            }
+        }
+
+        flush_batch(&db, &batch).await;
+        batch.clear();
+    }
+}
+
+async fn flush_batch(db: &sqlx::SqlitePool, batch: &[EgressLogEntry]) {
+    for entry in batch {
+        let id = uuid::Uuid::new_v4().to_string();
+        let allowed: i32 = if entry.allowed { 1 } else { 0 };
+        let port = entry.port as i32;
+        let _ = sqlx::query(
+            "INSERT INTO egress_log (id, capability_id, method, host, port, allowed) VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&id)
+        .bind(&entry.capability_id)
+        .bind(&entry.method)
+        .bind(&entry.host)
+        .bind(port)
+        .bind(allowed)
+        .execute(db)
+        .await;
+    }
+}
+
+// ── Proxy server ──────────────────────────────────────────────────────────────
+
 /// Start the egress proxy server.
-pub async fn run_proxy(listen_addr: SocketAddr, registry: EgressRegistry) -> Result<()> {
+pub async fn run_proxy(
+    listen_addr: SocketAddr,
+    registry: EgressRegistry,
+    log_tx: EgressLogSender,
+) -> Result<()> {
     let listener = TcpListener::bind(listen_addr).await?;
     info!(addr = %listen_addr, "Egress proxy listening");
 
     loop {
         let (stream, peer_addr) = listener.accept().await?;
         let registry = registry.clone();
+        let log_tx = log_tx.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, peer_addr, registry).await {
+            if let Err(e) = handle_connection(stream, peer_addr, registry, log_tx).await {
                 debug!(peer = %peer_addr, "Proxy connection error: {e}");
             }
         });
@@ -92,6 +175,7 @@ async fn handle_connection(
     mut stream: TcpStream,
     _peer_addr: SocketAddr,
     registry: EgressRegistry,
+    log_tx: EgressLogSender,
 ) -> Result<()> {
     // Read the initial request
     let mut buf = vec![0u8; 8192];
@@ -129,8 +213,8 @@ async fn handle_connection(
     let ident = token.as_deref().unwrap_or("no-token");
 
     match method {
-        "CONNECT" => handle_connect(stream, target, ident, policy).await,
-        _ => handle_http(stream, method, target, &buf[..n], ident, policy).await,
+        "CONNECT" => handle_connect(stream, target, ident, policy, &log_tx).await,
+        _ => handle_http(stream, method, target, &buf[..n], ident, policy, &log_tx).await,
     }
 }
 
@@ -168,14 +252,28 @@ async fn handle_connect(
     target: &str, // "hostname:port"
     ident: &str,
     policy: Option<ContainerEgressPolicy>,
+    log_tx: &EgressLogSender,
 ) -> Result<()> {
     let (host, port) = parse_host_port(target, 443);
+    let allowed = is_allowed(&host, port, ident, &policy);
+    let cap_id = policy.as_ref()
+        .map(|p| p.capability_id.clone())
+        .unwrap_or_else(|| "unknown".to_string());
 
-    if !is_allowed(&host, port, ident, &policy) {
+    // Log the request
+    let _ = log_tx.try_send(EgressLogEntry {
+        capability_id: cap_id.clone(),
+        method: "CONNECT".to_string(),
+        host: host.clone(),
+        port,
+        allowed,
+    });
+
+    if !allowed {
         warn!(
             ident = %ident,
             target = %target,
-            capability = %policy.as_ref().map(|p| p.capability_id.as_str()).unwrap_or("unknown"),
+            capability = %cap_id,
             "EGRESS DENIED"
         );
         client.write_all(b"HTTP/1.1 403 Forbidden\r\n\r\n").await?;
@@ -209,9 +307,10 @@ async fn handle_http(
     raw_request: &[u8],
     ident: &str,
     policy: Option<ContainerEgressPolicy>,
+    log_tx: &EgressLogSender,
 ) -> Result<()> {
     // Extract host from either the target URL or the Host header
-    let host = if target.starts_with("http://") {
+    let host_str = if target.starts_with("http://") {
         // Absolute URL: "http://hostname[:port]/path"
         target
             .strip_prefix("http://")
@@ -228,21 +327,34 @@ async fn handle_http(
             .unwrap_or_default()
     };
 
-    let (hostname, port) = parse_host_port(&host, 80);
+    let (hostname, port) = parse_host_port(&host_str, 80);
+    let allowed = is_allowed(&hostname, port, ident, &policy);
+    let cap_id = policy.as_ref()
+        .map(|p| p.capability_id.clone())
+        .unwrap_or_else(|| "unknown".to_string());
 
-    if !is_allowed(&hostname, port, ident, &policy) {
+    // Log the request
+    let _ = log_tx.try_send(EgressLogEntry {
+        capability_id: cap_id.clone(),
+        method: method.to_string(),
+        host: hostname.clone(),
+        port,
+        allowed,
+    });
+
+    if !allowed {
         warn!(
             ident = %ident,
-            host = %host,
+            host = %host_str,
             method = %method,
-            capability = %policy.as_ref().map(|p| p.capability_id.as_str()).unwrap_or("unknown"),
+            capability = %cap_id,
             "EGRESS DENIED"
         );
         client.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n").await?;
         return Ok(());
     }
 
-    debug!(ident = %ident, host = %host, method = %method, "EGRESS ALLOWED (HTTP)");
+    debug!(ident = %ident, host = %host_str, method = %method, "EGRESS ALLOWED (HTTP)");
 
     // Forward to upstream
     let mut upstream = TcpStream::connect(format!("{}:{}", hostname, port)).await?;

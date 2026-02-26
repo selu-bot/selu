@@ -57,6 +57,65 @@
       </div>
       {% endfor %}
 
+      <!-- Tool Permissions -->
+      {% if !tool_policies.is_empty() %}
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading">Tool Permissions</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-coral/15 text-coral">Required</span>
+        </div>
+        <div class="p-5 space-y-2">
+          <p class="text-xs text-txt-muted leading-relaxed mb-3">
+            Choose a security policy for each tool this agent can use. Tools without a policy will be blocked by default.
+          </p>
+
+          {% for tp in tool_policies %}
+          <div class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl gap-4">
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-txt-heading truncate">{{ tp.display_name }}</div>
+              <div class="text-xs text-txt-muted mt-0.5 line-clamp-2">{{ tp.description }}</div>
+              <div class="text-[10px] text-txt-faint mt-0.5">{{ tp.capability_id }}</div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <input type="hidden" name="policy_cap_{{ tp.key }}" value="{{ tp.capability_id }}" />
+              <input type="hidden" name="policy_tool_{{ tp.key }}" value="{{ tp.tool_name }}" />
+              <label class="inline-flex items-center gap-1 cursor-pointer">
+                <input type="radio" name="policy_val_{{ tp.key }}" value="allow"
+                       {% if tp.recommended == "allow" %}checked{% endif %}
+                       class="sr-only peer" />
+                <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
+                             peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30
+                             text-txt-muted hover:text-txt-heading transition-all">
+                  Allow
+                </span>
+              </label>
+              <label class="inline-flex items-center gap-1 cursor-pointer">
+                <input type="radio" name="policy_val_{{ tp.key }}" value="ask"
+                       {% if tp.recommended == "ask" %}checked{% endif %}
+                       class="sr-only peer" />
+                <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
+                             peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30
+                             text-txt-muted hover:text-txt-heading transition-all">
+                  Ask
+                </span>
+              </label>
+              <label class="inline-flex items-center gap-1 cursor-pointer">
+                <input type="radio" name="policy_val_{{ tp.key }}" value="block"
+                       {% if tp.recommended == "block" %}checked{% endif %}
+                       class="sr-only peer" />
+                <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
+                             peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30
+                             text-txt-muted hover:text-txt-heading transition-all">
+                  Block
+                </span>
+              </label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Model Assignment -->
       <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
         <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">

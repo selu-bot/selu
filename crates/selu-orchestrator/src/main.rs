@@ -9,6 +9,7 @@ mod pipes;
 mod agents;
 mod bluebubbles;
 mod capabilities;
+mod channels;
 mod events;
 mod llm;
 mod permissions;
@@ -21,6 +22,7 @@ use capabilities::{
     runner::CapabilityRunner,
     CapabilityEngine,
 };
+use channels::ChannelRegistry;
 use permissions::{store::parse_key, CredentialStore};
 use events::{EventBus, fanout};
 use agents::memory::{MemoryStore, EmbeddingConfig};
@@ -64,8 +66,14 @@ async fn main() -> Result<()> {
     let egress_addr: std::net::SocketAddr = cfg.egress_proxy_addr.parse()
         .unwrap_or_else(|_| "0.0.0.0:8888".parse().unwrap());
     let proxy_registry = egress_registry.clone();
+
+    // Egress log: channel + background drain task
+    let (egress_log_tx, egress_log_rx) = egress_proxy::new_log_channel(1024);
+    let log_db = persistence::db::connect(&cfg.database.url).await?;
+    tokio::spawn(egress_proxy::drain_egress_log(log_db, egress_log_rx));
+
     tokio::spawn(async move {
-        if let Err(e) = egress_proxy::run_proxy(egress_addr, proxy_registry).await {
+        if let Err(e) = egress_proxy::run_proxy(egress_addr, proxy_registry, egress_log_tx).await {
             tracing::error!("Egress proxy error: {e}");
         }
     });
@@ -95,7 +103,8 @@ async fn main() -> Result<()> {
     };
 
     // ── Build shared state ────────────────────────────────────────────────────
-    let state = AppState::new(db, cfg.clone(), agent_defs, cap_engine, cred_store, event_bus, memory);
+    let channel_registry = ChannelRegistry::new();
+    let state = AppState::new(db, cfg.clone(), agent_defs, cap_engine, channel_registry, cred_store, event_bus, memory);
 
     // Start fanout after state is built (needs AppState)
     fanout::start(state.clone(), fanout_rx, cfg.max_chain_depth);
@@ -170,6 +179,18 @@ async fn main() -> Result<()> {
                 }
                 Err(e) => tracing::error!("Thread idle cleanup error: {e}"),
                 _ => {}
+            }
+        }
+    });
+
+    // Pending tool approval expiry: runs every 30 seconds
+    let approval_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            if let Err(e) = permissions::approval_queue::expire_pending(&approval_state).await {
+                tracing::error!("Approval expiry error: {e}");
             }
         }
     });

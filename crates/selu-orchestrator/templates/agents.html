@@ -95,7 +95,7 @@
               <tr class="hover:bg-sidebar-hover transition-colors">
                 <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ agent.id }}</td>
                 <td class="px-5 py-3.5">
-                  <span class="font-medium text-txt-heading">{{ agent.name }}</span>
+                  <a href="/agents/{{ agent.id }}" class="font-medium text-txt-heading hover:text-coral transition-colors">{{ agent.name }}</a>
                   {% if agent.is_bundled %}
                   <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral">Bundled</span>
                   {% endif %}

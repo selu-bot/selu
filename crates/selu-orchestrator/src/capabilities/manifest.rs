@@ -37,12 +37,41 @@ pub struct ToolDefinition {
     pub name: String,
     pub description: String,
     pub input_schema: serde_json::Value,
-    /// When true, the orchestrator must obtain explicit user confirmation
-    /// before dispatching this tool call. Interactive callers (web chat)
-    /// present a confirmation prompt; non-interactive callers (inbound
-    /// webhooks, fanout reactions) auto-deny the call.
+    /// Legacy field — kept for backward compatibility.
+    /// When true and `recommended_policy` is absent, the recommended
+    /// policy defaults to `"ask"`.
     #[serde(default)]
     pub requires_confirmation: bool,
+    /// The agent author's recommended policy for this tool.
+    /// Users see this as the default when configuring permissions during
+    /// the install wizard.
+    ///
+    /// Valid values: `"allow"`, `"ask"`, `"block"`.
+    ///
+    /// If absent, derived from `requires_confirmation`:
+    ///   - `requires_confirmation: true`  → `"ask"`
+    ///   - `requires_confirmation: false` → `"block"` (secure default)
+    #[serde(default)]
+    pub recommended_policy: Option<String>,
+}
+
+impl ToolDefinition {
+    /// Return the effective recommended policy for this tool.
+    ///
+    /// Priority:
+    ///   1. Explicit `recommended_policy` field
+    ///   2. `requires_confirmation: true` → `"ask"`
+    ///   3. Default → `"block"` (secure default)
+    pub fn effective_recommended_policy(&self) -> &str {
+        if let Some(ref p) = self.recommended_policy {
+            return p.as_str();
+        }
+        if self.requires_confirmation {
+            "ask"
+        } else {
+            "block"
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

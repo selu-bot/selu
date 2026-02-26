@@ -20,10 +20,11 @@ use tokio::time::{Duration, interval};
 use tracing::{debug, error, info, warn};
 
 use crate::agents::{
-    engine::{noop_sender, run_turn, TurnParams},
+    engine::{noop_sender, run_turn, ChannelKind, TurnParams},
     router as agent_router,
     thread as thread_mgr,
 };
+use crate::permissions::approval_queue;
 use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
@@ -132,6 +133,17 @@ pub async fn start_all(state: AppState) {
             http: Client::new(),
             sent_guids: Arc::new(RwLock::new(HashSet::new())),
         };
+
+        // Register a ChannelSender for this pipe so the approval queue
+        // can send approval prompts via iMessage.
+        let sender = Arc::new(BlueBubblesSender {
+            http: Client::new(),
+            server_url: cfg.server_url.clone(),
+            server_password: cfg.server_password.clone(),
+            chat_guid: cfg.chat_guid.clone(),
+            sent_guids: instance.sent_guids.clone(),
+        });
+        state.channel_registry.register(&cfg.pipe_id, sender).await;
 
         info!(
             config_id = %cfg.id,
@@ -400,13 +412,36 @@ async fn dispatch_message(
 
     let thread_id = thread.id.to_string();
 
+    // ── Approval interception ─────────────────────────────────────────────
+    // If this thread has a pending tool approval, the user's reply (inline
+    // reply to the approval prompt) resolves it instead of starting a new
+    // agent turn.
+    if approval_queue::try_resolve_pending(&state, &thread_id).await {
+        info!(thread_id = %thread_id, "Message consumed as tool approval response");
+        // Send a brief acknowledgment
+        let _ = send_bb_reply(
+            &http,
+            &server_url,
+            &server_password,
+            &chat_guid,
+            "Approved. Processing...",
+            message_guid.as_deref(),
+            &sent_guids,
+        ).await;
+        return;
+    }
+
     let params = TurnParams {
-        pipe_id,
+        pipe_id: pipe_id.clone(),
         user_id,
         agent_id: Some(agent_id),
         message: effective_text,
         thread_id: Some(thread_id.clone()),
         chain_depth: 0,
+        channel_kind: ChannelKind::ThreadedNonInteractive {
+            pipe_id,
+            thread_id: thread_id.clone(),
+        },
     };
 
     let reply = run_turn(&state, params, noop_sender()).await;
@@ -505,6 +540,45 @@ async fn send_bb_reply(
             error!("Failed to reach BlueBubbles: {e}");
             None
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ChannelSender implementation for BlueBubbles
+// ---------------------------------------------------------------------------
+
+/// A `ChannelSender` that sends messages via the BlueBubbles API.
+///
+/// Registered on the `ChannelRegistry` for each pipe backed by a BB adapter.
+/// The approval queue uses this to send approval prompts and the interception
+/// handler uses it for acknowledgments.
+pub struct BlueBubblesSender {
+    http: Client,
+    server_url: String,
+    server_password: String,
+    chat_guid: String,
+    sent_guids: SentGuids,
+}
+
+#[async_trait::async_trait]
+impl crate::channels::ChannelSender for BlueBubblesSender {
+    async fn send_message(
+        &self,
+        _thread_id: &str,
+        text: &str,
+        reply_to_guid: Option<&str>,
+    ) -> Result<Option<String>> {
+        let clean_text = strip_markdown(text);
+        let guid = send_bb_reply(
+            &self.http,
+            &self.server_url,
+            &self.server_password,
+            &self.chat_guid,
+            &clean_text,
+            reply_to_guid,
+            &self.sent_guids,
+        ).await;
+        Ok(guid)
     }
 }
 

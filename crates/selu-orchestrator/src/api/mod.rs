@@ -8,6 +8,7 @@ pub mod credentials;
 pub mod pipes;
 pub mod providers;
 pub mod subscriptions;
+pub mod tool_policies;
 
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
@@ -32,6 +33,12 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/api/subscriptions", get(subscriptions::list_subscriptions))
         .route("/api/subscriptions", post(subscriptions::create_subscription))
         .route("/api/subscriptions/{id}", delete(subscriptions::delete_subscription))
+        // Tool policies
+        .route("/api/tool-policies", get(tool_policies::list_policies))
+        .route("/api/tool-policies", put(tool_policies::bulk_set_policies))
+        // Pending tool approvals
+        .route("/api/approvals", get(tool_policies::list_approvals))
+        .route("/api/approvals/{id}", post(tool_policies::resolve_approval))
         .with_state(state)
 }
 

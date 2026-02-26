@@ -6,6 +6,7 @@ use tokio::sync::{oneshot, Mutex, Notify, RwLock};
 use crate::agents::loader::AgentDefinition;
 use crate::agents::memory::MemoryStore;
 use crate::capabilities::CapabilityEngine;
+use crate::channels::ChannelRegistry;
 use crate::config::AppConfig;
 use crate::events::EventBus;
 use crate::llm::tool_loop::LoopSender;
@@ -25,8 +26,15 @@ pub struct AppState {
     /// Pending tool-call confirmations keyed by confirmation_id.
     /// The oneshot sender is resolved when the user approves or denies.
     pub pending_confirmations: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
+    /// Pending asynchronous tool-call approvals keyed by approval_id.
+    /// Used for non-interactive channels (iMessage, webhooks) where the
+    /// user approves by replying to a thread rather than clicking a button.
+    pub pending_approvals: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
     /// Capability engine: manages Docker container lifecycle + gRPC dispatch
     pub capabilities: CapabilityEngine,
+    /// Channel-agnostic outbound message registry.
+    /// Adapters register their `ChannelSender` here at startup.
+    pub channel_registry: ChannelRegistry,
     /// Encrypted credential store
     pub credentials: CredentialStore,
     /// Event bus: persists + broadcasts agent events for fanout
@@ -41,6 +49,7 @@ impl AppState {
         config: AppConfig,
         agents: HashMap<String, AgentDefinition>,
         capabilities: CapabilityEngine,
+        channel_registry: ChannelRegistry,
         credentials: CredentialStore,
         events: EventBus,
         memory: Option<MemoryStore>,
@@ -52,7 +61,9 @@ impl AppState {
             active_streams: Arc::new(Mutex::new(HashMap::new())),
             stream_notifies: Arc::new(Mutex::new(HashMap::new())),
             pending_confirmations: Arc::new(Mutex::new(HashMap::new())),
+            pending_approvals: Arc::new(Mutex::new(HashMap::new())),
             capabilities,
+            channel_registry,
             credentials,
             events,
             memory: memory.map(Arc::new),
