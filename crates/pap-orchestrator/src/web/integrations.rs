@@ -15,15 +15,6 @@ use crate::web::auth::AuthUser;
 // ── View structs ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct IntegrationOverview {
-    pub id: String,
-    pub name: String,
-    pub status: String,        // "connected", "not_configured"
-    pub detail: String,        // e.g. "2 users, 3 threads today"
-}
-
-#[derive(Debug, Clone)]
 pub struct ImessageDetail {
     pub config_id: String,
     pub name: String,
@@ -50,32 +41,18 @@ pub struct UserOption {
     pub display: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct AgentOption {
-    pub id: String,
-    pub name: String,
-}
-
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 #[derive(Template)]
-#[template(path = "integrations.html")]
-struct IntegrationsTemplate {
-    active_nav: &'static str,
-    imessage_configs: Vec<ImessageDetail>,
-}
-
-#[derive(Template)]
-#[template(path = "integrations_imessage_setup.html")]
+#[template(path = "pipes_imessage_setup.html")]
 struct ImessageSetupTemplate {
     active_nav: &'static str,
     users: Vec<UserOption>,
-    agents: Vec<AgentOption>,
     error: Option<String>,
 }
 
 #[derive(Template)]
-#[template(path = "integrations_imessage_detail.html")]
+#[template(path = "pipes_imessage_detail.html")]
 struct ImessageDetailTemplate {
     active_nav: &'static str,
     config: ImessageDetail,
@@ -93,7 +70,6 @@ pub struct ImessageSetupForm {
     pub server_url: String,
     pub server_password: String,
     pub chat_guid: String,
-    pub default_agent_id: Option<String>,
     /// Comma-separated list of "phone:user_id" pairs
     /// e.g. "+14155551234:uuid1,+14155555678:uuid2"
     pub people: Option<String>,
@@ -174,26 +150,6 @@ struct BbApiHandle {
 struct BbApiLastMessage {
     #[serde(default)]
     text: Option<String>,
-}
-
-// ── Handlers: Overview ────────────────────────────────────────────────────────
-
-pub async fn integrations_index(
-    _user: AuthUser,
-    State(state): State<AppState>,
-) -> Response {
-    let imessage_configs = load_imessage_configs(&state.db).await;
-
-    match (IntegrationsTemplate {
-        active_nav: "integrations",
-        imessage_configs,
-    }).render() {
-        Ok(html) => Html(html).into_response(),
-        Err(e) => {
-            error!("Template render error: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
 }
 
 // ── Handlers: BlueBubbles proxy ───────────────────────────────────────────────
@@ -336,12 +292,10 @@ pub async fn imessage_setup_page(
     State(state): State<AppState>,
 ) -> Response {
     let users = load_users(&state.db).await;
-    let agents = load_agents(&state).await;
 
     match (ImessageSetupTemplate {
-        active_nav: "integrations",
+        active_nav: "pipes",
         users,
-        agents,
         error: q.error,
     }).render() {
         Ok(html) => Html(html).into_response(),
@@ -364,21 +318,21 @@ pub async fn imessage_setup_submit(
         || form.server_password.is_empty()
         || form.chat_guid.trim().is_empty()
     {
-        return Redirect::to("/integrations/imessage/setup?error=Please+fill+in+all+required+fields").into_response();
+        return Redirect::to("/pipes/imessage/setup?error=Please+fill+in+all+required+fields").into_response();
     }
 
     // 1. Find a user to own the pipe (first user, or from people list)
     let owner_user_id = match find_pipe_owner(&state.db, &form.people).await {
         Some(id) => id,
         None => {
-            return Redirect::to("/integrations/imessage/setup?error=You+need+at+least+one+user.+Create+one+in+Users+first.").into_response();
+            return Redirect::to("/pipes/imessage/setup?error=You+need+at+least+one+user.+Create+one+in+Users+first.").into_response();
         }
     };
 
     // 2. Auto-create the pipe (no outbound URL needed — BB adapter sends directly)
     let pipe_id = Uuid::new_v4().to_string();
     let inbound_token = Uuid::new_v4().to_string().replace('-', "");
-    let default_agent_id = form.default_agent_id.as_deref().filter(|s| !s.is_empty());
+    let default_agent_id: Option<&str> = None; // Always use default agent
     let pipe_name = format!("iMessage: {}", form.name.trim());
     let transport = "webhook";
     let outbound_url = "internal://bluebubbles"; // Marker: handled by integrated adapter
@@ -392,7 +346,7 @@ pub async fn imessage_setup_submit(
     .await
     {
         error!("Failed to create pipe: {e}");
-        return Redirect::to("/integrations/imessage/setup?error=Failed+to+create+pipe").into_response();
+        return Redirect::to("/pipes/imessage/setup?error=Failed+to+create+pipe").into_response();
     }
 
     // 3. Create the BlueBubbles config
@@ -408,7 +362,7 @@ pub async fn imessage_setup_submit(
     .await
     {
         error!("Failed to create BB config: {e}");
-        return Redirect::to("/integrations/imessage/setup?error=Failed+to+create+adapter+config").into_response();
+        return Redirect::to("/pipes/imessage/setup?error=Failed+to+create+adapter+config").into_response();
     }
 
     // 4. Create sender ref mappings from the people list
@@ -435,7 +389,7 @@ pub async fn imessage_setup_submit(
     }
 
     Redirect::to(&format!(
-        "/integrations/imessage/{}?msg=iMessage+integration+set+up+successfully!+Restart+PAP+to+start+the+adapter.",
+        "/pipes/imessage/{}?msg=iMessage+pipe+set+up+successfully!+Restart+PAP+to+start+the+adapter.",
         bb_config_id
     )).into_response()
 }
@@ -450,14 +404,14 @@ pub async fn imessage_detail(
 ) -> Response {
     let config = match load_imessage_config(&state.db, &config_id).await {
         Some(c) => c,
-        None => return Redirect::to("/integrations").into_response(),
+        None => return Redirect::to("/pipes").into_response(),
     };
 
     let people = load_allowed_people(&state.db, &config.pipe_id).await;
     let users = load_users(&state.db).await;
 
     match (ImessageDetailTemplate {
-        active_nav: "integrations",
+        active_nav: "pipes",
         config,
         people,
         users,
@@ -480,7 +434,7 @@ pub async fn imessage_add_person(
 ) -> Response {
     if form.user_id.is_empty() || form.sender_ref.trim().is_empty() {
         return Redirect::to(&format!(
-            "/integrations/imessage/{}?error=Please+fill+in+both+fields", config_id
+            "/pipes/imessage/{}?error=Please+fill+in+both+fields", config_id
         )).into_response();
     }
 
@@ -492,7 +446,7 @@ pub async fn imessage_add_person(
         .flatten()
     {
         Some(r) => r.pipe_id,
-        None => return Redirect::to("/integrations").into_response(),
+        None => return Redirect::to("/pipes").into_response(),
     };
 
     let ref_id = Uuid::new_v4().to_string();
@@ -504,15 +458,15 @@ pub async fn imessage_add_person(
     .await
     {
         Ok(_) => Redirect::to(&format!(
-            "/integrations/imessage/{}?msg=Person+added", config_id
+            "/pipes/imessage/{}?msg=Person+added", config_id
         )).into_response(),
         Err(e) if e.to_string().contains("UNIQUE") => Redirect::to(&format!(
-            "/integrations/imessage/{}?error=This+phone+number+is+already+added", config_id
+            "/pipes/imessage/{}?error=This+phone+number+is+already+added", config_id
         )).into_response(),
         Err(e) => {
             error!("Failed to add person: {e}");
             Redirect::to(&format!(
-                "/integrations/imessage/{}?error=Failed+to+add+person.+Please+try+again.", config_id
+                "/pipes/imessage/{}?error=Failed+to+add+person.+Please+try+again.", config_id
             )).into_response()
         }
     }
@@ -546,12 +500,12 @@ pub async fn imessage_delete(
     .execute(&state.db)
     .await;
 
-    Redirect::to("/integrations?msg=Integration+removed").into_response()
+    Redirect::to("/pipes?msg=Pipe+removed").into_response()
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
-async fn load_imessage_configs(db: &sqlx::SqlitePool) -> Vec<ImessageDetail> {
+pub async fn load_imessage_configs(db: &sqlx::SqlitePool) -> Vec<ImessageDetail> {
     sqlx::query!(
         r#"SELECT bc.id, bc.name, bc.server_url, bc.chat_guid, bc.active, bc.pipe_id,
                   COALESCE(p.default_agent_id, 'default') as "agent_name!: String"
@@ -640,16 +594,6 @@ async fn load_users(db: &sqlx::SqlitePool) -> Vec<UserOption> {
             display: format!("{} ({})", r.display_name, r.username),
         })
         .collect()
-}
-
-async fn load_agents(state: &AppState) -> Vec<AgentOption> {
-    let map = state.agents.read().await;
-    let mut v: Vec<AgentOption> = map
-        .values()
-        .map(|d| AgentOption { id: d.id.clone(), name: d.name.clone() })
-        .collect();
-    v.sort_by(|a, b| a.id.cmp(&b.id));
-    v
 }
 
 async fn find_pipe_owner(db: &sqlx::SqlitePool, people: &Option<String>) -> Option<String> {

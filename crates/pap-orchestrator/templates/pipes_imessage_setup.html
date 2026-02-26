@@ -8,9 +8,9 @@
 
     <!-- Back link + Header -->
     <div>
-      <a href="/integrations" class="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-3">
+      <a href="/pipes" class="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-3">
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        Back to Integrations
+        Back to Pipes
       </a>
       <h1 class="text-2xl font-bold text-white">Set Up iMessage</h1>
       <p class="text-sm text-slate-400 mt-1">Connect your iMessage to PAP. You'll need a <a href="https://bluebubbles.app" target="_blank" class="text-brand-400 hover:text-brand-300">BlueBubbles</a> server running on your Mac.</p>
@@ -40,7 +40,7 @@
     </div>
     {% endif %}
 
-    <form method="post" action="/integrations/imessage/setup" id="setup-form" class="space-y-4">
+    <form method="post" action="/pipes/imessage/setup" id="setup-form" class="space-y-4">
 
       <!-- Step 1: BlueBubbles Server -->
       <div id="step-1" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
@@ -75,8 +75,8 @@
         </div>
       </div>
 
-      <!-- Step 2: Chat Selection -->
-      <div id="step-2" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden opacity-40 pointer-events-none transition-opacity duration-300">
+      <!-- Step 2: Chat Selection (hidden until step 1 completes) -->
+      <div id="step-2" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hidden">
         <div class="px-5 py-3.5 border-b border-slate-800">
           <span class="text-sm font-semibold text-white">Step 2: Pick a Chat</span>
         </div>
@@ -106,29 +106,17 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label for="bb-name" class="block text-xs font-medium text-slate-400 mb-1.5">Integration Name</label>
-              <input id="bb-name" name="name" type="text" placeholder="e.g. Family Chat" required
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-              <p class="text-[11px] text-slate-500 mt-1">A friendly name for this connection.</p>
-            </div>
-            <div>
-              <label for="bb-agent" class="block text-xs font-medium text-slate-400 mb-1.5">Default Agent</label>
-              <select id="bb-agent" name="default_agent_id"
-                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
-                {% for a in agents %}
-                <option value="{{ a.id }}">{{ a.name }}</option>
-                {% endfor %}
-              </select>
-              <p class="text-[11px] text-slate-500 mt-1">Which agent responds to messages in this chat.</p>
-            </div>
+          <div>
+            <label for="bb-name" class="block text-xs font-medium text-slate-400 mb-1.5">Pipe Name</label>
+            <input id="bb-name" name="name" type="text" placeholder="e.g. Family Chat" required
+                   class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
+            <p class="text-[11px] text-slate-500 mt-1">A friendly name for this pipe.</p>
           </div>
         </div>
       </div>
 
-      <!-- Step 3: People -->
-      <div id="step-3" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden opacity-40 pointer-events-none transition-opacity duration-300">
+      <!-- Step 3: People (hidden until step 2 completes) -->
+      <div id="step-3" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hidden">
         <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
           <span class="text-sm font-semibold text-white">Step 3: Who Can Talk to PAP?</span>
           <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-500">Optional</span>
@@ -176,9 +164,9 @@
         </div>
       </div>
 
-      <!-- Submit -->
-      <div class="flex items-center justify-between pt-2">
-        <a href="/integrations" class="text-sm text-slate-400 hover:text-slate-200 transition-colors">Cancel</a>
+      <!-- Submit (hidden until chat is selected) -->
+      <div id="submit-row" class="flex items-center justify-between pt-2 hidden">
+        <a href="/pipes" class="text-sm text-slate-400 hover:text-slate-200 transition-colors">Cancel</a>
         <button type="submit" id="btn-submit" disabled
                 class="bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-lg transition-all cursor-pointer">
           Set Up iMessage
@@ -217,7 +205,7 @@ async function testConnection() {
   status.innerHTML = '<span class="text-slate-400">Reaching BlueBubbles server...</span>';
 
   try {
-    const resp = await fetch('/integrations/imessage/proxy/chats', {
+    const resp = await fetch('/pipes/imessage/proxy/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ server_url: serverUrl, server_password: password }),
@@ -414,22 +402,40 @@ function setWizardStep(num, state) {
 
 function unlockStep(id) {
   const el = document.getElementById(id);
-  el.classList.remove('opacity-40', 'pointer-events-none');
+  el.classList.remove('hidden');
+  // Trigger a smooth entrance: start transparent, animate in
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(8px)';
+  el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'translateY(0)';
+  });
+  // Scroll into view after a brief delay for the animation
+  setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
 }
 
 function lockStep(id) {
   const el = document.getElementById(id);
-  el.classList.add('opacity-40', 'pointer-events-none');
+  el.classList.add('hidden');
 }
 
 function enableSubmit() {
+  const row = document.getElementById('submit-row');
   const btn = document.getElementById('btn-submit');
   btn.disabled = false;
+  if (row.classList.contains('hidden')) {
+    row.classList.remove('hidden');
+    row.style.opacity = '0';
+    row.style.transition = 'opacity 0.3s ease';
+    requestAnimationFrame(() => { row.style.opacity = '1'; });
+  }
 }
 
 function disableSubmit() {
-  const btn = document.getElementById('btn-submit');
-  btn.disabled = true;
+  const row = document.getElementById('submit-row');
+  row.classList.add('hidden');
+  document.getElementById('btn-submit').disabled = true;
 }
 
 function escapeHtml(s) {

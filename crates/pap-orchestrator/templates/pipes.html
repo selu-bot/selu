@@ -4,13 +4,19 @@
 
 {% block body %}
 <div class="flex-1 overflow-y-auto">
-  <div class="max-w-4xl mx-auto px-6 py-8 space-y-6">
+  <div class="max-w-4xl mx-auto px-6 py-8 space-y-8">
 
     <!-- Header -->
     <div>
       <h1 class="text-2xl font-bold text-white">Pipes</h1>
-      <p class="text-sm text-slate-400 mt-1">Inbound/outbound message channels. Each pipe connects an external adapter to an agent via webhook.</p>
+      <p class="text-sm text-slate-400 mt-1">Pipes connect the outside world to your agents. Add a pipe for each way you want to talk to PAP.</p>
     </div>
+
+    {% if let Some(msg) = msg %}
+    <div class="px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+      {{ msg }}
+    </div>
+    {% endif %}
 
     {% if let Some(err) = error %}
     <div class="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
@@ -20,139 +26,151 @@
 
     {% if let Some(f) = flash %}
     <div class="px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm space-y-1.5">
-      <p class="font-semibold">Pipe created successfully.</p>
+      <p class="font-semibold">Webhook pipe created.</p>
       <p>Inbound URL: <code class="font-mono text-xs bg-black/25 px-1.5 py-0.5 rounded break-all">{{ f.inbound_url }}</code></p>
       <p>Bearer token (save this -- shown only once): <code class="font-mono text-xs bg-black/25 px-1.5 py-0.5 rounded break-all">{{ f.inbound_token }}</code></p>
       <p class="text-slate-500 text-xs">POST to the inbound URL with <code class="font-mono bg-black/25 px-1 py-0.5 rounded">Authorization: Bearer &lt;token&gt;</code> and a JSON body <code class="font-mono bg-black/25 px-1 py-0.5 rounded">{"sender_ref":"...","text":"..."}</code>.</p>
     </div>
     {% endif %}
 
-    <!-- Pipes Table -->
-    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="border-b border-slate-800">
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Name</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Transport</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Outbound URL</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Agent</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Inbound URL</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Status</th>
-              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">Created</th>
-              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-widest text-slate-500"></th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-800">
-            {% for pipe in pipes %}
-            <tr class="hover:bg-slate-800/30 transition-colors">
-              <td class="px-5 py-3.5 font-medium text-slate-200">{{ pipe.name }}</td>
-              <td class="px-5 py-3.5">
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-500/15 text-brand-300">{{ pipe.transport }}</span>
-              </td>
-              <td class="px-5 py-3.5 font-mono text-xs text-slate-500 max-w-[180px] truncate">{{ pipe.outbound_url }}</td>
-              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ pipe.default_agent_id }}</td>
-              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">/api/pipes/{{ pipe.id }}/inbound</td>
-              <td class="px-5 py-3.5">
-                {% if pipe.active %}
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
-                  Active
-                </span>
-                {% else %}
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">Inactive</span>
-                {% endif %}
-              </td>
-              <td class="px-5 py-3.5 font-mono text-xs text-slate-500">{{ pipe.created_at }}</td>
-              <td class="px-5 py-3.5 text-right">
-                {% if pipe.active %}
-                <button class="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                        hx-delete="/pipes/{{ pipe.id }}"
-                        hx-target="closest tr"
-                        hx-swap="outerHTML"
-                        hx-confirm="Deactivate pipe &quot;{{ pipe.name }}&quot;?">Deactivate</button>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-            {% if pipes.is_empty() %}
-            <tr>
-              <td colspan="8" class="px-5 py-8 text-center text-slate-500 text-sm">No pipes yet. Create one below.</td>
-            </tr>
-            {% endif %}
-          </tbody>
-        </table>
+    <!-- Active Pipes -->
+    {% if !imessage_pipes.is_empty() || !other_pipes.is_empty() %}
+    <div>
+      <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Active Pipes</h2>
+      <div class="space-y-3">
+
+        {% for cfg in imessage_pipes %}
+        <a href="/pipes/imessage/{{ cfg.config_id }}"
+           class="block bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-brand-500/40 transition-colors group">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <div class="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div>
+                <div class="text-sm font-semibold text-white group-hover:text-brand-300 transition-colors">{{ cfg.name }}</div>
+                <div class="text-xs text-slate-500 mt-0.5">iMessage via BlueBubbles</div>
+              </div>
+            </div>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              Connected
+            </span>
+          </div>
+          <div class="mt-3 flex items-center gap-3 text-xs text-slate-500">
+            <span>{{ cfg.owner_name }}</span>
+            <span class="text-slate-700">|</span>
+            <span class="font-mono">{{ cfg.server_url }}</span>
+          </div>
+        </a>
+        {% endfor %}
+
+        {% for pipe in other_pipes %}
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              {% if pipe.transport == "web" %}
+              <div class="w-10 h-10 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              </div>
+              {% else %}
+              <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              </div>
+              {% endif %}
+              <div>
+                <div class="text-sm font-semibold text-white">{{ pipe.name }}</div>
+                <div class="text-xs text-slate-500 mt-0.5">
+                  {% if pipe.transport == "web" %}Web UI{% else %}Webhook{% endif %}
+                  {% if !pipe.owner_name.is_empty() %}<span class="text-slate-600 mx-1">&middot;</span>{{ pipe.owner_name }}{% endif %}
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Active
+              </span>
+              <button class="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                      hx-delete="/pipes/{{ pipe.id }}"
+                      hx-target="closest div.rounded-xl"
+                      hx-swap="outerHTML"
+                      hx-confirm="Remove pipe &quot;{{ pipe.name }}&quot;?">Remove</button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Add New Pipe -->
+    <div>
+      <h2 class="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Add New Pipe</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Web UI -->
+        <a href="/pipes/web/new"
+           class="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-brand-500/40 transition-colors group flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <span class="text-sm font-semibold text-white group-hover:text-brand-300 transition-colors">Web UI</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">Chat with your agents directly in the PAP web interface.</p>
+          <span class="inline-flex items-center gap-1 text-xs font-medium text-brand-400 mt-auto">
+            Set up
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </span>
+        </a>
+
+        <!-- iMessage -->
+        <a href="/pipes/imessage/setup"
+           class="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-brand-500/40 transition-colors group flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <span class="text-sm font-semibold text-white group-hover:text-brand-300 transition-colors">iMessage</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">Connect your Mac's iMessage via BlueBubbles. Your agents can receive and reply to iMessages.</p>
+          <span class="inline-flex items-center gap-1 text-xs font-medium text-brand-400 mt-auto">
+            Set up
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </span>
+        </a>
+
+        <!-- WhatsApp (coming soon) -->
+        <div class="bg-slate-900/50 border border-slate-800 border-dashed rounded-xl p-5 opacity-50 flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+            </div>
+            <span class="text-sm font-semibold text-slate-300">WhatsApp</span>
+          </div>
+          <p class="text-xs text-slate-500 leading-relaxed">Connect WhatsApp via Baileys adapter.</p>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-500 mt-auto w-fit">Coming Soon</span>
+        </div>
+
+        <!-- Custom Webhook -->
+        <a href="/pipes/webhook/new"
+           class="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-brand-500/40 transition-colors group flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </div>
+            <span class="text-sm font-semibold text-white group-hover:text-brand-300 transition-colors">Webhook</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">For developers: connect any external service via HTTP. It sends messages in, PAP replies back.</p>
+          <span class="inline-flex items-center gap-1 text-xs font-medium text-brand-400 mt-auto">
+            Set up
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </span>
+        </a>
       </div>
     </div>
 
-    <!-- Create Pipe -->
-    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-slate-800">
-        <span class="text-sm font-semibold text-white">Create Pipe</span>
-      </div>
-      <form method="post" action="/pipes">
-        <div class="p-5 space-y-4">
-          {% if users.is_empty() %}
-          <div class="px-4 py-3 rounded-lg bg-brand-500/10 border border-brand-500/20 text-brand-300 text-sm">
-            <p class="font-semibold">No users found.</p>
-            <p>You need at least one user account before creating a pipe. <a href="/users" class="underline hover:no-underline">Create a user</a>.</p>
-          </div>
-          {% endif %}
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label for="pipe-name" class="block text-xs font-medium text-slate-400 mb-1.5">Name</label>
-              <input id="pipe-name" name="name" type="text" placeholder="My Pipe" required
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-            </div>
-            <div>
-              <label for="pipe-user" class="block text-xs font-medium text-slate-400 mb-1.5">Owner</label>
-              <select id="pipe-user" name="user_id" required {% if users.is_empty() %}disabled{% endif %}
-                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition disabled:opacity-50">
-                <option value="">-- select user --</option>
-                {% for u in users %}
-                <option value="{{ u.id }}">{{ u.display }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div>
-              <label for="pipe-transport" class="block text-xs font-medium text-slate-400 mb-1.5">Transport</label>
-              <select id="pipe-transport" name="transport"
-                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
-                <option value="webhook">webhook</option>
-                <option value="web">web</option>
-                <option value="api">api</option>
-              </select>
-            </div>
-            <div>
-              <label for="pipe-agent" class="block text-xs font-medium text-slate-400 mb-1.5">Default Agent</label>
-              <select id="pipe-agent" name="default_agent_id"
-                      class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
-                <option value="">-- none --</option>
-                {% for a in agents %}
-                <option value="{{ a.id }}">{{ a.name }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div>
-              <label for="pipe-outbound" class="block text-xs font-medium text-slate-400 mb-1.5">Outbound URL</label>
-              <input id="pipe-outbound" name="outbound_url" type="text" placeholder="https://adapter.example.com/send" required
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-              <p class="text-[11px] text-slate-500 mt-1">The URL to POST assistant replies to.</p>
-            </div>
-            <div>
-              <label for="pipe-auth" class="block text-xs font-medium text-slate-400 mb-1.5">Outbound Auth Header</label>
-              <input id="pipe-auth" name="outbound_auth" type="text" placeholder="Bearer token123 (optional)"
-                     class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition" />
-              <p class="text-[11px] text-slate-500 mt-1">Value for the Authorization header on outbound requests.</p>
-            </div>
-          </div>
-          <div class="flex justify-end">
-            <button type="submit" {% if users.is_empty() %}disabled{% endif %}
-                    class="bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-5 py-2.5 rounded-lg transition-colors cursor-pointer">Create Pipe</button>
-          </div>
-        </div>
-      </form>
-    </div>
   </div>
 </div>
 {% endblock %}
