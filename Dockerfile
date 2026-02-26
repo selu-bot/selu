@@ -4,8 +4,8 @@
 #   docker buildx build --platform linux/amd64,linux/arm64 -t selu .
 #
 # Requires:
-#   - crates/selu-orchestrator/.sqlx/ directory with offline query metadata
-#     (run: cargo sqlx prepare   from crates/selu-orchestrator/)
+#   - .sqlx/ directory with offline query metadata in the workspace root
+#     (run: cargo sqlx prepare --workspace)
 #   - SQLX_OFFLINE=true is set automatically below
 #
 # Runtime requirements:
@@ -34,17 +34,18 @@ ENV SQLX_OFFLINE=true
 # without seeing our real code. This layer is expensive but rarely changes.
 
 COPY Cargo.toml Cargo.lock ./
+COPY .sqlx/ .sqlx/
 COPY crates/selu-core/Cargo.toml crates/selu-core/Cargo.toml
 COPY crates/selu-orchestrator/Cargo.toml crates/selu-orchestrator/Cargo.toml
 COPY crates/selu-orchestrator/build.rs crates/selu-orchestrator/build.rs
 COPY crates/selu-orchestrator/proto/ crates/selu-orchestrator/proto/
-COPY crates/selu-orchestrator/.sqlx/ crates/selu-orchestrator/.sqlx/
 
 # Stub source files – just enough for cargo to resolve the crate graph
 RUN mkdir -p crates/selu-core/src && echo "pub fn _stub() {}" > crates/selu-core/src/lib.rs \
     && mkdir -p crates/selu-orchestrator/src && echo "fn main() {}" > crates/selu-orchestrator/src/main.rs \
     && mkdir -p crates/selu-orchestrator/migrations \
-    && mkdir -p crates/selu-orchestrator/templates
+    && mkdir -p crates/selu-orchestrator/templates \
+    && mkdir -p agents/default && touch agents/default/agent.yaml agents/default/agent.md
 
 RUN cargo build --release --bin selu-orchestrator 2>/dev/null || true
 
@@ -59,6 +60,9 @@ RUN rm -rf crates/selu-core/src crates/selu-orchestrator/src \
     && rm -rf target/release/incremental/selu_*
 
 COPY crates/ crates/
+
+# The bundled default agent is embedded via include_str!() at compile time
+COPY agents/ agents/
 
 RUN cargo build --release --bin selu-orchestrator
 
