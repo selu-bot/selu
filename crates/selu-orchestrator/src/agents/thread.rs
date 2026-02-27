@@ -167,9 +167,13 @@ pub async fn find_thread_by_message_ref(
 
 /// Find or create a thread for an inbound message.
 ///
-/// If `reply_to_ref` is provided and matches an existing active thread,
-/// that thread is reused (enabling reply-to chains). Otherwise a new
-/// thread is created.
+/// Resolution order:
+///   1. If `reply_to_ref` is provided, try to match an existing active thread
+///      by message GUID (enables iMessage reply-chain routing).
+///   2. If no reply-to info, fall back to the most recent active thread for
+///      this user + pipe (enables continuity in DMs where iMessage doesn't
+///      provide threading GUIDs).
+///   3. If nothing matches, create a new thread.
 pub async fn find_or_create_thread(
     db: &SqlitePool,
     pipe_id: &str,
@@ -185,7 +189,7 @@ pub async fn find_or_create_thread(
         "find_or_create_thread: called"
     );
 
-    // Try to match an existing thread via the reply-to reference
+    // 1. Try to match an existing thread via the reply-to reference
     if let Some(ref_guid) = reply_to_ref {
         if let Some(existing) = find_thread_by_message_ref(db, pipe_id, ref_guid).await? {
             info!(
@@ -200,12 +204,75 @@ pub async fn find_or_create_thread(
             reply_to_ref = %ref_guid,
             "reply_to_ref provided but no matching thread found"
         );
-    } else {
-        info!("find_or_create_thread: no reply_to_ref — will create new thread");
     }
 
-    // No match — create a new thread
+    // 2. No reply-to info (or reply-to didn't match) — try the most recent
+    //    active thread for this user + pipe. This keeps DM conversations
+    //    continuous without requiring iMessage inline replies.
+    if let Some(recent) = find_recent_active_thread(db, pipe_id, user_id).await? {
+        info!(
+            thread_id = %recent.id,
+            title = ?recent.title,
+            "Reusing most recent active thread for user+pipe"
+        );
+        return Ok(recent);
+    }
+
+    // 3. No match — create a new thread
+    info!("find_or_create_thread: no existing thread found — creating new");
     create_thread(db, pipe_id, user_id, agent_id, origin_message_ref).await
+}
+
+/// Find the most recent active thread for a user on a given pipe.
+///
+/// Used as a fallback when no reply-to GUID is available (e.g. regular DM
+/// messages without iMessage inline-reply). Only returns threads that have
+/// at least one message (to avoid matching freshly-created empty threads
+/// from concurrent requests).
+async fn find_recent_active_thread(
+    db: &SqlitePool,
+    pipe_id: &str,
+    user_id: &str,
+) -> Result<Option<Thread>> {
+    let row = sqlx::query!(
+        r#"SELECT t.id, t.pipe_id, t.session_id, t.user_id, t.status, t.title,
+                  t.origin_message_ref, t.last_reply_guid, t.created_at, t.completed_at
+           FROM threads t
+           WHERE t.pipe_id = ? AND t.user_id = ? AND t.status = 'active'
+             AND EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = t.id)
+           ORDER BY t.created_at DESC
+           LIMIT 1"#,
+        pipe_id,
+        user_id,
+    )
+    .fetch_optional(db)
+    .await?;
+
+    match row {
+        Some(r) => {
+            debug!(
+                thread_id = ?r.id,
+                title = ?r.title,
+                "find_recent_active_thread: found"
+            );
+            Ok(Some(Thread {
+                id: Uuid::parse_str(r.id.as_deref().unwrap_or_default())?,
+                pipe_id: Uuid::parse_str(&r.pipe_id)?,
+                session_id: Uuid::parse_str(&r.session_id)?,
+                user_id: Uuid::parse_str(&r.user_id)?,
+                status: ThreadStatus::Active,
+                title: r.title,
+                origin_message_ref: r.origin_message_ref,
+                last_reply_guid: r.last_reply_guid,
+                created_at: r.created_at.parse().unwrap_or_default(),
+                completed_at: None,
+            }))
+        }
+        None => {
+            debug!("find_recent_active_thread: no active thread for user+pipe");
+            Ok(None)
+        }
+    }
 }
 
 /// Store Selu's outbound reply GUID on the thread so future incoming

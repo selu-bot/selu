@@ -153,6 +153,7 @@ impl CapabilityRunner {
         // This is the most reliable method because it works regardless of
         // cgroup version or runtime quirks.
         if container_id.is_none() {
+            debug!("Filesystem-based container detection did not find a container ID, trying Docker API");
             container_id = self.detect_via_docker_api().await;
         }
 
@@ -161,6 +162,8 @@ impl CapabilityRunner {
             self.join_network_if_needed(self_id, TOOLS_NETWORK).await?;
             self.join_network_if_needed(self_id, ENVS_NETWORK).await?;
             *self.self_container_id.write().await = Some(self_id.clone());
+        } else {
+            debug!("Not running inside Docker (or could not detect container ID)");
         }
 
         Ok(())
@@ -228,24 +231,33 @@ impl CapabilityRunner {
     /// container.  Docker sets the hostname to the short (12-char) container ID
     /// by default, so we can inspect it to get the full ID.
     async fn detect_via_docker_api(&self) -> Option<String> {
-        let hostname = std::fs::read_to_string("/etc/hostname")
+        // Read the hostname — try /proc first (Linux), then /etc/hostname
+        let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname")
+            .or_else(|_| std::fs::read_to_string("/etc/hostname"))
             .ok()
             .map(|h| h.trim().to_string())
             .unwrap_or_default();
 
         if hostname.is_empty() {
+            debug!("Could not read hostname for Docker API detection");
             return None;
         }
 
-        // Try to inspect a container matching our hostname
+        debug!(hostname = %hostname, "Attempting Docker API detection with hostname");
+
         match self.docker.inspect_container(&hostname, None).await {
             Ok(inspect) => {
-                let id = inspect.id?;
-                debug!(container_id = %id, "Detected own container via Docker API");
-                Some(id)
+                if let Some(id) = inspect.id {
+                    debug!(container_id = %id, "Detected own container via Docker API");
+                    return Some(id);
+                }
             }
-            Err(_) => None,
+            Err(e) => {
+                debug!(hostname = %hostname, error = %e, "Hostname did not match a Docker container");
+            }
         }
+
+        None
     }
 
     /// Start a capability container for the given manifest + session.
@@ -518,6 +530,9 @@ fn detect_self_container_id() -> Option<String> {
                 }
             }
         }
+        debug!("mountinfo exists but no /docker/containers/ pattern found");
+    } else {
+        debug!("/proc/self/mountinfo not available");
     }
 
     // Strategy 2: /proc/1/cgroup — works on cgroup v1 and some v2 setups
@@ -544,27 +559,25 @@ fn detect_self_container_id() -> Option<String> {
                 }
             }
         }
+        debug!("/proc/1/cgroup exists but no docker pattern found");
+    } else {
+        debug!("/proc/1/cgroup not available");
     }
 
-    // Strategy 3: /etc/hostname — Docker sets this to the short (12-char) container ID.
-    // Only trust this if we also see evidence of being in a container (/.dockerenv or
-    // /proc/1/cgroup contains "docker" or "containerd").
-    let likely_container = std::path::Path::new("/.dockerenv").exists()
-        || std::fs::read_to_string("/proc/1/cgroup")
-            .map(|c| c.contains("docker") || c.contains("containerd") || c.contains("/lxc/"))
-            .unwrap_or(false)
-        || std::fs::read_to_string("/proc/self/mountinfo")
-            .map(|c| c.contains("/docker/"))
-            .unwrap_or(false);
-
-    if likely_container {
+    // Strategy 3: /.dockerenv file exists — we're definitely in Docker,
+    // use the hostname as a container ID hint
+    if std::path::Path::new("/.dockerenv").exists() {
+        debug!("/.dockerenv exists — we are in Docker");
         if let Ok(hostname) = std::fs::read_to_string("/etc/hostname") {
             let hostname = hostname.trim();
+            debug!(hostname = %hostname, "Read /etc/hostname for container ID");
             if hostname.len() == 12 && hostname.chars().all(|c| c.is_ascii_hexdigit()) {
                 debug!("Detected container ID from hostname: {}", hostname);
                 return Some(hostname.to_string());
             }
         }
+    } else {
+        debug!("/.dockerenv does not exist");
     }
 
     None
