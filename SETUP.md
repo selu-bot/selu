@@ -32,7 +32,15 @@ git clone git@github.com:selu-bot/selu.git
 cd selu
 ```
 
-### 2. Create a `.env` file
+### 2. Activate the git hooks
+
+The repo includes a pre-commit hook that automatically keeps the sqlx offline cache (`.sqlx/`) up-to-date. Activate it once after cloning:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+### 3. Create a `.env` file
 
 ```bash
 cp .env.example .env   # then edit with your values
@@ -57,7 +65,7 @@ SELU__INSTALLED_AGENTS_DIR=./installed_agents
 SELU__EGRESS_PROXY_ADDR=0.0.0.0:8888
 ```
 
-### 3. Run locally
+### 4. Run locally
 
 ```bash
 cargo run --bin selu-orchestrator
@@ -65,7 +73,7 @@ cargo run --bin selu-orchestrator
 
 The web UI is at `http://localhost:3000`. On first launch you'll be guided through initial setup (admin user creation, provider configuration).
 
-### 4. Run tests
+### 5. Run tests
 
 ```bash
 cargo test --workspace
@@ -155,16 +163,21 @@ The GitHub Actions workflow (`.github/workflows/docker.yml`) builds multi-arch D
 
 ### Preparing SQLx offline metadata
 
-The Docker build uses `SQLX_OFFLINE=true` so it doesn't need a live database at compile time. The `.sqlx/` directory must contain pre-generated query metadata.
+The Docker build uses `SQLX_OFFLINE=true` so it doesn't need a live database at compile time. The `.sqlx/` directory must contain pre-generated query metadata for every `sqlx::query!` call in the codebase.
 
-**Whenever you change a `sqlx::query!` call or a migration, regenerate:**
+**This is automated.** Two safety nets ensure the cache is never stale:
+
+1. **Pre-commit hook** (`.githooks/pre-commit`) — automatically regenerates `.sqlx/` and stages it whenever you commit `.rs` or migration files. Activate with `git config core.hooksPath .githooks` (see step 2 above).
+2. **CI check** — the `sqlx-check` job in `.github/workflows/docker.yml` runs `cargo sqlx prepare --workspace --check` before the Docker build. If the cache is stale, CI fails fast with a clear message before wasting time on a full build.
+
+**If you need to regenerate manually:**
 
 ```bash
-# Ensure you have a local database with all migrations applied
+# Ensure local DB schema is current
 cargo sqlx database create
 cargo sqlx migrate run --source crates/selu-orchestrator/migrations
 
-# Generate offline metadata
+# Regenerate offline metadata
 cargo sqlx prepare --workspace
 ```
 

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Pre-commit hook: regenerate sqlx offline query cache if Rust source or
+# migrations changed. This prevents the Docker build from failing due to
+# stale .sqlx/ metadata.
+set -euo pipefail
+
+# Only run if staged changes include Rust source files or SQL migrations.
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
+
+has_rs=false
+has_sql=false
+for f in $STAGED; do
+    case "$f" in
+        *.rs)  has_rs=true ;;
+        *migrations/*.sql) has_sql=true ;;
+    esac
+done
+
+if ! $has_rs && ! $has_sql; then
+    exit 0
+fi
+
+# Ensure sqlx-cli is available.
+if ! command -v cargo-sqlx &>/dev/null && ! cargo sqlx --version &>/dev/null 2>&1; then
+    echo "WARNING: sqlx-cli not found — skipping .sqlx/ cache refresh."
+    echo "Install with: cargo install sqlx-cli --no-default-features --features sqlite"
+    exit 0
+fi
+
+echo "Pre-commit: regenerating sqlx offline cache..."
+
+# Run migrations first so the local DB schema is up-to-date.
+cargo sqlx database create 2>/dev/null || true
+cargo sqlx migrate run --source crates/selu-orchestrator/migrations 2>/dev/null || true
+
+# Regenerate the cache.
+if cargo sqlx prepare --workspace; then
+    # Stage any changed/new .sqlx/ files so they're included in this commit.
+    git add .sqlx/
+    echo "Pre-commit: .sqlx/ cache updated and staged."
+else
+    echo "ERROR: cargo sqlx prepare failed. Fix the queries before committing."
+    exit 1
+fi

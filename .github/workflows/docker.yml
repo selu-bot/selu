@@ -40,9 +40,43 @@ jobs:
             echo "### Dev build: \`dev_${TS}\`" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  # ── Verify sqlx offline cache is up-to-date ────────────────────────────
+  sqlx-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: sqlx-check-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: sqlx-check-
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features sqlite --locked
+
+      - name: Run migrations & check cache freshness
+        run: |
+          export DATABASE_URL="sqlite://ci-check.db?mode=rwc"
+          cargo sqlx database create
+          cargo sqlx migrate run --source crates/selu-orchestrator/migrations
+
+          # Regenerate into a temp dir and diff against committed .sqlx/
+          cargo sqlx prepare --workspace --check
+        env:
+          DATABASE_URL: "sqlite://ci-check.db?mode=rwc"
+
   # ── Per-architecture builds (run in parallel on native runners) ───────
   build:
-    needs: prepare
+    needs: [prepare, sqlx-check]
     strategy:
       matrix:
         include:

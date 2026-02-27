@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, username, display_name, created_at FROM users ORDER BY created_at",
+  "query": "SELECT id, name, transport FROM pipes WHERE active = 1 AND transport = 'web' AND user_id = ? ORDER BY created_at",
   "describe": {
     "columns": [
       {
@@ -9,30 +9,24 @@
         "type_info": "Text"
       },
       {
-        "name": "username",
+        "name": "name",
         "ordinal": 1,
         "type_info": "Text"
       },
       {
-        "name": "display_name",
+        "name": "transport",
         "ordinal": 2,
-        "type_info": "Text"
-      },
-      {
-        "name": "created_at",
-        "ordinal": 3,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
       true,
       false,
-      false,
       false
     ]
   },
-  "hash": "f775b118059ea15eb3f1a13634578f1bf80b4fd767888632539549840d2f1dc4"
+  "hash": "bf60b493ef03afdfdb2b301fadbcf72d20844222224ad1a3d244586d53d8db55"
 }

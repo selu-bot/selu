@@ -147,7 +147,18 @@ struct MyPageTemplate {
 
 - Use `sqlx::query!` for compile-time checked queries. No ORM, no repository pattern — SQL is inline.
 - UUIDs as text primary keys, `datetime('now')` for timestamps.
-- After changing any `sqlx::query!` call or migration, regenerate offline metadata: `cargo sqlx prepare --workspace`. Commit the `.sqlx/` directory.
+
+**CRITICAL — sqlx offline cache (`.sqlx/` directory):**
+
+The `sqlx::query!` macro verifies SQL at compile time against a live database. The Docker build has no database, so it relies on pre-generated query metadata in `.sqlx/`. If this cache is stale, the Docker build fails.
+
+A pre-commit hook (`.githooks/pre-commit`) automatically regenerates the cache when `.rs` or migration files are committed. CI also verifies freshness before building.
+
+Rules for AI agents and developers:
+- **After adding, changing, or removing any `sqlx::query!` / `sqlx::query_as!` call, always run `cargo sqlx prepare --workspace` before considering the task complete.** Do not rely solely on the pre-commit hook — run it explicitly.
+- After adding or changing a migration file, run `cargo sqlx migrate run --source crates/selu-orchestrator/migrations` first, then `cargo sqlx prepare --workspace`.
+- Always commit the `.sqlx/` directory alongside your code changes. Never `.gitignore` it.
+- If a build fails with `SQLX_OFFLINE=true but there is no cached data`, it means this step was missed.
 
 **Template patterns:**
 
@@ -175,4 +186,4 @@ Use `tokio::spawn` for fire-and-forget async work (personality extraction, title
 3. Are all new web handlers protected with `AuthUser` (unless they're public)?
 4. Are secrets handled safely (encrypted at rest, never logged, never in error messages)?
 5. Does `cargo test --workspace` pass?
-6. If you changed a `sqlx::query!` or migration, did you run `cargo sqlx prepare --workspace`?
+6. If you changed any `sqlx::query!` / `sqlx::query_as!` call or migration, did you run `cargo sqlx prepare --workspace` and verify the `.sqlx/` directory is staged? (The pre-commit hook does this automatically, but always run it explicitly too — do not rely on the hook alone.)
