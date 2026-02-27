@@ -44,8 +44,10 @@ pub const ENVS_NETWORK: &str = "selu-envs-net";
 pub struct RunningCapability {
     pub container_id: String,
     pub capability_id: String,
-    /// Host port on 127.0.0.1 mapped from the container's gRPC port
-    pub grpc_port: u16,
+    /// Full gRPC address to reach this container, e.g. `http://127.0.0.1:55001`
+    /// when running on the host, or `http://172.18.0.3:50051` when running
+    /// inside Docker (using the container's IP on the shared bridge network).
+    pub grpc_addr: String,
     /// Unique egress proxy auth token for this container
     pub egress_token: String,
 }
@@ -57,6 +59,9 @@ pub struct CapabilityRunner {
     egress_registry: EgressRegistry,
     /// Port the egress proxy listens on (resolved per-network with the gateway IP)
     egress_proxy_port: u16,
+    /// When Selu itself runs inside Docker, this holds our own container ID
+    /// so we can join the capability bridge networks and connect via container IP.
+    self_container_id: Option<String>,
 }
 
 impl CapabilityRunner {
@@ -68,10 +73,24 @@ impl CapabilityRunner {
             .rsplit_once(':')
             .and_then(|(_, p)| p.parse::<u16>().ok())
             .unwrap_or(8888);
+
+        // Detect if we are running inside Docker by checking /.dockerenv
+        let self_container_id = if std::path::Path::new("/.dockerenv").exists() {
+            // Read our container ID from /proc/self/mountinfo (most reliable method)
+            read_self_container_id()
+        } else {
+            None
+        };
+
+        if self_container_id.is_some() {
+            info!("Running inside Docker — will connect to capabilities via container network IP");
+        }
+
         Ok(Self {
             docker: Arc::new(docker),
             egress_registry,
             egress_proxy_port: port,
+            self_container_id,
         })
     }
 
@@ -133,6 +152,14 @@ impl CapabilityRunner {
     pub async fn ensure_networks(&self) -> Result<()> {
         self.ensure_network(TOOLS_NETWORK).await?;
         self.ensure_network(ENVS_NETWORK).await?;
+
+        // When running inside Docker, join the Selu container to both capability
+        // networks so we can reach capability containers by their internal IP.
+        if let Some(ref self_id) = self.self_container_id {
+            self.join_network_if_needed(self_id, TOOLS_NETWORK).await?;
+            self.join_network_if_needed(self_id, ENVS_NETWORK).await?;
+        }
+
         Ok(())
     }
 
@@ -161,6 +188,36 @@ impl CapabilityRunner {
             .with_context(|| format!("Failed to create Docker network '{}'", name))?;
 
         info!(network = name, "Created Docker bridge network");
+        Ok(())
+    }
+
+    /// Connect the Selu container to a capability bridge network (idempotent).
+    async fn join_network_if_needed(&self, container_id: &str, network: &str) -> Result<()> {
+        use bollard::network::ConnectNetworkOptions;
+        use bollard::models::EndpointSettings;
+
+        // Check if already connected by inspecting our container
+        if let Ok(inspect) = self.docker.inspect_container(container_id, None).await {
+            if let Some(nets) = inspect.network_settings.as_ref().and_then(|n| n.networks.as_ref()) {
+                if nets.contains_key(network) {
+                    debug!(network = network, "Selu container already connected to network");
+                    return Ok(());
+                }
+            }
+        }
+
+        self.docker
+            .connect_network(
+                network,
+                ConnectNetworkOptions {
+                    container: container_id.to_string(),
+                    endpoint_config: EndpointSettings::default(),
+                },
+            )
+            .await
+            .with_context(|| format!("Failed to connect Selu container to network '{}'", network))?;
+
+        info!(network = network, "Connected Selu container to capability network");
         Ok(())
     }
 
@@ -296,14 +353,26 @@ impl CapabilityRunner {
             "Started capability container"
         );
 
-        // ── Inspect to get the assigned host port ──────────────────────────────
+        // ── Inspect to get connection details ───────────────────────────────────
         let inspect = self.docker
             .inspect_container(&container_id, None)
             .await
             .with_context(|| format!("Failed to inspect container '{}'", container_id))?;
 
-        let grpc_port = extract_host_port(&inspect, CAPABILITY_GRPC_PORT)
-            .ok_or_else(|| anyhow!("No host port assigned for container '{}'", container_id))?;
+        let grpc_addr = if self.self_container_id.is_some() {
+            // Running inside Docker — connect via the container's IP on the shared network
+            let container_ip = extract_container_ip(&inspect, network_name)
+                .ok_or_else(|| anyhow!(
+                    "No container IP found for '{}' on network '{}'",
+                    container_id, network_name
+                ))?;
+            format!("http://{}:{}", container_ip, CAPABILITY_GRPC_PORT)
+        } else {
+            // Running on the host — connect via the mapped host port on 127.0.0.1
+            let host_port = extract_host_port(&inspect, CAPABILITY_GRPC_PORT)
+                .ok_or_else(|| anyhow!("No host port assigned for container '{}'", container_id))?;
+            format!("http://127.0.0.1:{}", host_port)
+        };
 
         // ── Register egress policy (keyed by auth token) ──────────────────────
         let policy = ContainerEgressPolicy {
@@ -314,13 +383,13 @@ impl CapabilityRunner {
         crate::capabilities::egress_proxy::register(&self.egress_registry, egress_token.clone(), policy).await;
 
         // ── Wait for gRPC healthcheck ─────────────────────────────────────────
-        wait_for_grpc_ready(grpc_port, 30).await
+        wait_for_grpc_ready(&grpc_addr, 30).await
             .with_context(|| format!("Capability '{}' did not become ready in time", manifest.id))?;
 
         Ok(RunningCapability {
             container_id,
             capability_id: manifest.id.clone(),
-            grpc_port,
+            grpc_addr,
             egress_token,
         })
     }
@@ -367,13 +436,59 @@ fn extract_host_port(inspect: &ContainerInspectResponse, container_port: u16) ->
     binding.host_port.as_ref()?.parse().ok()
 }
 
+/// Extract the container's IP address on a specific Docker network.
+fn extract_container_ip(inspect: &ContainerInspectResponse, network_name: &str) -> Option<String> {
+    let networks = inspect
+        .network_settings
+        .as_ref()?
+        .networks
+        .as_ref()?;
+
+    let endpoint = networks.get(network_name)?;
+    let ip = endpoint.ip_address.as_ref()?;
+    if ip.is_empty() {
+        None
+    } else {
+        Some(ip.clone())
+    }
+}
+
+/// Read our own container ID when running inside Docker.
+/// Parses /proc/self/mountinfo looking for the docker container ID in the path.
+fn read_self_container_id() -> Option<String> {
+    // Try /proc/self/mountinfo first — look for the container ID in the cgroup path
+    if let Ok(contents) = std::fs::read_to_string("/proc/self/mountinfo") {
+        for line in contents.lines() {
+            // Look for Docker overlay paths like /var/lib/docker/containers/<id>/...
+            if let Some(pos) = line.find("/docker/containers/") {
+                let after = &line[pos + "/docker/containers/".len()..];
+                if let Some(end) = after.find('/') {
+                    let id = &after[..end];
+                    if id.len() >= 12 && id.chars().all(|c| c.is_ascii_hexdigit()) {
+                        return Some(id.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: read the hostname, which Docker sets to the short container ID
+    if let Ok(hostname) = std::fs::read_to_string("/etc/hostname") {
+        let hostname = hostname.trim();
+        if hostname.len() == 12 && hostname.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Some(hostname.to_string());
+        }
+    }
+
+    None
+}
+
 /// Polls the gRPC healthcheck until the container is ready or timeout expires.
-async fn wait_for_grpc_ready(grpc_port: u16, timeout_secs: u64) -> Result<()> {
+async fn wait_for_grpc_ready(grpc_addr: &str, timeout_secs: u64) -> Result<()> {
     use tonic::transport::Channel;
     use crate::capabilities::grpc::selu_capability::capability_client::CapabilityClient;
     use crate::capabilities::grpc::selu_capability::HealthRequest;
 
-    let addr = format!("http://127.0.0.1:{}", grpc_port);
     let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
 
     loop {
@@ -381,7 +496,7 @@ async fn wait_for_grpc_ready(grpc_port: u16, timeout_secs: u64) -> Result<()> {
             return Err(anyhow!("gRPC healthcheck timed out after {}s", timeout_secs));
         }
 
-        match Channel::from_shared(addr.clone())
+        match Channel::from_shared(grpc_addr.to_string())
             .context("Invalid gRPC address")?
             .connect()
             .await
@@ -391,7 +506,7 @@ async fn wait_for_grpc_ready(grpc_port: u16, timeout_secs: u64) -> Result<()> {
                 match client.healthcheck(HealthRequest {}).await {
                     Ok(resp) => {
                         if resp.into_inner().ready {
-                            debug!(port = grpc_port, "Capability gRPC endpoint is ready");
+                            debug!(addr = grpc_addr, "Capability gRPC endpoint is ready");
                             return Ok(());
                         }
                     }
@@ -408,9 +523,9 @@ async fn wait_for_grpc_ready(grpc_port: u16, timeout_secs: u64) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bollard::models::NetworkSettings;
+    use bollard::models::{EndpointSettings, NetworkSettings};
 
-    fn make_inspect(networks: HashMap<String, bollard::models::EndpointSettings>, port_map: HashMap<String, Option<Vec<PortBinding>>>) -> ContainerInspectResponse {
+    fn make_inspect(networks: HashMap<String, EndpointSettings>, port_map: HashMap<String, Option<Vec<PortBinding>>>) -> ContainerInspectResponse {
         ContainerInspectResponse {
             network_settings: Some(NetworkSettings {
                 networks: Some(networks),
@@ -433,5 +548,42 @@ mod tests {
         );
         let inspect = make_inspect(HashMap::new(), ports);
         assert_eq!(extract_host_port(&inspect, 50051), Some(54321));
+    }
+
+    #[test]
+    fn test_extract_container_ip() {
+        let mut networks = HashMap::new();
+        networks.insert(
+            TOOLS_NETWORK.to_string(),
+            EndpointSettings {
+                ip_address: Some("172.18.0.3".into()),
+                ..Default::default()
+            },
+        );
+        let inspect = make_inspect(networks, HashMap::new());
+        assert_eq!(
+            extract_container_ip(&inspect, TOOLS_NETWORK),
+            Some("172.18.0.3".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_container_ip_missing_network() {
+        let inspect = make_inspect(HashMap::new(), HashMap::new());
+        assert_eq!(extract_container_ip(&inspect, TOOLS_NETWORK), None);
+    }
+
+    #[test]
+    fn test_extract_container_ip_empty_ip() {
+        let mut networks = HashMap::new();
+        networks.insert(
+            TOOLS_NETWORK.to_string(),
+            EndpointSettings {
+                ip_address: Some("".into()),
+                ..Default::default()
+            },
+        );
+        let inspect = make_inspect(networks, HashMap::new());
+        assert_eq!(extract_container_ip(&inspect, TOOLS_NETWORK), None);
     }
 }

@@ -27,10 +27,9 @@ pub struct CapabilityGrpcClient {
 }
 
 impl CapabilityGrpcClient {
-    /// Connect to a container by its local gRPC port.
-    pub async fn connect(grpc_port: u16, capability_id: impl Into<String>) -> Result<Self> {
-        let addr = format!("http://127.0.0.1:{}", grpc_port);
-        let channel = Channel::from_shared(addr)
+    /// Connect to a container by its gRPC address (e.g. `http://127.0.0.1:55001`).
+    pub async fn connect(grpc_addr: &str, capability_id: impl Into<String>) -> Result<Self> {
+        let channel = Channel::from_shared(grpc_addr.to_string())
             .map_err(|e| anyhow!("Invalid gRPC address: {}", e))?
             .connect()
             .await

@@ -139,7 +139,7 @@ impl CapabilityEngine {
 
         debug!(capability = %cap_id, session = %session_id, "Starting capability container");
         let running = self.runner.start(manifest, session_id).await?;
-        let client = CapabilityGrpcClient::connect(running.grpc_port, cap_id).await?;
+        let client = CapabilityGrpcClient::connect(&running.grpc_addr, cap_id).await?;
 
         let mut active = self.active.write().await;
         if let Some(existing) = active.get(&key) {
