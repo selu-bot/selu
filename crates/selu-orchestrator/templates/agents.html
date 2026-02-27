@@ -24,16 +24,16 @@
     <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
       <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
         <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.globalmodel">Global Default Model</span>
-        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted">Used when no per-agent model is set</span>
+        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.globalmodel.hint">Used when no per-agent model is set</span>
       </div>
       <div class="p-5">
         <form method="POST" action="/agents/default-model" class="flex items-end gap-3 flex-wrap">
           <div class="flex-1 min-w-[150px]">
-            <label class="block text-xs font-medium text-txt-muted mb-1.5">Provider</label>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
             <select name="provider_id" id="global-provider-select"
                     onchange="fetchModels(this.value, '#global-model-select')"
                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
-              <option value="">-- Select provider --</option>
+              <option value="" data-i18n="agents.selectprovider">-- Select provider --</option>
               {% for p in providers %}
               <option value="{{ p.id }}" {% if p.id == global_provider %}selected{% endif %}>{{ p.display_name }}</option>
               {% endfor %}
@@ -44,14 +44,14 @@
             <select name="model_id" id="global-model-select" data-current="{{ global_model }}"
                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               {% if global_model.is_empty() %}
-              <option value="">-- Select a provider first --</option>
+              <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
               {% else %}
               <option value="{{ global_model }}" selected>{{ global_model_display_name }}</option>
               {% endif %}
             </select>
           </div>
           <div class="w-20">
-            <label class="block text-xs font-medium text-txt-muted mb-1.5">Temp</label>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.temperature">Temp</label>
             <input type="text" name="temperature" value="{{ global_temperature }}" placeholder="0.7"
                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           </div>
@@ -60,7 +60,7 @@
                   data-i18n="agents.save">Save</button>
         </form>
         {% if providers.is_empty() %}
-        <p class="text-xs text-txt-muted mt-3">No providers configured. Go to <a href="/providers" class="text-coral hover:text-amber transition-colors">Providers</a> to set up an API key first.</p>
+        <p class="text-xs text-txt-muted mt-3" data-i18n="agents.noproviders">No providers configured. Go to <a href="/providers" class="text-coral hover:text-amber transition-colors">Providers</a> to set up an API key first.</p>
         {% endif %}
       </div>
     </div>
@@ -82,12 +82,12 @@
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b border-edge">
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">ID</th>
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Name</th>
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Provider / Model</th>
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Capabilities</th>
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Status</th>
-                <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Actions</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.id">ID</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.name">Name</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.providermodel">Provider / Model</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.capabilities">Capabilities</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.status">Status</th>
+                <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.actions">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-edge">
@@ -97,7 +97,7 @@
                 <td class="px-5 py-3.5">
                   <a href="/agents/{{ agent.id }}" class="font-medium text-txt-heading hover:text-coral transition-colors">{{ agent.name }}</a>
                   {% if agent.is_bundled %}
-                  <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral">Bundled</span>
+                   <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral" data-i18n="agents.bundled">Bundled</span>
                   {% endif %}
                 </td>
                 <td class="px-5 py-3.5">
@@ -105,7 +105,7 @@
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral">{{ agent.provider_id }}</span>
                   <span class="text-txt ml-1">{{ agent.model_display_name }}</span>
                   {% else %}
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-alt text-txt-muted">Global default</span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-alt text-txt-muted" data-i18n="agents.globaldefault">Global default</span>
                   {% endif %}
                 </td>
                 <td class="px-5 py-3.5 text-txt">{{ agent.capability_count }}</td>
@@ -113,10 +113,10 @@
                   {% if agent.setup_complete %}
                   <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                     <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
-                    Active
+                    <span data-i18n="agents.status.active">Active</span>
                   </span>
                   {% else %}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber/10 text-amber border border-amber/20">Setup pending</span>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber/10 text-amber border border-amber/20" data-i18n="agents.status.pending">Setup pending</span>
                   {% endif %}
                 </td>
                 <td class="px-5 py-3.5 text-right">
@@ -132,11 +132,11 @@
                     <div class="hidden absolute z-20 right-0 mt-1 bg-surface-alt border border-edge rounded-2xl p-4 min-w-[320px] shadow-xl shadow-black/40">
                       <form method="POST" action="/agents/{{ agent.id }}/model" class="space-y-3">
                         <div>
-                          <label class="block text-xs font-medium text-txt-muted mb-1.5">Provider</label>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
                           <select name="provider_id"
                                   onchange="fetchModels(this.value, this.closest('form').querySelector('select[name=model_id]'))"
                                   class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
-                            <option value="">-- Global default --</option>
+                            <option value="" data-i18n="agents.globaldefaultoption">-- Global default --</option>
                             {% for p in providers %}
                             <option value="{{ p.id }}" {% if p.id == agent.provider_id %}selected{% endif %}>{{ p.display_name }}</option>
                             {% endfor %}
@@ -147,14 +147,14 @@
                           <select name="model_id" data-current="{{ agent.model_id }}"
                                   class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
                             {% if agent.model_id.is_empty() %}
-                            <option value="">-- Select a provider first --</option>
+                            <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
                             {% else %}
                             <option value="{{ agent.model_id }}" selected>{{ agent.model_display_name }}</option>
                             {% endif %}
                           </select>
                         </div>
                         <div>
-                          <label class="block text-xs font-medium text-txt-muted mb-1.5">Temperature</label>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.temperature">Temperature</label>
                           <input type="text" name="temperature" value="0.7" placeholder="0.7"
                                  class="w-20 bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition" />
                         </div>
@@ -165,7 +165,7 @@
                     </div>
                     {% if !agent.is_bundled %}
                     <form method="POST" action="/agents/{{ agent.id }}/uninstall" class="inline"
-                          onsubmit="return confirm('Uninstall {{ agent.name }}? This will remove all agent files.')">
+                          onsubmit="return confirm(t('agents.uninstall.confirm').replace('{name}', '{{ agent.name }}'))">
                       <button type="submit"
                               class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                               data-i18n="agents.uninstall">Uninstall</button>
@@ -194,7 +194,7 @@
 
       {% if marketplace_agents.is_empty() && marketplace_error.is_empty() %}
       <div class="bg-surface-raised border border-edge rounded-2xl p-8 text-center">
-        <p class="text-sm text-txt-muted">No agents available in the marketplace.</p>
+        <p class="text-sm text-txt-muted" data-i18n="agents.marketplace.empty">No agents available in the marketplace.</p>
       </div>
       {% endif %}
 
@@ -214,7 +214,7 @@
               {% if agent.is_installed %}
               <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
-                Installed
+                <span data-i18n="agents.installed.badge">Installed</span>
               </span>
               {% else %}
               <form method="POST" action="/agents/install">
@@ -278,8 +278,8 @@ document.addEventListener('click', function(e) {
 function fetchModels(providerId, target) {
   var sel = (typeof target === 'string') ? document.querySelector(target) : target;
   if (!sel) return;
-  if (!providerId) { sel.innerHTML = '<option value="">-- Select a provider first --</option>'; return; }
-  sel.innerHTML = '<option value="">Loading models...</option>';
+  if (!providerId) { sel.innerHTML = '<option value="">' + t('agents.selectproviderfirst') + '</option>'; return; }
+  sel.innerHTML = '<option value="">' + t('agents.loadingmodels') + '</option>';
   fetch('/agents/models/' + providerId, { credentials: 'same-origin' })
     .then(function(r) { return r.text(); })
     .then(function(html) {
@@ -291,7 +291,7 @@ function fetchModels(providerId, target) {
         }
       }
     })
-    .catch(function() { sel.innerHTML = '<option value="">Failed to load models</option>'; });
+    .catch(function() { sel.innerHTML = '<option value="">' + t('agents.loadmodelsfailed') + '</option>'; });
 }
 
 document.addEventListener('DOMContentLoaded', function() {

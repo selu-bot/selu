@@ -10,10 +10,10 @@
     <div>
       <a href="/agents" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        <span>Back to Agents</span>
+        <span data-i18n="agents.back">Back to Agents</span>
       </a>
-      <h1 class="text-2xl font-black text-txt-heading font-heading">Setup: {{ agent_name }}</h1>
-      <p class="text-sm text-txt-muted mt-1">Complete the following steps to finish installing this agent.</p>
+      <h1 class="text-2xl font-black text-txt-heading font-heading"><span data-i18n="agents.setup.title">Setup</span>: {{ agent_name }}</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="agents.setup.desc">Complete the following steps to finish installing this agent.</p>
     </div>
 
     <form method="POST" action="/agents/{{ agent_id }}/setup" id="setup-form" class="space-y-4">
@@ -22,9 +22,9 @@
         <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
           <span class="text-sm font-semibold text-txt-heading">{{ step.label }}</span>
           {% if step.step_type == "test" %}
-          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted">Test</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.setup.test">Test</span>
           {% else %}
-          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-coral/15 text-coral">Configuration</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-coral/15 text-coral" data-i18n="agents.setup.config">Configuration</span>
           {% endif %}
         </div>
         <div class="p-5 space-y-3">
@@ -47,7 +47,8 @@
                     hx-post="/agents/{{ agent_id }}/setup/test/{{ step.id }}"
                     hx-target="#test-result-{{ step.id }}"
                     hx-swap="innerHTML"
-                    hx-include="#setup-form">
+                     hx-include="#setup-form"
+                     data-i18n="agents.setup.runtest">
               Run Test
             </button>
             <span id="test-result-{{ step.id }}" class="text-sm"></span>
@@ -61,11 +62,11 @@
       {% if !tool_policies.is_empty() %}
       <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
         <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
-          <span class="text-sm font-semibold text-txt-heading">Tool Permissions</span>
-          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-coral/15 text-coral">Required</span>
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.setup.toolpermissions">Tool Permissions</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-coral/15 text-coral" data-i18n="agents.setup.required">Required</span>
         </div>
         <div class="p-5 space-y-2">
-          <p class="text-xs text-txt-muted leading-relaxed mb-3">
+          <p class="text-xs text-txt-muted leading-relaxed mb-3" data-i18n="agents.setup.toolpermissions.desc">
             Choose a security policy for each tool this agent can use. Tools without a policy will be blocked by default.
           </p>
 
@@ -85,7 +86,7 @@
                        class="sr-only peer" />
                 <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
                              peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30
-                             text-txt-muted hover:text-txt-heading transition-all">
+                             text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.allow">
                   Allow
                 </span>
               </label>
@@ -95,7 +96,7 @@
                        class="sr-only peer" />
                 <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
                              peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30
-                             text-txt-muted hover:text-txt-heading transition-all">
+                             text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.ask">
                   Ask
                 </span>
               </label>
@@ -105,7 +106,7 @@
                        class="sr-only peer" />
                 <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
                              peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30
-                             text-txt-muted hover:text-txt-heading transition-all">
+                             text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.block">
                   Block
                 </span>
               </label>
@@ -119,18 +120,18 @@
       <!-- Model Assignment -->
       <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
         <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
-          <span class="text-sm font-semibold text-txt-heading">Model Assignment</span>
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.setup.modelassignment">Model Assignment</span>
           <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="common.optional">Optional</span>
         </div>
         <div class="p-5 space-y-4">
-          <p class="text-xs text-txt-muted leading-relaxed">Assign a specific provider and model to this agent, or leave blank to use the global default.</p>
+          <p class="text-xs text-txt-muted leading-relaxed" data-i18n="agents.setup.modelassignment.desc">Assign a specific provider and model to this agent, or leave blank to use the global default.</p>
           <div class="flex items-end gap-3 flex-wrap">
             <div class="flex-1 min-w-[150px]">
-              <label class="block text-xs font-medium text-txt-muted mb-1.5">Provider</label>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
               <select name="agent_provider_id"
                       onchange="fetchModels(this.value, '#setup-model-select')"
                       class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
-                <option value="">-- Use global default --</option>
+                <option value="" data-i18n="agents.useglobaldefault">-- Use global default --</option>
                 {% for p in providers %}
                 <option value="{{ p.id }}">{{ p.display_name }}</option>
                 {% endfor %}
@@ -140,7 +141,7 @@
               <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.model">Model</label>
               <select name="agent_model_id" id="setup-model-select"
                       class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
-                <option value="">-- Select a provider first --</option>
+                <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
               </select>
             </div>
           </div>

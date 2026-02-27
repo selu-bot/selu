@@ -9,7 +9,7 @@
     <!-- Back link -->
     <a href="/agents" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      <span>Back to Agents</span>
+      <span data-i18n="agents.back">Back to Agents</span>
     </a>
 
     <!-- Header -->
@@ -34,14 +34,14 @@
           {% if cap.network_mode == "none" %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
           {% else if cap.network_mode == "allowlist" %}bg-amber-500/10 text-amber-400 border border-amber-500/20
           {% else %}bg-red-500/10 text-red-400 border border-red-500/20{% endif %}">
-          Network: {{ cap.network_mode }}
+          <span data-i18n="agents.detail.network">Network</span>: {{ cap.network_mode }}
         </span>
       </div>
       <div class="p-5 space-y-4">
         <!-- Network allowlist -->
         {% if !cap.allowed_hosts.is_empty() %}
         <div>
-          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">Allowed Hosts</p>
+          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.allowedhosts">Allowed Hosts</p>
           <div class="flex flex-wrap gap-1.5">
             {% for host in cap.allowed_hosts %}
             <span class="inline-flex px-2 py-0.5 rounded-md bg-surface-alt text-xs text-txt font-mono">{{ host }}</span>
@@ -52,19 +52,19 @@
 
         <!-- Resources -->
         <div>
-          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">Resources</p>
+          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.resources">Resources</p>
           <div class="flex gap-3 text-xs text-txt-muted">
-            <span>Memory: {{ cap.max_memory_mb }}MB</span>
-            <span>CPU: {{ cap.max_cpu_fraction }}</span>
-            <span>PIDs: {{ cap.pids_limit }}</span>
-            <span>FS: {{ cap.filesystem }}</span>
+            <span><span data-i18n="agents.detail.memory">Memory</span>: {{ cap.max_memory_mb }}MB</span>
+            <span><span data-i18n="agents.detail.cpu">CPU</span>: {{ cap.max_cpu_fraction }}</span>
+            <span><span data-i18n="agents.detail.pids">PIDs</span>: {{ cap.pids_limit }}</span>
+            <span><span data-i18n="agents.detail.fs">FS</span>: {{ cap.filesystem }}</span>
           </div>
         </div>
 
         <!-- Tools -->
         {% if !cap.tools.is_empty() %}
         <div>
-          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">Tools</p>
+          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.tools">Tools</p>
           <div class="space-y-1.5">
             {% for tool in cap.tools %}
             <div class="flex items-center justify-between py-1.5 px-3 bg-surface-alt/30 rounded-lg">
@@ -91,10 +91,10 @@
     {% if !builtin_policies.is_empty() %}
     <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
       <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
-        <span class="text-sm font-semibold text-txt-heading">Built-in Tool Permissions</span>
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.builtintools">Built-in Tool Permissions</span>
       </div>
       <div class="p-5 space-y-2">
-        <p class="text-xs text-txt-muted leading-relaxed mb-3">
+        <p class="text-xs text-txt-muted leading-relaxed mb-3" data-i18n="agents.detail.builtintools.desc">
           Control how this agent uses built-in tools. Changes take effect immediately.
         </p>
 
@@ -113,8 +113,8 @@
                      hx-swap="none"
                      class="sr-only peer" />
               <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                           peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30
-                           text-txt-muted hover:text-txt-heading transition-all">
+                            peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30
+                            text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.allow">
                 Allow
               </span>
             </label>
@@ -126,8 +126,8 @@
                      hx-swap="none"
                      class="sr-only peer" />
               <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                           peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30
-                           text-txt-muted hover:text-txt-heading transition-all">
+                            peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30
+                            text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.ask">
                 Ask
               </span>
             </label>
@@ -139,8 +139,8 @@
                      hx-swap="none"
                      class="sr-only peer" />
               <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                           peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30
-                           text-txt-muted hover:text-txt-heading transition-all">
+                            peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30
+                            text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.block">
                 Block
               </span>
             </label>
@@ -154,24 +154,24 @@
     <!-- Egress Log -->
     <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
       <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
-        <span class="text-sm font-semibold text-txt-heading">Network Activity</span>
-        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted">Last 100 requests</span>
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.networkactivity">Network Activity</span>
+        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.detail.last100">Last 100 requests</span>
       </div>
       {% if egress_entries.is_empty() %}
       <div class="p-5">
-        <p class="text-sm text-txt-muted text-center py-6">No network requests recorded yet.</p>
+        <p class="text-sm text-txt-muted text-center py-6" data-i18n="agents.detail.norequests">No network requests recorded yet.</p>
       </div>
       {% else %}
       <div class="overflow-x-auto">
         <table class="w-full text-xs">
           <thead>
             <tr class="border-b border-edge text-left">
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Time</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Capability</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Method</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Host</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Port</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide">Status</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.time">Time</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.capability">Capability</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.method">Method</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.host">Host</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.port">Port</th>
+              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.status">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -184,9 +184,9 @@
               <td class="px-5 py-2 text-txt-muted">{{ entry.port }}</td>
               <td class="px-5 py-2">
                 {% if entry.allowed %}
-                <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Allowed</span>
+                <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-i18n="agents.detail.allowed">Allowed</span>
                 {% else %}
-                <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">Denied</span>
+                <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20" data-i18n="agents.detail.denied">Denied</span>
                 {% endif %}
               </td>
             </tr>
