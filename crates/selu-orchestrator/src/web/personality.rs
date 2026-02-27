@@ -38,6 +38,7 @@ pub struct FactGroup {
 #[template(path = "personality.html")]
 struct PersonalityTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     groups: Vec<FactGroup>,
     error: Option<String>,
     success: Option<String>,
@@ -130,6 +131,7 @@ pub async fn personality_index(
 
     match (PersonalityTemplate {
         active_nav: "personality",
+        is_admin: user.is_admin,
         groups,
         error: q.error,
         success: q.success,

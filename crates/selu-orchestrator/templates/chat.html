@@ -14,16 +14,17 @@
     <div class="flex-1 overflow-y-auto py-1">
       {% for pipe in pipes %}
       <div>
-        <!-- Pipe header -->
+        {% if pipes.len() > 1 %}
+        <!-- Pipe header (only shown when multiple pipes) -->
         <a href="/chat/{{ pipe.id }}"
            class="block px-4 py-2.5 border-l-2 transition-all {% if selected_pipe_id == pipe.id %}border-coral bg-coral/10{% else %}border-transparent hover:bg-sidebar-hover{% endif %}">
           <div class="text-sm font-medium {% if selected_pipe_id == pipe.id %}text-txt-heading{% else %}text-txt{% endif %} truncate">{{ pipe.name }}</div>
-          <div class="text-xs text-txt-muted mt-0.5">{{ pipe.transport }}</div>
         </a>
+        {% endif %}
 
-        <!-- Thread list (only for selected pipe) -->
-        {% if selected_pipe_id == pipe.id %}
-        <div class="ml-3 border-l border-edge">
+        <!-- Thread list (shown for selected pipe, or always when single pipe) -->
+        {% if selected_pipe_id == pipe.id || pipes.len() == 1 %}
+        <div class="{% if pipes.len() > 1 %}ml-3 border-l border-edge{% endif %}">
           {% for thread in threads %}
           <a href="/chat/{{ pipe.id }}/t/{{ thread.id }}"
              class="block pl-4 pr-3 py-2 text-xs transition-all {% if selected_thread_id == thread.id %}text-txt-heading bg-coral/10{% else %}text-txt-muted hover:text-txt hover:bg-sidebar-hover{% endif %} truncate">
@@ -49,7 +50,9 @@
       {% if pipes.is_empty() %}
       <div class="px-4 py-6 text-center">
         <p class="text-sm text-txt-muted" data-i18n="chat.nopipes">No pipes yet.</p>
+        {% if is_admin %}
         <a href="/pipes" class="text-sm text-coral hover:text-amber mt-1 inline-block" data-i18n="chat.createone">Create one</a>
+        {% endif %}
       </div>
       {% endif %}
     </div>
@@ -170,7 +173,11 @@
       <ellipse cx="352" cy="292" rx="28" ry="14" fill="#FF4070" opacity="0.2"/>
       <path d="M 222,312 Q 256,344 290,312" stroke="#2D2B55" stroke-width="5" fill="none" stroke-linecap="round"/>
     </svg>
+    {% if pipes.is_empty() %}
+    <p class="text-sm text-txt-muted" data-i18n="chat.nopipes.hint">Ask an admin to set up a pipe for you.</p>
+    {% else %}
     <p class="text-sm text-txt-muted" data-i18n="chat.selectpipe">Select a conversation to start chatting</p>
+    {% endif %}
   </div>
   {% endif %}
 

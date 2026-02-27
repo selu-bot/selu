@@ -94,6 +94,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         // Users
         .route("/users", get(users::users_index).post(users::users_create))
         .route("/users/{id}", delete(users::users_delete))
+        .route("/users/{id}/toggle-admin", post(users::users_toggle_admin))
         // Personality
         .route("/personality", get(personality::personality_index).post(personality::personality_add))
         .route("/personality/{id}", delete(personality::personality_delete).put(personality::personality_update))

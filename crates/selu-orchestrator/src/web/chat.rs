@@ -28,7 +28,6 @@ use crate::web::auth::AuthUser;
 pub struct PipeView {
     pub id: String,
     pub name: String,
-    pub transport: String,
 }
 
 #[derive(Debug, Clone)]
@@ -51,6 +50,7 @@ pub struct MessageView {
 #[template(path = "chat.html")]
 struct ChatTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     pipes: Vec<PipeView>,
     selected_pipe_id: String,
     selected_pipe: Option<PipeView>,
@@ -61,18 +61,20 @@ struct ChatTemplate {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async fn fetch_pipes(db: &sqlx::SqlitePool) -> Vec<PipeView> {
-    sqlx::query!("SELECT id, name, transport FROM pipes WHERE active = 1 ORDER BY created_at")
-        .fetch_all(db)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|r| PipeView {
-            id: r.id.unwrap_or_default(),
-            name: r.name,
-            transport: r.transport,
-        })
-        .collect()
+async fn fetch_pipes(db: &sqlx::SqlitePool, user_id: &str) -> Vec<PipeView> {
+    sqlx::query!(
+        "SELECT id, name, transport FROM pipes WHERE active = 1 AND transport = 'web' AND user_id = ? ORDER BY created_at",
+        user_id
+    )
+    .fetch_all(db)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .map(|r| PipeView {
+        id: r.id.unwrap_or_default(),
+        name: r.name,
+    })
+    .collect()
 }
 
 async fn fetch_threads(db: &sqlx::SqlitePool, pipe_id: &str, user_id: &str) -> Vec<ThreadView> {
@@ -138,10 +140,17 @@ fn render_template(tmpl: ChatTemplate) -> Response {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 /// GET /chat — chat index (no pipe selected)
-pub async fn chat_index(_user: AuthUser, State(state): State<AppState>) -> Response {
-    let pipes = fetch_pipes(&state.db).await;
+pub async fn chat_index(user: AuthUser, State(state): State<AppState>) -> Response {
+    let pipes = fetch_pipes(&state.db, &user.user_id).await;
+
+    // If the user has exactly one web pipe, redirect directly to it
+    if pipes.len() == 1 {
+        return axum::response::Redirect::to(&format!("/chat/{}", pipes[0].id)).into_response();
+    }
+
     render_template(ChatTemplate {
         active_nav: "chat",
+        is_admin: user.is_admin,
         selected_pipe_id: String::new(),
         selected_pipe: None,
         threads: vec![],
@@ -158,12 +167,13 @@ pub async fn chat_pipe(
     State(state): State<AppState>,
 ) -> Response {
     let pipe_id_str = pipe_id.to_string();
-    let pipes = fetch_pipes(&state.db).await;
+    let pipes = fetch_pipes(&state.db, &user.user_id).await;
     let threads = fetch_threads(&state.db, &pipe_id_str, &user.user_id).await;
     let selected = pipes.iter().find(|p| p.id == pipe_id_str).cloned();
 
     render_template(ChatTemplate {
         active_nav: "chat",
+        is_admin: user.is_admin,
         selected_pipe_id: pipe_id_str,
         selected_pipe: selected,
         threads,
@@ -181,13 +191,14 @@ pub async fn chat_thread(
 ) -> Response {
     let pipe_id_str = pipe_id.to_string();
     let thread_id_str = thread_id.to_string();
-    let pipes = fetch_pipes(&state.db).await;
+    let pipes = fetch_pipes(&state.db, &user.user_id).await;
     let threads = fetch_threads(&state.db, &pipe_id_str, &user.user_id).await;
     let selected = pipes.iter().find(|p| p.id == pipe_id_str).cloned();
     let messages = fetch_thread_messages(&state.db, &thread_id_str).await;
 
     render_template(ChatTemplate {
         active_nav: "chat",
+        is_admin: user.is_admin,
         selected_pipe_id: pipe_id_str,
         selected_pipe: selected,
         threads,

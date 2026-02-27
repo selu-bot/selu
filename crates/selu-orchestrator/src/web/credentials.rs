@@ -41,6 +41,7 @@ pub struct UserOption {
 #[template(path = "credentials.html")]
 struct CredentialsTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     sys_creds: Vec<SysCredRow>,
     user_creds: Vec<UserCredRow>,
     users: Vec<UserOption>,
@@ -73,7 +74,10 @@ pub struct SetUserCredForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn credentials_index(_user: AuthUser, Query(q): Query<CredentialsQuery>, State(state): State<AppState>) -> Response {
+pub async fn credentials_index(user: AuthUser, Query(q): Query<CredentialsQuery>, State(state): State<AppState>) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
     let sys_creds = sqlx::query!(
         "SELECT capability_id, credential_name, created_at
          FROM system_credentials ORDER BY capability_id, credential_name"
@@ -119,7 +123,7 @@ pub async fn credentials_index(_user: AuthUser, Query(q): Query<CredentialsQuery
         })
         .collect();
 
-    match (CredentialsTemplate { active_nav: "credentials", sys_creds, user_creds, users, error: q.error, success: q.success })
+    match (CredentialsTemplate { active_nav: "credentials", is_admin: user.is_admin, sys_creds, user_creds, users, error: q.error, success: q.success })
         .render()
     {
         Ok(html) => Html(html).into_response(),
@@ -131,10 +135,13 @@ pub async fn credentials_index(_user: AuthUser, Query(q): Query<CredentialsQuery
 }
 
 pub async fn credentials_set_system(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<SetSystemCredForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if form.capability_id.trim().is_empty()
         || form.credential_name.trim().is_empty()
         || form.value.is_empty()
@@ -155,10 +162,13 @@ pub async fn credentials_set_system(
 }
 
 pub async fn credentials_delete_system(
-    _user: AuthUser,
+    user: AuthUser,
     Path((cap_id, name)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if let Err(e) = state.credentials.delete_system(&cap_id, &name).await {
         error!("Failed to delete system credential: {e}");
     }
@@ -166,10 +176,13 @@ pub async fn credentials_delete_system(
 }
 
 pub async fn credentials_set_user(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<SetUserCredForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if form.user_id.is_empty()
         || form.capability_id.trim().is_empty()
         || form.credential_name.trim().is_empty()
@@ -191,10 +204,13 @@ pub async fn credentials_set_user(
 }
 
 pub async fn credentials_delete_user(
-    _user: AuthUser,
+    user: AuthUser,
     Path((user_id, cap_id, name)): Path<(String, String, String)>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if let Err(e) = state.credentials.delete_user(&user_id, &cap_id, &name).await {
         error!("Failed to delete user credential: {e}");
     }

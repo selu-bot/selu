@@ -50,6 +50,7 @@ pub struct PipeCreatedFlash {
 #[template(path = "pipes.html")]
 struct PipesTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     imessage_pipes: Vec<ImessagePipeView>,
     other_pipes: Vec<OtherPipeView>,
     flash: Option<PipeCreatedFlash>,
@@ -61,6 +62,7 @@ struct PipesTemplate {
 #[template(path = "pipes_webhook_new.html")]
 struct PipesWebhookNewTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     users: Vec<UserOption>,
     error: Option<String>,
 }
@@ -69,6 +71,7 @@ struct PipesWebhookNewTemplate {
 #[template(path = "pipes_web_new.html")]
 struct PipesWebNewTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     users: Vec<UserOption>,
     error: Option<String>,
 }
@@ -148,10 +151,13 @@ async fn db_users(db: &sqlx::SqlitePool) -> Vec<UserOption> {
 
 /// Unified pipes index: shows all active pipes + add-new cards.
 pub async fn pipes_index(
-    _user: AuthUser,
+    user: AuthUser,
     Query(q): Query<PipesQuery>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
     // Build lookup maps: user_id -> display_name, pipe_id -> user_id
     let users = user_display_map(&state.db).await;
     let pipe_owners = pipe_owner_map(&state.db).await;
@@ -222,6 +228,7 @@ pub async fn pipes_index(
 
     match (PipesTemplate {
         active_nav: "pipes",
+        is_admin: user.is_admin,
         imessage_pipes,
         other_pipes,
         flash,
@@ -238,14 +245,19 @@ pub async fn pipes_index(
 
 /// Webhook pipe creation form page.
 pub async fn pipes_webhook_new(
-    _user: AuthUser,
+    user: AuthUser,
     Query(q): Query<SimpleErrorQuery>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
+
     let users = db_users(&state.db).await;
 
     match (PipesWebhookNewTemplate {
         active_nav: "pipes",
+        is_admin: user.is_admin,
         users,
         error: q.error,
     }).render() {
@@ -259,10 +271,13 @@ pub async fn pipes_webhook_new(
 
 /// Create a webhook pipe from the form.
 pub async fn pipes_webhook_create(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<WebhookCreateForm>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
     if form.name.trim().is_empty()
         || form.user_id.is_empty()
         || form.outbound_url.trim().is_empty()
@@ -307,14 +322,19 @@ pub async fn pipes_webhook_create(
 
 /// Web UI pipe creation form page.
 pub async fn pipes_web_new(
-    _user: AuthUser,
+    user: AuthUser,
     Query(q): Query<SimpleErrorQuery>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
+
     let users = db_users(&state.db).await;
 
     match (PipesWebNewTemplate {
         active_nav: "pipes",
+        is_admin: user.is_admin,
         users,
         error: q.error,
     }).render() {
@@ -328,10 +348,13 @@ pub async fn pipes_web_new(
 
 /// Create a web UI pipe.
 pub async fn pipes_web_create(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<WebCreateForm>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
     if form.name.trim().is_empty() || form.user_id.is_empty() {
         return Redirect::to("/pipes/web/new?error=Name+and+owner+are+required.").into_response();
     }
@@ -373,10 +396,13 @@ pub async fn pipes_web_create(
 
 /// Deactivate a pipe (HTMX delete).
 pub async fn pipes_delete(
-    _user: AuthUser,
+    user: AuthUser,
     Path(pipe_id): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if let Err(e) = sqlx::query!("UPDATE pipes SET active = 0 WHERE id = ?", pipe_id)
         .execute(&state.db)
         .await

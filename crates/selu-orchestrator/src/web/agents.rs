@@ -77,6 +77,7 @@ pub struct ToolPolicyView {
 #[template(path = "agents.html")]
 struct AgentsTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     agents: Vec<InstalledAgentView>,
     marketplace_agents: Vec<MarketplaceAgentView>,
     providers: Vec<ProviderOption>,
@@ -99,6 +100,7 @@ pub struct AgentsQuery {
 #[template(path = "agents_setup.html")]
 struct AgentSetupTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     agent_id: String,
     agent_name: String,
     steps: Vec<SetupStepView>,
@@ -223,7 +225,10 @@ pub struct SetupSubmitForm {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 /// Main agents page: installed agents + marketplace catalogue
-pub async fn agents_index(_user: AuthUser, Query(q): Query<AgentsQuery>, State(state): State<AppState>) -> Response {
+pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(state): State<AppState>) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
     // Installed agents from in-memory map + DB metadata
     let agents_map = state.agents.read().await;
     let mut agents: Vec<InstalledAgentView> = Vec::new();
@@ -324,6 +329,7 @@ pub async fn agents_index(_user: AuthUser, Query(q): Query<AgentsQuery>, State(s
 
     match (AgentsTemplate {
         active_nav: "agents",
+        is_admin: user.is_admin,
         agents,
         marketplace_agents,
         providers,
@@ -347,10 +353,13 @@ pub async fn agents_index(_user: AuthUser, Query(q): Query<AgentsQuery>, State(s
 
 /// Install an agent from the marketplace
 pub async fn install_agent(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<InstallForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let entry: MarketplaceEntry = match serde_json::from_str(&form.entry_json) {
         Ok(e) => e,
         Err(e) => {
@@ -397,10 +406,13 @@ pub async fn install_agent(
 
 /// Show the setup wizard for an agent
 pub async fn setup_wizard(
-    _user: AuthUser,
+    user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
     let installed_dir = &state.config.installed_agents_dir;
     let agent_dir = std::path::Path::new(installed_dir).join(&agent_id);
 
@@ -476,6 +488,7 @@ pub async fn setup_wizard(
 
     match (AgentSetupTemplate {
         active_nav: "agents",
+        is_admin: user.is_admin,
         agent_id,
         agent_name: name,
         steps,
@@ -494,11 +507,14 @@ pub async fn setup_wizard(
 
 /// Submit setup wizard values
 pub async fn setup_submit(
-    _user: AuthUser,
+    user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
     Form(form): Form<SetupSubmitForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let installed_dir = &state.config.installed_agents_dir;
     let agent_dir = std::path::Path::new(installed_dir).join(&agent_id);
 
@@ -623,11 +639,14 @@ pub async fn setup_submit(
 
 /// Execute a test step during setup (HTMX endpoint)
 pub async fn setup_test(
-    _user: AuthUser,
+    user: AuthUser,
     Path((agent_id, step_id)): Path<(String, String)>,
     State(state): State<AppState>,
     Form(form): Form<SetupSubmitForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let installed_dir = &state.config.installed_agents_dir;
     let agent_dir = std::path::Path::new(installed_dir).join(&agent_id);
 
@@ -906,11 +925,14 @@ pub async fn agent_detail(
 
 /// Set model for a specific agent
 pub async fn set_agent_model_handler(
-    _user: AuthUser,
+    user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
     Form(form): Form<SetAgentModelForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let temp: f32 = form.temperature.parse().unwrap_or(0.7);
 
     if let Err(e) = model::set_agent_model(
@@ -1010,10 +1032,13 @@ pub async fn reset_tool_policy_handler(
 
 /// Uninstall an agent
 pub async fn uninstall_agent(
-    _user: AuthUser,
+    user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if let Err(e) = marketplace::uninstall_agent(
         &agent_id,
         &state.config.installed_agents_dir,
@@ -1033,10 +1058,13 @@ pub async fn uninstall_agent(
 
 /// Set the global default model
 pub async fn set_default_model(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<SetDefaultModelForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let temp: f32 = form.temperature.parse().unwrap_or(0.7);
 
     if let Err(e) = model::set_global_default(&state.db, &form.provider_id, &form.model_id, temp)

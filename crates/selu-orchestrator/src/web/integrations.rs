@@ -47,6 +47,7 @@ pub struct UserOption {
 #[template(path = "pipes_imessage_setup.html")]
 struct ImessageSetupTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     users: Vec<UserOption>,
     error: Option<String>,
 }
@@ -55,6 +56,7 @@ struct ImessageSetupTemplate {
 #[template(path = "pipes_imessage_detail.html")]
 struct ImessageDetailTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     config: ImessageDetail,
     people: Vec<AllowedPerson>,
     users: Vec<UserOption>,
@@ -158,9 +160,12 @@ struct BbApiLastMessage {
 /// This avoids CORS issues (browser can't call BB directly) and keeps
 /// the BB password out of the browser's network tab.
 pub async fn bb_proxy_chats(
-    _user: AuthUser,
+    user: AuthUser,
     axum::Json(req): axum::Json<BbProxyRequest>,
 ) -> Response {
+    if !user.is_admin {
+        return axum::http::StatusCode::FORBIDDEN.into_response();
+    }
     let server_url = req.server_url.trim_end_matches('/');
 
     let http = reqwest::Client::builder()
@@ -287,14 +292,18 @@ pub async fn bb_proxy_chats(
 // ── Handlers: iMessage Setup Wizard ───────────────────────────────────────────
 
 pub async fn imessage_setup_page(
-    _user: AuthUser,
+    user: AuthUser,
     Query(q): Query<FlashQuery>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
     let users = load_users(&state.db).await;
 
     match (ImessageSetupTemplate {
         active_nav: "pipes",
+        is_admin: user.is_admin,
         users,
         error: q.error,
     }).render() {
@@ -308,10 +317,13 @@ pub async fn imessage_setup_page(
 
 /// One-click setup: creates pipe + BB config + sender mappings in one go.
 pub async fn imessage_setup_submit(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<ImessageSetupForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     // Validate
     if form.name.trim().is_empty()
         || form.server_url.trim().is_empty()
@@ -403,11 +415,14 @@ pub async fn imessage_setup_submit(
 // ── Handlers: iMessage Detail ─────────────────────────────────────────────────
 
 pub async fn imessage_detail(
-    _user: AuthUser,
+    user: AuthUser,
     Path(config_id): Path<String>,
     Query(q): Query<FlashQuery>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
     let config = match load_imessage_config(&state.db, &config_id).await {
         Some(c) => c,
         None => return Redirect::to("/pipes").into_response(),
@@ -418,6 +433,7 @@ pub async fn imessage_detail(
 
     match (ImessageDetailTemplate {
         active_nav: "pipes",
+        is_admin: user.is_admin,
         config,
         people,
         users,
@@ -433,11 +449,14 @@ pub async fn imessage_detail(
 }
 
 pub async fn imessage_add_person(
-    _user: AuthUser,
+    user: AuthUser,
     Path(config_id): Path<String>,
     State(state): State<AppState>,
     Form(form): Form<AddPersonForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if form.user_id.is_empty() || form.sender_ref.trim().is_empty() {
         return Redirect::to(&format!(
             "/pipes/imessage/{}?error=Please+fill+in+both+fields", config_id
@@ -479,10 +498,13 @@ pub async fn imessage_add_person(
 }
 
 pub async fn imessage_remove_person(
-    _user: AuthUser,
+    user: AuthUser,
     Path((_config_id, ref_id)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let _ = sqlx::query!("DELETE FROM user_sender_refs WHERE id = ?", ref_id)
         .execute(&state.db)
         .await;
@@ -490,10 +512,13 @@ pub async fn imessage_remove_person(
 }
 
 pub async fn imessage_delete(
-    _user: AuthUser,
+    user: AuthUser,
     Path(config_id): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     // Deactivate the BB config and its pipe
     let _ = sqlx::query!("UPDATE bluebubbles_configs SET active = 0 WHERE id = ?", config_id)
         .execute(&state.db)

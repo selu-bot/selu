@@ -24,6 +24,7 @@ pub struct UserRow {
     pub id: String,
     pub username: String,
     pub display_name: String,
+    pub is_admin: bool,
     pub created_at: String,
 }
 
@@ -33,6 +34,8 @@ pub struct UserRow {
 #[template(path = "users.html")]
 struct UsersTemplate {
     active_nav: &'static str,
+    is_admin: bool,
+    current_user_id: String,
     users: Vec<UserRow>,
     error: Option<String>,
 }
@@ -49,17 +52,23 @@ pub struct CreateUserForm {
     pub username: String,
     pub display_name: String,
     pub password: String,
+    #[serde(default)]
+    pub is_admin: Option<String>,
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 pub async fn users_index(
-    _user: AuthUser,
+    user: AuthUser,
     Query(q): Query<UsersQuery>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
+
     let users = sqlx::query!(
-        "SELECT id, username, display_name, created_at FROM users ORDER BY created_at"
+        "SELECT id, username, display_name, is_admin, created_at FROM users ORDER BY created_at"
     )
     .fetch_all(&state.db)
     .await
@@ -69,6 +78,7 @@ pub async fn users_index(
         id: r.id.unwrap_or_default(),
         username: r.username,
         display_name: r.display_name,
+        is_admin: r.is_admin != 0,
         created_at: r.created_at,
     })
     .collect();
@@ -81,7 +91,7 @@ pub async fn users_index(
         _ => "An unexpected error occurred.".to_string(),
     });
 
-    match (UsersTemplate { active_nav: "users", users, error }).render() {
+    match (UsersTemplate { active_nav: "users", is_admin: user.is_admin, current_user_id: user.user_id, users, error }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -91,10 +101,14 @@ pub async fn users_index(
 }
 
 pub async fn users_create(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<CreateUserForm>,
 ) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
+
     if form.username.trim().is_empty() || form.password.is_empty() {
         return Redirect::to("/users?error=username_required").into_response();
     }
@@ -104,6 +118,8 @@ pub async fn users_create(
     } else {
         form.display_name.trim().to_string()
     };
+
+    let is_admin: i32 = if form.is_admin.as_deref() == Some("on") { 1 } else { 0 };
 
     // Hash password with Argon2id
     let sys_rng = SystemRandom::new();
@@ -132,11 +148,12 @@ pub async fn users_create(
     let username = form.username.trim().to_string();
 
     let result = sqlx::query!(
-        "INSERT INTO users (id, username, display_name, password_hash) VALUES (?, ?, ?, ?)",
+        "INSERT INTO users (id, username, display_name, password_hash, is_admin) VALUES (?, ?, ?, ?, ?)",
         id,
         username,
         display_name,
         hash,
+        is_admin,
     )
     .execute(&state.db)
     .await;
@@ -154,14 +171,84 @@ pub async fn users_create(
 }
 
 pub async fn users_delete(
-    _user: AuthUser,
+    user: AuthUser,
     Path(user_id): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    // Prevent self-deletion
+    if user_id == user.user_id {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
     if let Err(e) =
         sqlx::query!("DELETE FROM users WHERE id = ?", user_id).execute(&state.db).await
     {
         error!("Failed to delete user {user_id}: {e}");
     }
     Html("").into_response()
+}
+
+/// POST /users/{id}/toggle-admin — flip the is_admin flag (HTMX, returns updated badge)
+pub async fn users_toggle_admin(
+    user: AuthUser,
+    Path(target_id): Path<String>,
+    State(state): State<AppState>,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    // Prevent admins from changing their own admin status
+    if target_id == user.user_id {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    // Read current value and flip it
+    let current = sqlx::query!("SELECT is_admin FROM users WHERE id = ?", target_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten();
+
+    let new_val: i32 = match current {
+        Some(r) => if r.is_admin != 0 { 0 } else { 1 },
+        None => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    if let Err(e) = sqlx::query!(
+        "UPDATE users SET is_admin = ? WHERE id = ?",
+        new_val,
+        target_id,
+    )
+    .execute(&state.db)
+    .await
+    {
+        error!("Failed to toggle admin for user {target_id}: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    // Return the updated badge HTML
+    if new_val == 1 {
+        Html(format!(
+            r#"<button class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-coral/10 text-coral border border-coral/20 cursor-pointer hover:bg-coral/20 transition-colors"
+                    hx-post="/users/{id}/toggle-admin"
+                    hx-target="closest td"
+                    hx-swap="innerHTML"
+                    data-i18n="users.admin">Admin</button>"#,
+            id = target_id,
+        )).into_response()
+    } else {
+        Html(format!(
+            r#"<button class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-txt-muted border border-edge cursor-pointer hover:bg-sidebar-hover transition-colors"
+                    hx-post="/users/{id}/toggle-admin"
+                    hx-target="closest td"
+                    hx-swap="innerHTML"
+                    data-i18n="users.user">User</button>"#,
+            id = target_id,
+        )).into_response()
+    }
 }

@@ -40,6 +40,7 @@ pub struct UserOption {
 #[template(path = "subscriptions.html")]
 struct SubscriptionsTemplate {
     active_nav: &'static str,
+    is_admin: bool,
     subs: Vec<SubView>,
     users: Vec<UserOption>,
     error: Option<String>,
@@ -66,7 +67,10 @@ pub struct CreateSubForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn subscriptions_index(_user: AuthUser, Query(q): Query<SubsQuery>, State(state): State<AppState>) -> Response {
+pub async fn subscriptions_index(user: AuthUser, Query(q): Query<SubsQuery>, State(state): State<AppState>) -> Response {
+    if !user.is_admin {
+        return Redirect::to("/chat").into_response();
+    }
     let rows = sqlx::query!(
         r#"SELECT es.id, es.user_id, u.username,
                   es.event_type, es.reaction_type, es.reaction_config_json,
@@ -110,7 +114,7 @@ pub async fn subscriptions_index(_user: AuthUser, Query(q): Query<SubsQuery>, St
         })
         .collect();
 
-    match (SubscriptionsTemplate { active_nav: "subscriptions", subs, users, error: q.error, success: q.success }).render() {
+    match (SubscriptionsTemplate { active_nav: "subscriptions", is_admin: user.is_admin, subs, users, error: q.error, success: q.success }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -120,10 +124,13 @@ pub async fn subscriptions_index(_user: AuthUser, Query(q): Query<SubsQuery>, St
 }
 
 pub async fn subscriptions_create(
-    _user: AuthUser,
+    user: AuthUser,
     State(state): State<AppState>,
     Form(form): Form<CreateSubForm>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if form.user_id.is_empty()
         || form.event_type.trim().is_empty()
         || form.reaction_type.is_empty()
@@ -215,10 +222,13 @@ pub async fn subscriptions_create(
 }
 
 pub async fn subscriptions_delete(
-    _user: AuthUser,
+    user: AuthUser,
     Path(sub_id): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if let Err(e) = sqlx::query!(
         "UPDATE event_subscriptions SET active = 0 WHERE id = ?",
         sub_id

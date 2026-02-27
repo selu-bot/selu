@@ -187,3 +187,4 @@ Use `tokio::spawn` for fire-and-forget async work (personality extraction, title
 4. Are secrets handled safely (encrypted at rest, never logged, never in error messages)?
 5. Does `cargo test --workspace` pass?
 6. If you changed any `sqlx::query!` / `sqlx::query_as!` call or migration, did you run `cargo sqlx prepare --workspace` and verify the `.sqlx/` directory is staged? (The pre-commit hook does this automatically, but always run it explicitly too — do not rely on the hook alone.)
+7. If there are compile warnings -> fix them! We want to have a clean as debt free as possible codebase.
