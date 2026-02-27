@@ -44,9 +44,6 @@ Required variables:
 # 32-byte base64-encoded key for credential encryption
 # Generate: openssl rand -base64 32
 SELU__ENCRYPTION_KEY=<base64-key>
-
-# Optional: semantic memory (requires OpenAI API key)
-# SELU__EMBEDDING__API_KEY=sk-...
 ```
 
 Defaults that work out of the box (override if needed):
@@ -130,7 +127,6 @@ services:
       - selu-agents:/app/installed_agents
     environment:
       - SELU__ENCRYPTION_KEY=${SELU__ENCRYPTION_KEY}
-      - SELU__EMBEDDING__API_KEY=${SELU__EMBEDDING__API_KEY:-}
       # Optional: override marketplace URL
       # - SELU__MARKETPLACE_URL=https://selu.bot/api/marketplace/agents
     restart: unless-stopped
@@ -250,6 +246,3 @@ No additional secrets are needed. The workflow uses the built-in `GITHUB_TOKEN` 
 | `SELU__ENCRYPTION_KEY` | *(required)* | Base64-encoded 32-byte AES key |
 | `SELU__EGRESS_PROXY_ADDR` | `0.0.0.0:8888` | Egress proxy listen address |
 | `SELU__MAX_CHAIN_DEPTH` | `3` | Max event chain depth |
-| `SELU__EMBEDDING__API_KEY` | *(empty)* | OpenAI API key for semantic memory |
-| `SELU__EMBEDDING__BASE_URL` | `https://api.openai.com` | Embedding API base URL |
-| `SELU__EMBEDDING__MODEL` | `text-embedding-3-small` | Embedding model name |
