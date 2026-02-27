@@ -64,7 +64,7 @@ pub fn agent_registry_prompt(
         "You can delegate requests to these agents using the `delegate_to_agent` tool. \
          Delegate when a user's request clearly falls within a specialist's domain. \
          For general questions, conversation, or anything not covered by a specialist, \
-         handle it yourself.\n"
+         handle it yourself. Do not tell the user to use @mentions — handle the routing yourself.\n"
             .to_string(),
     );
 
