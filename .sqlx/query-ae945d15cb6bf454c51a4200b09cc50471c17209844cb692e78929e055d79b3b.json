@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, name, server_url, server_password, chat_guid, pipe_id, poll_interval_ms\n         FROM bluebubbles_configs WHERE id = ? AND active = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_url",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_password",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "chat_guid",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "poll_interval_ms",
+        "ordinal": 6,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ae945d15cb6bf454c51a4200b09cc50471c17209844cb692e78929e055d79b3b"
+}
