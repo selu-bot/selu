@@ -418,13 +418,15 @@ async fn dispatch_message(
     // agent turn.
     if approval_queue::try_resolve_pending(&state, &thread_id).await {
         info!(thread_id = %thread_id, "Message consumed as tool approval response");
-        // Send a brief acknowledgment
+        // Send a brief acknowledgment in the user's language
+        let lang = crate::i18n::user_language(&state.db, &user_id).await;
+        let ack_text = crate::i18n::t(&lang, "approval.approved_processing");
         let _ = send_bb_reply(
             &http,
             &server_url,
             &server_password,
             &chat_guid,
-            "Approved. Processing...",
+            ack_text,
             message_guid.as_deref(),
             &sent_guids,
         ).await;
@@ -439,7 +441,7 @@ async fn dispatch_message(
         thread_id: Some(thread_id.clone()),
         chain_depth: 0,
         channel_kind: ChannelKind::ThreadedNonInteractive {
-            pipe_id,
+            pipe_id: pipe_id.clone(),
             thread_id: thread_id.clone(),
         },
     };
@@ -474,7 +476,7 @@ async fn dispatch_message(
     // Store Selu's reply GUID so future incoming replies can be matched
     // back to this thread.
     if let Some(guid) = sent_guid {
-        let _ = thread_mgr::update_reply_guid(&state.db, &thread_id, &guid).await;
+        let _ = thread_mgr::update_reply_guid(&state.db, &thread_id, &pipe_id, &guid).await;
     }
 }
 

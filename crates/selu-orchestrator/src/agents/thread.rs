@@ -62,15 +62,17 @@ pub async fn create_thread(
 
 /// Find an active thread by matching a message GUID.
 ///
-/// Checks both `origin_message_ref` (the inbound message that started the
-/// thread) and `last_reply_guid` (Selu's last outbound reply in the thread).
-/// This enables iMessage reply-to chains: when a user replies to Selu's
-/// message, we can route it back into the correct thread.
+/// Checks `origin_message_ref` (the inbound message that started the
+/// thread), `last_reply_guid` (legacy single-GUID field), AND the
+/// `thread_reply_guids` table which stores ALL outbound message GUIDs.
+/// This enables iMessage reply-to chains: when a user replies to *any*
+/// of Selu's messages in the thread, we can route it back correctly.
 pub async fn find_thread_by_message_ref(
     db: &SqlitePool,
     pipe_id: &str,
     message_ref: &str,
 ) -> Result<Option<Thread>> {
+    // First try origin_message_ref and last_reply_guid (fast path)
     let row = sqlx::query!(
         r#"SELECT id, pipe_id, session_id, user_id, status, title,
                   origin_message_ref, last_reply_guid, created_at, completed_at
@@ -81,6 +83,36 @@ pub async fn find_thread_by_message_ref(
            LIMIT 1"#,
         pipe_id,
         message_ref,
+        message_ref,
+    )
+    .fetch_optional(db)
+    .await?;
+
+    if let Some(r) = row {
+        return Ok(Some(Thread {
+            id: Uuid::parse_str(r.id.as_deref().unwrap_or_default())?,
+            pipe_id: Uuid::parse_str(&r.pipe_id)?,
+            session_id: Uuid::parse_str(&r.session_id)?,
+            user_id: Uuid::parse_str(&r.user_id)?,
+            status: ThreadStatus::Active,
+            title: r.title,
+            origin_message_ref: r.origin_message_ref,
+            last_reply_guid: r.last_reply_guid,
+            created_at: r.created_at.parse().unwrap_or_default(),
+            completed_at: None,
+        }));
+    }
+
+    // Fall back to the thread_reply_guids lookup table (all outbound GUIDs)
+    let row = sqlx::query!(
+        r#"SELECT t.id, t.pipe_id, t.session_id, t.user_id, t.status, t.title,
+                  t.origin_message_ref, t.last_reply_guid, t.created_at, t.completed_at
+           FROM threads t
+           JOIN thread_reply_guids g ON g.thread_id = t.id
+           WHERE g.pipe_id = ? AND g.reply_guid = ? AND t.status = 'active'
+           ORDER BY t.created_at DESC
+           LIMIT 1"#,
+        pipe_id,
         message_ref,
     )
     .fetch_optional(db)
@@ -134,7 +166,12 @@ pub async fn find_or_create_thread(
 
 /// Store Selu's outbound reply GUID on the thread so future incoming
 /// replies can be matched back to this thread.
-pub async fn update_reply_guid(db: &SqlitePool, thread_id: &str, reply_guid: &str) -> Result<()> {
+///
+/// Updates the `last_reply_guid` convenience column AND inserts into the
+/// `thread_reply_guids` lookup table so that ALL outbound GUIDs are
+/// searchable (not just the most recent one).
+pub async fn update_reply_guid(db: &SqlitePool, thread_id: &str, pipe_id: &str, reply_guid: &str) -> Result<()> {
+    // Update the convenience column (latest reply)
     sqlx::query!(
         "UPDATE threads SET last_reply_guid = ? WHERE id = ?",
         reply_guid,
@@ -142,6 +179,20 @@ pub async fn update_reply_guid(db: &SqlitePool, thread_id: &str, reply_guid: &st
     )
     .execute(db)
     .await?;
+
+    // Insert into the lookup table so ALL outbound GUIDs are searchable
+    let id = Uuid::new_v4().to_string();
+    sqlx::query!(
+        "INSERT OR IGNORE INTO thread_reply_guids (id, thread_id, pipe_id, reply_guid)
+         VALUES (?, ?, ?, ?)",
+        id,
+        thread_id,
+        pipe_id,
+        reply_guid,
+    )
+    .execute(db)
+    .await?;
+
     Ok(())
 }
 

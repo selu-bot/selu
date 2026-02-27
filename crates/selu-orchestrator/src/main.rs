@@ -11,6 +11,7 @@ mod bluebubbles;
 mod capabilities;
 mod channels;
 mod events;
+mod i18n;
 mod llm;
 mod permissions;
 mod web;

@@ -439,8 +439,11 @@ where
                         &tool_call_id,
                     ).await?;
 
+                    // Look up user language for the approval prompt
+                    let lang = crate::i18n::user_language(&state.db, user_id).await;
+
                     // Build a human-readable approval prompt
-                    let prompt_text = build_approval_prompt(namespaced_name, args);
+                    let prompt_text = build_approval_prompt(&lang, namespaced_name, args);
 
                     // Send the approval prompt via the channel
                     // Look up the thread's origin_message_ref for reply-to
@@ -469,7 +472,7 @@ where
                             // inline reply routes back to this thread
                             if let Some(ref guid) = sent_guid {
                                 let _ = thread_mgr::update_reply_guid(
-                                    &state.db, chan_thread, guid,
+                                    &state.db, chan_thread, chan_pipe, guid,
                                 ).await;
                             }
                         }
@@ -517,15 +520,15 @@ where
 }
 
 /// Build a human-readable approval prompt for non-interactive channels.
-fn build_approval_prompt(tool_name: &str, args: &serde_json::Value) -> String {
+/// Uses the server-side i18n module to translate the prompt into the
+/// user's preferred language.
+fn build_approval_prompt(lang: &str, tool_name: &str, args: &serde_json::Value) -> String {
     let display_name = tool_name
         .split("__")
         .last()
         .unwrap_or(tool_name);
 
-    let mut prompt = format!(
-        "I'd like to use the tool \"{display_name}\""
-    );
+    let mut prompt = crate::i18n::t_with_tool(lang, "approval.would_like_to_use", display_name);
 
     // Add key argument values for context
     if let Some(obj) = args.as_object() {
@@ -548,7 +551,8 @@ fn build_approval_prompt(tool_name: &str, args: &serde_json::Value) -> String {
             .collect();
 
         if !relevant.is_empty() {
-            prompt.push_str(" with:\n");
+            prompt.push_str(crate::i18n::t(lang, "approval.with_args"));
+            prompt.push('\n');
             for item in &relevant {
                 prompt.push_str(&format!("  - {item}\n"));
             }
@@ -559,7 +563,8 @@ fn build_approval_prompt(tool_name: &str, args: &serde_json::Value) -> String {
         prompt.push_str(".\n");
     }
 
-    prompt.push_str("\nReply to this message to approve.");
+    prompt.push('\n');
+    prompt.push_str(crate::i18n::t(lang, "approval.reply_to_approve"));
     prompt
 }
 

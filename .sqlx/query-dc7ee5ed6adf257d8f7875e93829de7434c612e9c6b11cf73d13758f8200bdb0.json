@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id, t.pipe_id, t.session_id, t.user_id, t.status, t.title,\n                  t.origin_message_ref, t.last_reply_guid, t.created_at, t.completed_at\n           FROM threads t\n           JOIN thread_reply_guids g ON g.thread_id = t.id\n           WHERE g.pipe_id = ? AND g.reply_guid = ? AND t.status = 'active'\n           ORDER BY t.created_at DESC\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "session_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "origin_message_ref",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "last_reply_guid",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "completed_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "dc7ee5ed6adf257d8f7875e93829de7434c612e9c6b11cf73d13758f8200bdb0"
+}

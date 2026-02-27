@@ -97,8 +97,8 @@ docker run -d \
   --name selu \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v selu-data:/app/data \
-  -v selu-agents:/app/installed_agents \
+  -v ./data:/app/data \
+  -v ./installed_agents:/app/installed_agents \
   -e SELU__ENCRYPTION_KEY="$(openssl rand -base64 32)" \
   ghcr.io/selu-bot/selu:latest
 ```
@@ -108,8 +108,8 @@ docker run -d \
 | Mount | Purpose |
 |-------|---------|
 | `/var/run/docker.sock` | Required -- Selu manages capability containers via the Docker API |
-| `/app/installed_agents` | Persistent storage for agents installed from the marketplace |
-| `/app/data` | SQLite database (persistent state) |
+| `./data` → `/app/data` | SQLite database (persistent state) |
+| `./installed_agents` → `/app/installed_agents` | Agents installed from the marketplace |
 
 ### Docker Compose (recommended)
 
@@ -123,17 +123,13 @@ services:
       - "3000:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - selu-data:/app/data
-      - selu-agents:/app/installed_agents
+      - ./data:/app/data
+      - ./installed_agents:/app/installed_agents
     environment:
       - SELU__ENCRYPTION_KEY=${SELU__ENCRYPTION_KEY}
       # Optional: override marketplace URL
       # - SELU__MARKETPLACE_URL=https://selu.bot/api/marketplace/agents
     restart: unless-stopped
-
-volumes:
-  selu-data:
-  selu-agents:
 ```
 
 Then:
