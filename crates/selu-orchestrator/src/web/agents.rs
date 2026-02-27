@@ -137,6 +137,16 @@ pub struct EgressEntryView {
     pub created_at: String,
 }
 
+/// A built-in tool (delegate_to_agent, emit_event) with its current policy.
+#[derive(Debug, Clone)]
+pub struct BuiltinPolicyView {
+    pub capability_id: String,
+    pub tool_name: String,
+    pub display_name: String,
+    pub description: String,
+    pub policy: String,
+}
+
 #[derive(Template)]
 #[template(path = "agents_detail.html")]
 struct AgentDetailTemplate {
@@ -144,6 +154,7 @@ struct AgentDetailTemplate {
     agent_id: String,
     agent_name: String,
     capabilities: Vec<CapabilityView>,
+    builtin_policies: Vec<BuiltinPolicyView>,
     egress_entries: Vec<EgressEntryView>,
 }
 
@@ -157,6 +168,13 @@ pub struct SetAgentModelForm {
     pub temperature: String,
 }
 fn default_temp_str() -> String { "0.7".into() }
+
+#[derive(Debug, Deserialize)]
+pub struct SetToolPolicyForm {
+    pub capability_id: String,
+    pub tool_name: String,
+    pub policy: String,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct SetDefaultModelForm {
@@ -790,11 +808,35 @@ pub async fn agent_detail(
     egress_entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     egress_entries.truncate(100);
 
+    // Build built-in tool policy views
+    use crate::permissions::tool_policy::{BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT};
+    let builtin_tools = [
+        (BUILTIN_DELEGATE, "Delegate to Agent", "Allows the agent to hand off tasks to other specialist agents."),
+        (BUILTIN_EMIT_EVENT, "Emit Event", "Allows the agent to emit events that can trigger other agents or notifications."),
+    ];
+    let builtin_policies: Vec<BuiltinPolicyView> = builtin_tools
+        .iter()
+        .map(|(tool_name, display, desc)| {
+            let policy = policy_map
+                .get(&(BUILTIN_CAPABILITY_ID.to_string(), tool_name.to_string()))
+                .cloned()
+                .unwrap_or_else(|| "not set".to_string());
+            BuiltinPolicyView {
+                capability_id: BUILTIN_CAPABILITY_ID.to_string(),
+                tool_name: tool_name.to_string(),
+                display_name: display.to_string(),
+                description: desc.to_string(),
+                policy,
+            }
+        })
+        .collect();
+
     match (AgentDetailTemplate {
         active_nav: "agents",
         agent_id,
         agent_name,
         capabilities,
+        builtin_policies,
         egress_entries,
     })
     .render()
@@ -830,6 +872,37 @@ pub async fn set_agent_model_handler(
     }
 
     Redirect::to("/agents?success=Model+updated+successfully.").into_response()
+}
+
+/// HTMX endpoint: update a single tool policy for an agent.
+///
+/// Returns an updated badge fragment so the UI reflects the new state
+/// without a full page reload.
+pub async fn set_tool_policy_handler(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    State(state): State<AppState>,
+    Form(form): Form<SetToolPolicyForm>,
+) -> Response {
+    let policy = match crate::permissions::tool_policy::ToolPolicy::from_str(&form.policy) {
+        Ok(p) => p,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+
+    if let Err(e) = crate::permissions::tool_policy::set_policies(
+        &state.db,
+        &user.user_id,
+        &agent_id,
+        &[(form.capability_id, form.tool_name, policy)],
+    )
+    .await
+    {
+        error!("Failed to set tool policy: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    // Return empty 200 — the radio buttons already reflect the new state client-side
+    StatusCode::OK.into_response()
 }
 
 /// Uninstall an agent

@@ -83,19 +83,23 @@ pub type LoopSender = mpsc::Sender<LoopEvent>;
 /// streams the final text response for real-time token delivery.
 ///
 /// The `tool_dispatcher` closure is responsible for:
-///   1. Checking the user's tool policy
-///   2. If `Allow`: invoking the tool and returning `ToolDispatchResult::Done`
+///   1. Checking the user's tool policy (unless `approved` is `true`)
+///   2. If `Allow` (or `approved`): invoking the tool and returning `ToolDispatchResult::Done`
 ///   3. If `Block` / no policy: returning `ToolDispatchResult::Blocked`
 ///   4. If `Ask` + interactive: returning `ToolDispatchResult::NeedsConfirmation`
 ///   5. If `Ask` + threaded non-interactive: queuing an approval and returning
 ///      `ToolDispatchResult::Queued`
+///
+/// The third parameter (`approved: bool`) is `true` when the user has already
+/// approved this specific call via the confirmation flow.  In that case the
+/// dispatcher should skip the policy check and invoke the tool directly.
 pub async fn run_loop(
     provider: Arc<dyn LlmProvider>,
     mut messages: Vec<ChatMessage>,
     tools: Vec<ToolSpec>,
     temperature: f32,
     tx: LoopSender,
-    tool_dispatcher: impl Fn(String, serde_json::Value) -> futures::future::BoxFuture<'static, Result<ToolDispatchResult>> + Send + Sync + 'static,
+    tool_dispatcher: impl Fn(String, serde_json::Value, bool) -> futures::future::BoxFuture<'static, Result<ToolDispatchResult>> + Send + Sync + 'static,
 ) -> Result<String> {
     let max_iterations = 10;
 
@@ -163,7 +167,7 @@ pub async fn run_loop(
                     let _ = tx.send(LoopEvent::CapabilityStatus(status)).await;
 
                     // ── Dispatch with policy enforcement ──────────────────────
-                    let dispatch_result = tool_dispatcher(call.name.clone(), call.arguments.clone())
+                    let dispatch_result = tool_dispatcher(call.name.clone(), call.arguments.clone(), false)
                         .await
                         .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
 
@@ -201,9 +205,9 @@ pub async fn run_loop(
                             }
                             info!(tool = %call.name, "Tool call approved by user (interactive)");
 
-                            // Re-dispatch — this time the dispatcher should
-                            // invoke unconditionally (the policy check already passed).
-                            let result = tool_dispatcher(call.name.clone(), call.arguments.clone())
+                            // Re-dispatch — the user already approved, so the
+                            // dispatcher should skip the policy check and invoke directly.
+                            let result = tool_dispatcher(call.name.clone(), call.arguments.clone(), true)
                                 .await
                                 .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
 
@@ -259,7 +263,7 @@ pub async fn run_loop(
                             info!(tool = %call.name, "Tool call approved (async)");
 
                             // Re-dispatch after approval
-                            let result = tool_dispatcher(call.name.clone(), call.arguments.clone())
+                            let result = tool_dispatcher(call.name.clone(), call.arguments.clone(), true)
                                 .await
                                 .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
 

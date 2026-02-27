@@ -87,6 +87,70 @@
     </div>
     {% endfor %}
 
+    <!-- Built-in Tool Permissions -->
+    {% if !builtin_policies.is_empty() %}
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading">Built-in Tool Permissions</span>
+      </div>
+      <div class="p-5 space-y-2">
+        <p class="text-xs text-txt-muted leading-relaxed mb-3">
+          Control how this agent uses built-in tools. Changes take effect immediately.
+        </p>
+
+        {% for bp in builtin_policies %}
+        <div class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl gap-4">
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-txt-heading truncate">{{ bp.display_name }}</div>
+            <div class="text-xs text-txt-muted mt-0.5 line-clamp-2">{{ bp.description }}</div>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <label class="inline-flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="policy_{{ bp.tool_name }}" value="allow"
+                     {% if bp.policy == "allow" %}checked{% endif %}
+                     hx-post="/agents/{{ agent_id }}/policy"
+                     hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "allow"}'
+                     hx-swap="none"
+                     class="sr-only peer" />
+              <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
+                           peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30
+                           text-txt-muted hover:text-txt-heading transition-all">
+                Allow
+              </span>
+            </label>
+            <label class="inline-flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="policy_{{ bp.tool_name }}" value="ask"
+                     {% if bp.policy == "ask" %}checked{% endif %}
+                     hx-post="/agents/{{ agent_id }}/policy"
+                     hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "ask"}'
+                     hx-swap="none"
+                     class="sr-only peer" />
+              <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
+                           peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30
+                           text-txt-muted hover:text-txt-heading transition-all">
+                Ask
+              </span>
+            </label>
+            <label class="inline-flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="policy_{{ bp.tool_name }}" value="block"
+                     {% if bp.policy == "block" || bp.policy == "not set" %}checked{% endif %}
+                     hx-post="/agents/{{ agent_id }}/policy"
+                     hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "block"}'
+                     hx-swap="none"
+                     class="sr-only peer" />
+              <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
+                           peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30
+                           text-txt-muted hover:text-txt-heading transition-all">
+                Block
+              </span>
+            </label>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Egress Log -->
     <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
       <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">

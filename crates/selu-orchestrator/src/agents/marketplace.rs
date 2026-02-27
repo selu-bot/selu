@@ -247,13 +247,64 @@ pub async fn uninstall_agent(
         ));
     }
 
+    // Collect capability IDs before we tear anything down. Try the
+    // in-memory map first; fall back to loading from disk.
+    let cap_ids: Vec<String> = {
+        let map = agents.read().await;
+        if let Some(def) = map.get(agent_id) {
+            def.capability_manifests.keys().cloned().collect()
+        } else {
+            drop(map);
+            let agent_dir = Path::new(installed_dir).join(agent_id);
+            loader::load_one(&agent_dir)
+                .await
+                .map(|d| d.capability_manifests.keys().cloned().collect())
+                .unwrap_or_default()
+        }
+    };
+
     // Remove from in-memory map
     {
         let mut map = agents.write().await;
         map.remove(agent_id);
     }
 
-    // Remove DB row
+    // Remove tool policies for this agent (all users)
+    sqlx::query("DELETE FROM tool_policies WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(db)
+        .await
+        .context("Failed to delete tool policies")?;
+
+    // Remove pending approvals for this agent
+    sqlx::query("DELETE FROM pending_tool_approvals WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(db)
+        .await
+        .context("Failed to delete pending approvals")?;
+
+    // Remove credentials and egress log entries for each capability
+    for cap_id in &cap_ids {
+        sqlx::query("DELETE FROM system_credentials WHERE capability_id = ?")
+            .bind(cap_id)
+            .execute(db)
+            .await
+            .context("Failed to delete system credentials")?;
+
+        sqlx::query("DELETE FROM user_credentials WHERE capability_id = ?")
+            .bind(cap_id)
+            .execute(db)
+            .await
+            .context("Failed to delete user credentials")?;
+
+        sqlx::query("DELETE FROM egress_log WHERE capability_id = ?")
+            .bind(cap_id)
+            .execute(db)
+            .await
+            .context("Failed to delete egress log entries")?;
+    }
+
+    // Remove agent DB row
     sqlx::query("DELETE FROM agents WHERE id = ?")
         .bind(agent_id)
         .execute(db)

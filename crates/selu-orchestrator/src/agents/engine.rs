@@ -171,6 +171,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     let dispatcher_state = state.clone();
     let dispatcher_channel = channel_kind.clone();
     let dispatcher_pipe = pipe_id.clone();
+    let dispatcher_tx = tx.clone();
 
     let reply = run_loop(
         provider,
@@ -178,7 +179,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         tool_specs,
         resolved.temperature,
         tx.clone(),
-        move |name, args| {
+        move |name, args, approved| {
             let engine = cap_engine.clone();
             let store = cred_store.clone();
             let bus = event_bus.clone();
@@ -191,6 +192,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             let state = dispatcher_state.clone();
             let channel = dispatcher_channel.clone();
             let pipe = dispatcher_pipe.clone();
+            let del_tx = dispatcher_tx.clone();
 
             Box::pin(async move {
                 // ── Built-in tools: emit_event, delegate_to_agent ─────────
@@ -207,6 +209,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         &session,
                         &pipe,
                         &agent_id_copy,
+                        approved,
                         || {
                             let bus = bus.clone();
                             let session = session.clone();
@@ -236,15 +239,19 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         &session,
                         &pipe,
                         &agent_id_copy,
+                        approved,
                         || {
                             let del_state = del_state.clone();
                             let del_pipe = del_pipe.clone();
                             let user = user.clone();
                             let args = args.clone();
                             let chain_depth = chain_depth;
+                            let del_channel = channel.clone();
+                            let del_tx = del_tx.clone();
                             Box::pin(async move {
                                 dispatch_delegation(
                                     del_state, del_pipe, user, args, chain_depth,
+                                    del_channel, del_tx,
                                 ).await
                             })
                         },
@@ -272,6 +279,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     &session,
                     &pipe,
                     &agent_id_copy,
+                    approved,
                     || {
                         let engine = engine.clone();
                         let manifests = manifests.clone();
@@ -356,8 +364,12 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
 /// Check the user's tool policy and either invoke the tool, block it,
 /// or return a confirmation/queued result.
 ///
+/// When `approved` is `true` the caller has already obtained user consent
+/// (e.g. via the interactive confirmation flow).  In that case the policy
+/// check is skipped and the tool is invoked directly.
+///
 /// `invoke_fn` is a closure that actually executes the tool. It is only
-/// called when the policy is `Allow`.
+/// called when the policy is `Allow` or the call was pre-approved.
 async fn check_policy_and_dispatch<F, Fut>(
     state: &AppState,
     user_id: &str,
@@ -369,12 +381,20 @@ async fn check_policy_and_dispatch<F, Fut>(
     session_id: &str,
     pipe_id: &str,
     agent_id: &str,
+    approved: bool,
     invoke_fn: F,
 ) -> Result<ToolDispatchResult>
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<String>>,
 {
+    // If the user already approved this call, skip policy lookup and invoke.
+    if approved {
+        let result = invoke_fn().await
+            .unwrap_or_else(|e| format!("Tool error: {}", e));
+        return Ok(ToolDispatchResult::Done(result));
+    }
+
     let policy = tool_policy::get_policy(&state.db, user_id, capability_id, tool_name)
         .await
         .unwrap_or(None);
@@ -593,9 +613,9 @@ async fn generate_thread_title(
 
 /// Dispatch a `delegate_to_agent` tool call by running a nested agent turn.
 ///
-/// The delegated turn runs non-streaming (the orchestrator agent will relay
-/// the response), using the same pipe and user but targeting the specialist
-/// agent directly.
+/// The delegated turn inherits the parent's channel kind and event sender
+/// so that tool confirmations can bubble up to the user (e.g. via the
+/// web UI SSE stream).
 ///
 /// Returns a `BoxFuture` (rather than being `async fn`) so that the recursive
 /// `run_turn` call satisfies the `Send` bound required by the tool dispatcher.
@@ -605,6 +625,8 @@ fn dispatch_delegation(
     user_id: String,
     args: serde_json::Value,
     chain_depth: i32,
+    channel_kind: ChannelKind,
+    tx: LoopSender,
 ) -> BoxFuture<'static, Result<String>> {
     async move {
         let (target_agent_id, message) = delegation::parse_args(&args)?;
@@ -622,12 +644,12 @@ fn dispatch_delegation(
             message,
             thread_id: None, // Delegation gets its own context, no thread
             chain_depth: chain_depth + 1,
-            channel_kind: ChannelKind::NonInteractive,
+            channel_kind,
         };
 
-        // Run the delegated turn with a noop sender — we capture the reply text
-        // and return it as the tool result to the orchestrator.
-        let reply = run_turn(&state, params, noop_sender()).await?;
+        // Run the delegated turn with the parent's sender so that
+        // confirmation prompts and status updates reach the user.
+        let reply = run_turn(&state, params, tx).await?;
 
         Ok(reply)
     }.boxed()

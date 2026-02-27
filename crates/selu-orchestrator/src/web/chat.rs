@@ -278,12 +278,12 @@ pub async fn chat_send(
 
     let html = format!(
         r#"<div class="flex justify-end">
-  <div class="max-w-[72%] bg-brand-600/20 border border-brand-500/20 rounded-2xl rounded-br-md px-4 py-2.5">
-    <p class="text-sm leading-relaxed whitespace-pre-wrap break-words">{escaped_text}</p>
+  <div class="max-w-[72%] bg-gradient-to-br from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">
+    <p class="text-sm leading-relaxed whitespace-pre-wrap break-words text-txt-heading">{escaped_text}</p>
   </div>
 </div>
-<div class="flex justify-start">
-  <div class="max-w-[72%] bg-slate-800 border border-slate-700 rounded-2xl rounded-bl-md px-4 py-2.5">
+<div class="flex justify-start" id="stream-wrap-{stream_id}" style="display:none">
+  <div class="max-w-[72%] bg-surface-raised border border-edge rounded-2xl rounded-bl-md px-4 py-2.5">
     <div class="text-sm leading-relaxed break-words markdown-body streaming" id="stream-{stream_id}"
          hx-ext="sse"
          sse-connect="/chat/{pipe_id}/stream/{stream_id}"
@@ -399,7 +399,8 @@ pub async fn chat_stream(
   var msgs = document.getElementById('messages');
   var statusDiv = document.createElement('div');
   statusDiv.className = 'flex justify-start';
-  statusDiv.innerHTML = '<div class="tool-status active"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg><span>Approval queued for {display} (id: {id})</span></div>';
+  var label = t('chat.confirm.queued').replace('{{tool}}', '{display}').replace('{{id}}', '{id}');
+  statusDiv.innerHTML = '<div class="tool-status active"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg><span>' + label + '</span></div>';
   msgs.appendChild(statusDiv);
   msgs.scrollTop = msgs.scrollHeight;
 }})();
@@ -440,16 +441,16 @@ pub async fn chat_confirm(
             let _ = tx.send(approved);
             if approved {
                 Html(format!(
-                    r#"<div class="flex justify-start"><div class="tool-status" style="color:#6ee7b7;border-color:rgba(16,185,129,0.3);background:rgba(6,95,70,0.15)"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Approved</span></div></div>"#
+                    r#"<div class="flex justify-start"><div class="tool-status" style="color:#6ee7b7;border-color:rgba(16,185,129,0.3);background:rgba(6,95,70,0.15)"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span data-i18n="chat.confirm.approved">Approved</span></div></div>"#
                 )).into_response()
             } else {
                 Html(format!(
-                    r#"<div class="flex justify-start"><div class="tool-status" style="color:#fca5a5;border-color:rgba(220,38,38,0.3);background:rgba(127,29,29,0.15)"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Denied</span></div></div>"#
+                    r#"<div class="flex justify-start"><div class="tool-status" style="color:#fca5a5;border-color:rgba(220,38,38,0.3);background:rgba(127,29,29,0.15)"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span data-i18n="chat.confirm.denied">Denied</span></div></div>"#
                 )).into_response()
             }
         }
         None => {
-            Html(r#"<div class="flex justify-start"><div class="tool-status"><span>Confirmation expired or already handled.</span></div></div>"#.to_string())
+            Html(r#"<div class="flex justify-start"><div class="tool-status"><span data-i18n="chat.confirm.expired">Confirmation expired or already handled.</span></div></div>"#.to_string())
                 .into_response()
         }
     }
@@ -534,13 +535,13 @@ fn build_confirmation_html(sid: &str, cid: &str, tool: &str, args: &str) -> Stri
     s.push_str("  cardWrap.id = 'confirm-");
     s.push_str(cid);
     s.push_str("';\n");
-    // Build innerHTML using JS string concatenation to avoid Rust raw string issues
+    // Build innerHTML using JS string concatenation; use t() for i18n
     s.push_str("  var h = '';\n");
     s.push_str("  h += '<div class=\"confirm-card\">';\n");
     s.push_str("  h += '<div class=\"flex items-center gap-2 text-sm font-medium text-amber-300 mb-2\">';\n");
     s.push_str("  h += '<svg class=\"w-4 h-4\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg>';\n");
-    s.push_str("  h += ' Confirmation required</div>';\n");
-    s.push_str("  h += '<p class=\"text-xs text-slate-300 mb-1\">Tool: <code class=\"bg-slate-900 px-1.5 py-0.5 rounded text-brand-300 text-xs\">");
+    s.push_str("  h += ' ' + t('chat.confirm.title') + '</div>';\n");
+    s.push_str("  h += '<p class=\"text-xs text-txt-muted mb-1\">' + t('chat.confirm.tool') + ' <code class=\"bg-surface-input px-1.5 py-0.5 rounded text-brand-300 text-xs\">");
     s.push_str(&tool_esc);
     s.push_str("</code></p>';\n");
     s.push_str("  h += '<pre>");
@@ -551,12 +552,12 @@ fn build_confirmation_html(sid: &str, cid: &str, tool: &str, args: &str) -> Stri
     s.push_str(cid);
     s.push_str("?approved=true\" hx-target=\"#confirm-");
     s.push_str(cid);
-    s.push_str("\" hx-swap=\"outerHTML\" class=\"btn-approve\">Approve</button>';\n");
+    s.push_str("\" hx-swap=\"outerHTML\" class=\"btn-approve\">' + t('chat.confirm.approve') + '</button>';\n");
     s.push_str("  h += '<button hx-post=\"/chat/confirm/");
     s.push_str(cid);
     s.push_str("?approved=false\" hx-target=\"#confirm-");
     s.push_str(cid);
-    s.push_str("\" hx-swap=\"outerHTML\" class=\"btn-deny\">Deny</button>';\n");
+    s.push_str("\" hx-swap=\"outerHTML\" class=\"btn-deny\">' + t('chat.confirm.deny') + '</button>';\n");
     s.push_str("  h += '</div></div>';\n");
     s.push_str("  cardWrap.innerHTML = h;\n");
     s.push_str("  msgs.appendChild(cardWrap);\n");

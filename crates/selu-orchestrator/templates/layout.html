@@ -421,6 +421,14 @@
         'chat.selectpipe': 'Select a conversation to start chatting',
         'chat.placeholder': 'Message... (Shift+Enter for newline)',
         'chat.send': 'Send',
+        'chat.confirm.title': 'Confirmation required',
+        'chat.confirm.tool': 'Tool:',
+        'chat.confirm.approve': 'Approve',
+        'chat.confirm.deny': 'Deny',
+        'chat.confirm.approved': 'Approved',
+        'chat.confirm.denied': 'Denied',
+        'chat.confirm.expired': 'Confirmation expired or already handled.',
+        'chat.confirm.queued': 'Approval queued for {tool} (id: {id})',
         'pipes.title': 'Pipes',
         'pipes.desc': 'Pipes connect the outside world to your agents. Add a pipe for each way you want to talk to Selu.',
         'pipes.active': 'Active Pipes',
@@ -523,6 +531,14 @@
         'chat.selectpipe': 'W\u00e4hle eine Unterhaltung zum Chatten',
         'chat.placeholder': 'Nachricht... (Shift+Enter f\u00fcr Zeilenumbruch)',
         'chat.send': 'Senden',
+        'chat.confirm.title': 'Best\u00e4tigung erforderlich',
+        'chat.confirm.tool': 'Tool:',
+        'chat.confirm.approve': 'Genehmigen',
+        'chat.confirm.deny': 'Ablehnen',
+        'chat.confirm.approved': 'Genehmigt',
+        'chat.confirm.denied': 'Abgelehnt',
+        'chat.confirm.expired': 'Best\u00e4tigung abgelaufen oder bereits bearbeitet.',
+        'chat.confirm.queued': 'Genehmigung angefragt f\u00fcr {tool} (id: {id})',
         'pipes.title': 'Pipes',
         'pipes.desc': 'Pipes verbinden die Au\u00dfenwelt mit deinen Agenten. F\u00fcge f\u00fcr jeden Kommunikationsweg eine Pipe hinzu.',
         'pipes.active': 'Aktive Pipes',
@@ -654,6 +670,9 @@
       var raw = (el.dataset.rawContent || '') + tokenText;
       el.dataset.rawContent = raw;
       el.innerHTML = marked.parse(raw);
+      // Show the wrapper on first token
+      var wrap = el.closest('[id^="stream-wrap-"]');
+      if (wrap && wrap.style.display === 'none') wrap.style.display = '';
     }
     function finalizeStream(streamId) {
       var el = document.getElementById('stream-' + streamId);
@@ -662,9 +681,12 @@
         var raw = el.dataset.rawContent || el.textContent || '';
         if (raw.trim()) { el.innerHTML = marked.parse(raw); }
         el.dataset.mdRendered = '1';
+        // Remove the wrapper if empty; otherwise ensure it is visible
+        var wrap = document.getElementById('stream-wrap-' + streamId);
         if (!raw.trim()) {
-          var bubble = el.closest('.flex.justify-start');
-          if (bubble) bubble.remove();
+          if (wrap) wrap.remove();
+        } else if (wrap) {
+          wrap.style.display = '';
         }
       }
       document.querySelectorAll('.tool-status').forEach(function(pill) {
@@ -690,6 +712,10 @@
         e.target.style.height = 'auto';
         e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
       }
+    });
+    // Re-apply translations on HTMX swaps (for dynamically injected i18n elements)
+    document.addEventListener('htmx:afterSettle', function() {
+      applyTranslations(getCurrentLang());
     });
     document.addEventListener('keydown', function(e) {
       if (e.target.tagName === 'TEXTAREA' && e.key === 'Enter' && !e.shiftKey) {
