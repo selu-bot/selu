@@ -388,8 +388,14 @@ pub async fn imessage_setup_submit(
         }
     }
 
+    // 5. Start the adapter immediately (no restart needed)
+    if let Err(e) = crate::bluebubbles::adapter::start_one(state, &bb_config_id).await {
+        error!("Failed to start BlueBubbles adapter: {e}");
+        // Non-fatal: the config is saved, adapter will start on next restart
+    }
+
     Redirect::to(&format!(
-        "/pipes/imessage/{}?msg=iMessage+pipe+set+up+successfully!+Restart+Selu+to+start+the+adapter.",
+        "/pipes/imessage/{}?msg=iMessage+pipe+set+up+successfully!",
         bb_config_id
     )).into_response()
 }

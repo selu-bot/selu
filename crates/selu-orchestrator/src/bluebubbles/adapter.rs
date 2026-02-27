@@ -101,8 +101,38 @@ struct AdapterInstance {
 }
 
 // ---------------------------------------------------------------------------
-// Public: start all configured adapters
+// Public: start adapters
 // ---------------------------------------------------------------------------
+
+/// Start a single BlueBubbles adapter by config ID.
+///
+/// Call this after inserting a new `bluebubbles_configs` row so the adapter
+/// begins polling immediately — no restart required.
+pub async fn start_one(state: AppState, config_id: &str) -> Result<()> {
+    let row = sqlx::query!(
+        "SELECT id, name, server_url, server_password, chat_guid, pipe_id, poll_interval_ms
+         FROM bluebubbles_configs WHERE id = ? AND active = 1",
+        config_id
+    )
+    .fetch_optional(&state.db)
+    .await
+    .context("Failed to load BlueBubbles config")?;
+
+    let row = row.ok_or_else(|| anyhow::anyhow!("BlueBubbles config not found or inactive: {config_id}"))?;
+
+    let cfg = BbConfig {
+        id: row.id.unwrap_or_default(),
+        name: row.name,
+        server_url: row.server_url,
+        server_password: row.server_password,
+        chat_guid: row.chat_guid,
+        pipe_id: row.pipe_id,
+        poll_interval_ms: row.poll_interval_ms,
+    };
+
+    spawn_adapter(&state, cfg);
+    Ok(())
+}
 
 /// Loads all active BlueBubbles configs from the DB and spawns a polling
 /// task for each one. Call this from main.rs after building AppState.
@@ -123,42 +153,55 @@ pub async fn start_all(state: AppState) {
     info!("Starting {} BlueBubbles adapter(s)", configs.len());
 
     for cfg in configs {
-        let instance = AdapterInstance {
-            config_id: cfg.id.clone(),
-            server_url: cfg.server_url.clone(),
-            server_password: cfg.server_password.clone(),
-            chat_guid: cfg.chat_guid.clone(),
-            pipe_id: cfg.pipe_id.clone(),
-            poll_interval_ms: cfg.poll_interval_ms as u64,
-            http: Client::new(),
-            sent_guids: Arc::new(RwLock::new(HashSet::new())),
-        };
-
-        // Register a ChannelSender for this pipe so the approval queue
-        // can send approval prompts via iMessage.
-        let sender = Arc::new(BlueBubblesSender {
-            http: Client::new(),
-            server_url: cfg.server_url.clone(),
-            server_password: cfg.server_password.clone(),
-            chat_guid: cfg.chat_guid.clone(),
-            sent_guids: instance.sent_guids.clone(),
-        });
-        state.channel_registry.register(&cfg.pipe_id, sender).await;
-
-        info!(
-            config_id = %cfg.id,
-            name = %cfg.name,
-            chat = %cfg.chat_guid,
-            pipe_id = %cfg.pipe_id,
-            poll_ms = cfg.poll_interval_ms,
-            "Starting BlueBubbles adapter"
-        );
-
-        let state_clone = state.clone();
-        tokio::spawn(async move {
-            poll_loop(instance, state_clone).await;
-        });
+        spawn_adapter(&state, cfg);
     }
+}
+
+/// Create an adapter instance for a single config, register its channel
+/// sender, and spawn the polling loop.
+fn spawn_adapter(state: &AppState, cfg: BbConfig) {
+    let instance = AdapterInstance {
+        config_id: cfg.id.clone(),
+        server_url: cfg.server_url.clone(),
+        server_password: cfg.server_password.clone(),
+        chat_guid: cfg.chat_guid.clone(),
+        pipe_id: cfg.pipe_id.clone(),
+        poll_interval_ms: cfg.poll_interval_ms as u64,
+        http: Client::new(),
+        sent_guids: Arc::new(RwLock::new(HashSet::new())),
+    };
+
+    // Register a ChannelSender for this pipe so the approval queue
+    // can send approval prompts via iMessage.
+    let sender = Arc::new(BlueBubblesSender {
+        http: Client::new(),
+        server_url: cfg.server_url.clone(),
+        server_password: cfg.server_password.clone(),
+        chat_guid: cfg.chat_guid.clone(),
+        sent_guids: instance.sent_guids.clone(),
+    });
+
+    let pipe_id = cfg.pipe_id.clone();
+    let state_clone = state.clone();
+    let state_for_spawn = state.clone();
+
+    // Register channel sender and spawn poller
+    tokio::spawn(async move {
+        state_clone.channel_registry.register(&pipe_id, sender).await;
+    });
+
+    info!(
+        config_id = %cfg.id,
+        name = %cfg.name,
+        chat = %cfg.chat_guid,
+        pipe_id = %cfg.pipe_id,
+        poll_ms = cfg.poll_interval_ms,
+        "Starting BlueBubbles adapter"
+    );
+
+    tokio::spawn(async move {
+        poll_loop(instance, state_for_spawn).await;
+    });
 }
 
 struct BbConfig {
