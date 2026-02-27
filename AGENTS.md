@@ -158,7 +158,7 @@ struct MyPageTemplate {
 
 **Background tasks:**
 
-Use `tokio::spawn` for fire-and-forget async work (embedding storage, title generation). Use `tokio::time::interval` in spawned loops for periodic tasks (session cleanup, workspace TTL).
+Use `tokio::spawn` for fire-and-forget async work (personality extraction, title generation). Use `tokio::time::interval` in spawned loops for periodic tasks (session cleanup, workspace TTL).
 
 **Testing:**
 
