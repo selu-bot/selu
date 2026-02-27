@@ -47,14 +47,18 @@ struct BbMessage {
     handle: Option<BbHandle>,
     guid: Option<String>,
     date_created: Option<i64>,
-    /// If this message is a reply to another message, this is the GUID of
-    /// the original message. Used to route replies into existing threads.
-    thread_origin_guid: Option<String>,
-    /// Associated message GUID — BlueBubbles may use this instead of
-    /// `thread_origin_guid` for reply-chain info.
+    /// The GUID of the first message in this thread (the "thread originator").
+    /// Set when the message is part of an iMessage reply chain.
+    /// Note: BB API field is "threadOriginatorGuid" (not "threadOriginGuid").
+    thread_originator_guid: Option<String>,
+    /// The GUID of the specific message this is a direct reply to.
+    /// Different from thread_originator_guid: the originator points to the
+    /// *first* message in the thread, while reply_to_guid points to the
+    /// *specific* message being replied to.
+    reply_to_guid: Option<String>,
+    /// Associated message GUID (for tapbacks/reactions, not regular replies).
     associated_message_guid: Option<String>,
-    /// The type of association (e.g. reply, tapback). Only relevant when
-    /// `associated_message_guid` is set.
+    /// The type of association (e.g. tapback type).
     associated_message_type: Option<String>,
 }
 
@@ -317,13 +321,15 @@ async fn poll_once(instance: &AdapterInstance, state: &AppState, after_ts: i64) 
             .unwrap_or_else(|| "self".into());
 
         let message_guid = msg.guid.clone();
-        let thread_origin_guid = msg.thread_origin_guid.clone();
+        let thread_originator_guid = msg.thread_originator_guid.clone();
+        let reply_to_guid = msg.reply_to_guid.clone();
 
         // Log ALL threading-related fields from BlueBubbles so we can
         // trace exactly what iMessage provides for reply-chain routing.
         info!(
             message_guid = ?message_guid,
-            thread_origin_guid = ?thread_origin_guid,
+            thread_originator_guid = ?thread_originator_guid,
+            reply_to_guid = ?reply_to_guid,
             associated_message_guid = ?msg.associated_message_guid,
             associated_message_type = ?msg.associated_message_type,
             is_from_me = msg.is_from_me,
@@ -368,7 +374,8 @@ async fn poll_once(instance: &AdapterInstance, state: &AppState, after_ts: i64) 
                 sender_ref,
                 text,
                 message_guid,
-                thread_origin_guid,
+                reply_to_guid,
+                thread_originator_guid,
                 chat_guid,
                 server_url,
                 server_password,
@@ -431,7 +438,8 @@ async fn dispatch_message(
     _sender_ref: String,
     text: String,
     message_guid: Option<String>,
-    thread_origin_guid: Option<String>,
+    reply_to_guid: Option<String>,
+    thread_originator_guid: Option<String>,
     chat_guid: String,
     server_url: String,
     server_password: String,
@@ -455,11 +463,22 @@ async fn dispatch_message(
         &agents_snapshot,
     );
 
-    // Find existing thread (reply-to chain) or create a new one
+    // ── Thread resolution ─────────────────────────────────────────────────
+    // For matching, we try multiple GUIDs in priority order:
+    //   1. reply_to_guid — the specific message being replied to (most precise)
+    //   2. thread_originator_guid — the first message in the thread
+    // Either can match an origin_message_ref, last_reply_guid, or an entry
+    // in the thread_reply_guids table.
+    let reply_to_ref = reply_to_guid
+        .as_deref()
+        .or(thread_originator_guid.as_deref());
+
     info!(
         pipe_id = %pipe_id,
         message_guid = ?message_guid,
-        thread_origin_guid = ?thread_origin_guid,
+        reply_to_guid = ?reply_to_guid,
+        thread_originator_guid = ?thread_originator_guid,
+        effective_reply_to_ref = ?reply_to_ref,
         "Thread resolution: looking for existing thread"
     );
     let thread = match thread_mgr::find_or_create_thread(
@@ -468,7 +487,7 @@ async fn dispatch_message(
         &user_id,
         &agent_id,
         message_guid.as_deref(),
-        thread_origin_guid.as_deref(),
+        reply_to_ref,
     ).await {
         Ok(t) => t,
         Err(e) => {
@@ -507,6 +526,10 @@ async fn dispatch_message(
         ).await;
         return;
     }
+
+    // Show typing indicator while the agent is working.
+    // Stops automatically when we send the reply message.
+    start_typing(&http, &server_url, &server_password, &chat_guid).await;
 
     let params = TurnParams {
         pipe_id: pipe_id.clone(),
@@ -631,6 +654,36 @@ async fn send_bb_reply(
         Err(e) => {
             error!("Failed to reach BlueBubbles: {e}");
             None
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Typing indicator
+// ---------------------------------------------------------------------------
+
+/// Start the typing indicator for a chat.
+///
+/// Requires the Private API to be enabled in BlueBubbles. If it's not
+/// available the request will simply fail silently — no harm done.
+/// The indicator stops automatically when a message is sent to the chat.
+async fn start_typing(http: &Client, server_url: &str, server_password: &str, chat_guid: &str) {
+    let url = format!("{}/api/v1/chat/{}/typing", server_url, chat_guid);
+    let resp = http
+        .post(&url)
+        .query(&[("password", server_password)])
+        .send()
+        .await;
+
+    match resp {
+        Ok(r) if r.status().is_success() => {
+            debug!("Typing indicator started");
+        }
+        Ok(r) => {
+            debug!(status = %r.status(), "Typing indicator not available (Private API may be disabled)");
+        }
+        Err(e) => {
+            debug!("Typing indicator request failed: {e}");
         }
     }
 }
