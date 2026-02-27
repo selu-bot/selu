@@ -3,7 +3,7 @@ pub mod session;
 pub mod router;
 pub mod context;
 pub mod delegation;
-pub mod memory;
+pub mod personality;
 pub mod engine;
 pub mod thread;
 pub mod model;

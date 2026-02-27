@@ -73,7 +73,6 @@ mod tests {
                 name: "Dev".to_string(),
                 model: None,
                 session: Default::default(),
-                memory: Default::default(),
                 system_prompt: String::new(),
                 capabilities: vec![],
                 capability_manifests: std::collections::HashMap::new(),

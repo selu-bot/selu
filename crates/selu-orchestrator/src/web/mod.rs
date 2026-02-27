@@ -3,6 +3,7 @@ pub mod auth;
 pub mod chat;
 pub mod credentials;
 pub mod integrations;
+pub mod personality;
 pub mod pipes;
 pub mod providers;
 pub mod subscriptions;
@@ -92,5 +93,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         // Users
         .route("/users", get(users::users_index).post(users::users_create))
         .route("/users/{id}", delete(users::users_delete))
+        // Personality
+        .route("/personality", get(personality::personality_index).post(personality::personality_add))
+        .route("/personality/{id}", delete(personality::personality_delete).put(personality::personality_update))
+        .route("/personality/{id}/edit", get(personality::personality_edit_form))
+        .route("/personality/{id}/row", get(personality::personality_row))
         .with_state(state)
 }

@@ -71,7 +71,7 @@ pub struct TurnParams {
 ///   4. Build context window + tool specs
 ///   5. Run the tool loop (capability dispatch + `emit_event` + `delegate_to_agent`)
 ///   6. Persist the assistant reply
-///   7. Store embeddings for semantic memory
+///   7. Extract personality facts (background)
 ///
 /// Streaming tokens are sent to `tx`. Pass a throwaway channel for
 /// non-streaming callers (inbound, fanout).
@@ -119,20 +119,6 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         error!("Failed to persist user message: {e}");
     }
 
-    // ── Store user message embedding (best-effort, non-blocking) ──────────────
-    if let Some(ref memory) = state.memory {
-        let mem = memory.clone();
-        let mid = msg_id.clone();
-        let sid = session_id.clone();
-        let pid = pipe_id.clone();
-        let txt = effective_text.clone();
-        tokio::spawn(async move {
-            if let Err(e) = mem.store_message(&mid, &sid, &pid, &txt).await {
-                debug!("Failed to store user message embedding: {e}");
-            }
-        });
-    }
-
     // ── Context + provider (model resolved from DB) ────────────────────────────
     let messages = context::build(
         &state.db,
@@ -140,7 +126,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         &pipe_id,
         &session_id,
         thread_id.as_deref(),
-        state.memory.as_deref(),
+        &user_id,
         &effective_text,
         Some(&agents_snapshot),
     ).await?;
@@ -314,16 +300,19 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             error!("Failed to persist assistant reply: {e}");
         }
 
-        // Store assistant reply embedding (best-effort)
-        if let Some(ref memory) = state.memory {
-            let mem = memory.clone();
-            let rid = reply_id.clone();
-            let sid = session_id.clone();
-            let pid = pipe_id.clone();
-            let rtxt = reply.clone();
+        // ── Personality extraction (best-effort, non-blocking) ────────────────
+        {
+            let db = state.db.clone();
+            let creds = state.credentials.clone();
+            let uid = user_id.clone();
+            let agent_id = agent.id.clone();
+            let conv_msg = effective_text.clone();
+            let conv_reply = reply.clone();
             tokio::spawn(async move {
-                if let Err(e) = mem.store_message(&rid, &sid, &pid, &rtxt).await {
-                    debug!("Failed to store assistant reply embedding: {e}");
+                if let Err(e) = crate::agents::personality::extract_from_conversation(
+                    &db, &creds, &uid, &agent_id, &conv_msg, &conv_reply,
+                ).await {
+                    debug!("Personality extraction failed (non-fatal): {e}");
                 }
             });
         }
@@ -379,7 +368,7 @@ async fn check_policy_and_dispatch<F, Fut>(
     args: &serde_json::Value,
     channel: &ChannelKind,
     session_id: &str,
-    pipe_id: &str,
+    _pipe_id: &str,
     agent_id: &str,
     approved: bool,
     invoke_fn: F,

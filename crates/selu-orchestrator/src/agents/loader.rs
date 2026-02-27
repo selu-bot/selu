@@ -20,8 +20,6 @@ pub struct AgentDefinition {
     pub model: Option<ModelConfig>,
     #[serde(default)]
     pub session: SessionConfig,
-    #[serde(default)]
-    pub memory: MemoryConfig,
     /// System prompt loaded from agent.md
     #[serde(skip_deserializing)]
     pub system_prompt: String,
@@ -55,17 +53,6 @@ pub struct SessionConfig {
 
 fn default_trigger() -> String { "mention".to_string() }
 fn default_idle_timeout() -> u32 { 30 }
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct MemoryConfig {
-    #[serde(default = "default_policy")]
-    pub policy: String,
-    #[serde(default = "default_top_k")]
-    pub top_k: u32,
-}
-
-fn default_policy() -> String { "retrieval".to_string() }
-fn default_top_k() -> u32 { 8 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityRef {

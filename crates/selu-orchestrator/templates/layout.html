@@ -304,6 +304,11 @@
         <span data-i18n="nav.chat">Chat</span>
       </a>
 
+      <a href="/personality" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "personality" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span data-i18n="nav.personality">Personality</span>
+      </a>
+
       <a href="/pipes" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "pipes" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         <span data-i18n="nav.pipes">Pipes</span>
@@ -403,6 +408,7 @@
       en: {
         'nav.main': 'Main',
         'nav.chat': 'Chat',
+        'nav.personality': 'Personality',
         'nav.pipes': 'Pipes',
         'nav.agents': 'Agents',
         'nav.providers': 'Providers',
@@ -562,6 +568,27 @@
         'subs.desc': 'Trigger outbound notifications or agent invocations when agent events match a CEL filter expression.',
         'subs.create': 'Create Subscription',
         'subs.deactivate': 'Deactivate',
+        'personality.title': 'Personality',
+        'personality.desc': 'This is what your agents know about you. You can edit or remove anything.',
+        'personality.add': 'Add a fact',
+        'personality.category': 'Category',
+        'personality.fact': 'Fact',
+        'personality.fact.placeholder': 'e.g. My name is Jan, I live in Berlin...',
+        'personality.edit': 'Edit',
+        'personality.delete': 'Remove',
+        'personality.empty': 'No facts yet.',
+        'personality.source.auto': 'Learned from conversation',
+        'personality.source.manual': 'Added manually',
+        'personality.cat.personal': 'Personal',
+        'personality.cat.preferences': 'Preferences',
+        'personality.cat.location': 'Location',
+        'personality.cat.work': 'Work & Skills',
+        'personality.cat.other': 'Other',
+        'personality.error.empty': 'Please enter a fact.',
+        'personality.error.addfailed': 'Could not save the fact. Please try again.',
+        'personality.error.generic': 'Something went wrong. Please try again.',
+        'personality.success.added': 'Fact added.',
+        'personality.success.generic': 'Done.',
         'common.optional': 'Optional',
         'common.delete': 'Delete',
         'common.cancel': 'Cancel',
@@ -571,6 +598,7 @@
       de: {
         'nav.main': 'Haupt',
         'nav.chat': 'Chat',
+        'nav.personality': 'Pers\u00f6nlichkeit',
         'nav.pipes': 'Pipes',
         'nav.agents': 'Agenten',
         'nav.providers': 'Anbieter',
@@ -730,6 +758,27 @@
         'subs.desc': 'L\u00f6se Benachrichtigungen oder Agenten-Aufrufe aus, wenn Agenten-Ereignisse einem CEL-Filter entsprechen.',
         'subs.create': 'Abonnement erstellen',
         'subs.deactivate': 'Deaktivieren',
+        'personality.title': 'Pers\u00f6nlichkeit',
+        'personality.desc': 'Das ist, was deine Agenten \u00fcber dich wissen. Du kannst alles bearbeiten oder entfernen.',
+        'personality.add': 'Fakt hinzuf\u00fcgen',
+        'personality.category': 'Kategorie',
+        'personality.fact': 'Fakt',
+        'personality.fact.placeholder': 'z.B. Mein Name ist Jan, ich wohne in Berlin...',
+        'personality.edit': 'Bearbeiten',
+        'personality.delete': 'Entfernen',
+        'personality.empty': 'Noch keine Fakten.',
+        'personality.source.auto': 'Aus Gespr\u00e4ch gelernt',
+        'personality.source.manual': 'Manuell hinzugef\u00fcgt',
+        'personality.cat.personal': 'Pers\u00f6nliches',
+        'personality.cat.preferences': 'Vorlieben',
+        'personality.cat.location': 'Standort',
+        'personality.cat.work': 'Arbeit & F\u00e4higkeiten',
+        'personality.cat.other': 'Sonstiges',
+        'personality.error.empty': 'Bitte gib einen Fakt ein.',
+        'personality.error.addfailed': 'Fakt konnte nicht gespeichert werden. Bitte versuche es erneut.',
+        'personality.error.generic': 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
+        'personality.success.added': 'Fakt hinzugef\u00fcgt.',
+        'personality.success.generic': 'Erledigt.',
         'common.optional': 'Optional',
         'common.delete': 'L\u00f6schen',
         'common.cancel': 'Abbrechen',

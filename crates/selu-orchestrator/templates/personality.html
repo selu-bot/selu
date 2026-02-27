@@ -1,0 +1,112 @@
+{% extends "layout.html" %}
+
+{% block title %}Personality{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <!-- Header -->
+    <div>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="personality.title">Personality</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="personality.desc">This is what your agents know about you. You can edit or remove anything.</p>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
+      {% if err == "empty" %}<span data-i18n="personality.error.empty">Please enter a fact.</span>
+      {% else if err == "add_failed" %}<span data-i18n="personality.error.addfailed">Could not save the fact. Please try again.</span>
+      {% else %}<span data-i18n="personality.error.generic">Something went wrong. Please try again.</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if let Some(msg) = success %}
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+      {% if msg == "added" %}<span data-i18n="personality.success.added">Fact added.</span>
+      {% else %}<span data-i18n="personality.success.generic">Done.</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Add Fact -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="personality.add">Add a fact</span>
+      </div>
+      <form method="post" action="/personality">
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4">
+            <div>
+              <label for="p-category" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="personality.category">Category</label>
+              <select id="p-category" name="category"
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                <option value="personal" data-i18n="personality.cat.personal">Personal</option>
+                <option value="preferences" data-i18n="personality.cat.preferences">Preferences</option>
+                <option value="location" data-i18n="personality.cat.location">Location</option>
+                <option value="work" data-i18n="personality.cat.work">Work & Skills</option>
+                <option value="other" data-i18n="personality.cat.other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label for="p-fact" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="personality.fact">Fact</label>
+              <input id="p-fact" name="fact" type="text" required autocomplete="off"
+                     data-i18n-placeholder="personality.fact.placeholder"
+                     placeholder="e.g. My name is Jan, I live in Berlin..."
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button type="submit"
+                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    data-i18n="personality.add">Add a fact</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Personality Facts by Category -->
+    {% for group in groups %}
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="personality.cat.{{ group.category }}">{{ group.label_en }}</span>
+        {% if !group.facts.is_empty() %}
+        <span class="text-xs text-txt-faint">{{ group.facts.len() }}</span>
+        {% endif %}
+      </div>
+      <div class="divide-y divide-edge">
+        {% for fact in group.facts %}
+        <div class="fact-row flex items-center gap-3 px-5 py-3 hover:bg-sidebar-hover transition-colors group" id="fact-{{ fact.id }}">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm text-txt-heading">{{ fact.fact }}</p>
+            <p class="text-[11px] text-txt-faint mt-0.5">
+              {% if fact.source == "auto" %}<span data-i18n="personality.source.auto">Learned from conversation</span>
+              {% else %}<span data-i18n="personality.source.manual">Added manually</span>{% endif %}
+            </p>
+          </div>
+          <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-txt-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    hx-get="/personality/{{ fact.id }}/edit"
+                    hx-target="#fact-{{ fact.id }}"
+                    hx-swap="outerHTML"
+                    data-i18n="personality.edit">Edit</button>
+            <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    hx-delete="/personality/{{ fact.id }}"
+                    hx-target="#fact-{{ fact.id }}"
+                    hx-swap="outerHTML"
+                    data-i18n="personality.delete">Remove</button>
+          </div>
+        </div>
+        {% endfor %}
+        {% if group.facts.is_empty() %}
+        <div class="px-5 py-6 text-center text-txt-faint text-sm">
+          <span data-i18n="personality.empty">No facts yet.</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+  </div>
+</div>
+{% endblock %}

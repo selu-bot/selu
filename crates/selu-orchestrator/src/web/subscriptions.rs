@@ -152,24 +152,37 @@ pub async fn subscriptions_create(
     ) {
         (Some(expr), _) => Some(expr), // User provided an explicit CEL expression
         (None, Some(desc)) => {
-            // Try to translate NL description to CEL
-            let cfg = &state.config;
-            if !cfg.embedding.api_key.is_empty() {
-                match crate::events::nl_to_cel::translate(
-                    desc,
-                    &cfg.embedding.api_key,
-                    &cfg.embedding.base_url,
-                    "gpt-4o-mini", // Use a fast/cheap model for translation
-                ).await {
-                    Ok(cel) if !cel.is_empty() => Some(cel),
-                    Ok(_) => None,
-                    Err(e) => {
-                        tracing::warn!("NL-to-CEL translation failed: {e}");
-                        None
+            // Try to translate NL description to CEL using the default LLM provider
+            match crate::agents::model::resolve_model(&state.db, "default").await {
+                Ok(resolved) => {
+                    match crate::llm::registry::load_provider(
+                        &state.db, &resolved.provider_id, &resolved.model_id, &state.credentials,
+                    ).await {
+                        Ok(provider) => {
+                            let msgs = vec![
+                                crate::llm::provider::ChatMessage::system(
+                                    "You are a CEL (Common Expression Language) expert. Translate the user's filter description into a valid CEL expression. \
+                                     Available variables: event_type (string), event (map). Return ONLY the CEL expression, nothing else."
+                                ),
+                                crate::llm::provider::ChatMessage::user(
+                                    format!("Translate this to a CEL expression: {}", desc)
+                                ),
+                            ];
+                            match provider.chat(&msgs, &[], 0.0).await {
+                                Ok(crate::llm::provider::LlmResponse::Text(cel)) => {
+                                    let cel = cel.trim().to_string();
+                                    if !cel.is_empty() { Some(cel) } else { None }
+                                }
+                                _ => None,
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("NL-to-CEL: failed to load provider: {e}");
+                            None
+                        }
                     }
                 }
-            } else {
-                None
+                Err(_) => None,
             }
         }
         (None, None) => None,

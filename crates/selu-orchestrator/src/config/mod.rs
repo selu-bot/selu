@@ -18,9 +18,6 @@ pub struct AppConfig {
     /// Maximum event chain depth for loop prevention (default: 3)
     #[serde(default = "default_max_chain_depth")]
     pub max_chain_depth: i32,
-    /// Embedding API configuration for semantic memory
-    #[serde(default)]
-    pub embedding: EmbeddingApiConfig,
 }
 
 fn default_max_chain_depth() -> i32 {
@@ -38,26 +35,6 @@ pub struct DatabaseConfig {
     pub url: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-pub struct EmbeddingApiConfig {
-    /// API key for the embedding provider (e.g. OpenAI)
-    #[serde(default)]
-    pub api_key: String,
-    /// Base URL for the embedding API (default: https://api.openai.com)
-    #[serde(default = "default_embedding_url")]
-    pub base_url: String,
-    /// Embedding model name (default: text-embedding-3-small)
-    #[serde(default = "default_embedding_model")]
-    pub model: String,
-}
-
-fn default_embedding_url() -> String {
-    "https://api.openai.com".into()
-}
-fn default_embedding_model() -> String {
-    "text-embedding-3-small".into()
-}
-
 impl AppConfig {
     pub fn load() -> Result<Self> {
         dotenvy::dotenv().ok();
@@ -70,9 +47,6 @@ impl AppConfig {
             .set_default("installed_agents_dir", "./installed_agents")?
             .set_default("egress_proxy_addr", "0.0.0.0:8888")?
             .set_default("max_chain_depth", 3)?
-            .set_default("embedding.api_key", "")?
-            .set_default("embedding.base_url", "https://api.openai.com")?
-            .set_default("embedding.model", "text-embedding-3-small")?
             .add_source(
                 config::Environment::with_prefix("SELU")
                     .separator("__")

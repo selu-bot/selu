@@ -4,7 +4,6 @@ use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex, Notify, RwLock};
 
 use crate::agents::loader::AgentDefinition;
-use crate::agents::memory::MemoryStore;
 use crate::capabilities::CapabilityEngine;
 use crate::channels::ChannelRegistry;
 use crate::config::AppConfig;
@@ -39,8 +38,6 @@ pub struct AppState {
     pub credentials: CredentialStore,
     /// Event bus: persists + broadcasts agent events for fanout
     pub events: EventBus,
-    /// Semantic memory store (None if no embedding API key configured)
-    pub memory: Option<Arc<MemoryStore>>,
 }
 
 impl AppState {
@@ -52,7 +49,6 @@ impl AppState {
         channel_registry: ChannelRegistry,
         credentials: CredentialStore,
         events: EventBus,
-        memory: Option<MemoryStore>,
     ) -> Self {
         Self {
             db,
@@ -66,7 +62,6 @@ impl AppState {
             channel_registry,
             credentials,
             events,
-            memory: memory.map(Arc::new),
         }
     }
 }

@@ -25,7 +25,6 @@ use capabilities::{
 use channels::ChannelRegistry;
 use permissions::{store::parse_key, CredentialStore};
 use events::{EventBus, fanout};
-use agents::memory::{MemoryStore, EmbeddingConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -86,25 +85,9 @@ async fn main() -> Result<()> {
     // ── Event bus + fanout ────────────────────────────────────────────────────
     let (event_bus, fanout_rx) = EventBus::new(db.clone());
 
-    // ── Semantic memory ───────────────────────────────────────────────────────
-    let memory = if !cfg.embedding.api_key.is_empty() {
-        info!("Semantic memory enabled (embedding model: {})", cfg.embedding.model);
-        Some(MemoryStore::new(
-            db.clone(),
-            EmbeddingConfig {
-                api_key: cfg.embedding.api_key.clone(),
-                base_url: cfg.embedding.base_url.clone(),
-                model: cfg.embedding.model.clone(),
-            },
-        ))
-    } else {
-        info!("Semantic memory disabled (no SELU__EMBEDDING__API_KEY set)");
-        None
-    };
-
     // ── Build shared state ────────────────────────────────────────────────────
     let channel_registry = ChannelRegistry::new();
-    let state = AppState::new(db, cfg.clone(), agent_defs, cap_engine, channel_registry, cred_store, event_bus, memory);
+    let state = AppState::new(db, cfg.clone(), agent_defs, cap_engine, channel_registry, cred_store, event_bus);
 
     // Start fanout after state is built (needs AppState)
     fanout::start(state.clone(), fanout_rx, cfg.max_chain_depth);

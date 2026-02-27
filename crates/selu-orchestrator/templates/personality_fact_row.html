@@ -1,0 +1,21 @@
+<div class="fact-row flex items-center gap-3 px-5 py-3 hover:bg-sidebar-hover transition-colors group" id="fact-{{ fact.id }}">
+  <div class="flex-1 min-w-0">
+    <p class="text-sm text-txt-heading">{{ fact.fact }}</p>
+    <p class="text-[11px] text-txt-faint mt-0.5">
+      {% if fact.source == "auto" %}<span data-i18n="personality.source.auto">Learned from conversation</span>
+      {% else %}<span data-i18n="personality.source.manual">Added manually</span>{% endif %}
+    </p>
+  </div>
+  <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+    <button class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-txt-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            hx-get="/personality/{{ fact.id }}/edit"
+            hx-target="#fact-{{ fact.id }}"
+            hx-swap="outerHTML"
+            data-i18n="personality.edit">Edit</button>
+    <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            hx-delete="/personality/{{ fact.id }}"
+            hx-target="#fact-{{ fact.id }}"
+            hx-swap="outerHTML"
+            data-i18n="personality.delete">Remove</button>
+  </div>
+</div>

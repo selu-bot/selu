@@ -5,12 +5,12 @@ use tracing::debug;
 
 use crate::agents::delegation;
 use crate::agents::loader::AgentDefinition;
-use crate::agents::memory::MemoryStore;
+use crate::agents::personality;
 use crate::llm::provider::ChatMessage;
 
 /// Builds the LLM context window for a turn:
 ///   [system prompt + capability prompts + agent registry]
-///   [semantically relevant messages from memory (if enabled)]
+///   [user personality facts (if any)]
 ///   [recent N messages from this thread (or session/pipe if no thread)]
 pub async fn build(
     db: &SqlitePool,
@@ -18,11 +18,12 @@ pub async fn build(
     pipe_id: &str,
     session_id: &str,
     thread_id: Option<&str>,
-    memory_store: Option<&MemoryStore>,
+    user_id: &str,
     latest_message: &str,
     all_agents: Option<&HashMap<String, AgentDefinition>>,
 ) -> Result<Vec<ChatMessage>> {
     let mut messages = Vec::new();
+    let _ = latest_message; // reserved for future use
 
     // ── System prompt ─────────────────────────────────────────────────────────
     let mut system = agent.system_prompt.clone();
@@ -50,39 +51,48 @@ pub async fn build(
 
     messages.push(ChatMessage::system(system));
 
-    // ── Semantic memory retrieval ─────────────────────────────────────────────
-    // If the agent has memory policy "retrieval" and a memory store is available,
-    // retrieve relevant past messages and inject them as context.
-    // Memory is shared across all threads in the session (threads share context).
-    if agent.memory.policy == "retrieval" {
-        if let Some(store) = memory_store {
-            match store.retrieve(latest_message, session_id, agent.memory.top_k).await {
-                Ok(relevant) if !relevant.is_empty() => {
-                    debug!(
-                        count = relevant.len(),
-                        top_k = agent.memory.top_k,
-                        "Retrieved relevant messages from memory"
-                    );
-                    let mut memory_context = String::from(
-                        "The following are relevant messages from earlier in this conversation:\n\n"
-                    );
-                    for (_, content, score) in &relevant {
-                        memory_context.push_str(&format!("- [relevance: {:.2}] {}\n", score, content));
+    // ── User personality ──────────────────────────────────────────────────────
+    // Load persistent personality facts for this user and inject them so the
+    // agent knows about the user from the very first message.
+    match personality::get_facts(db, user_id).await {
+        Ok(facts) if !facts.is_empty() => {
+            debug!(count = facts.len(), "Injecting personality facts into context");
+            let mut ctx = String::from("## What you know about this user\n\n");
+            ctx.push_str("The following facts have been learned about the user over time. ");
+            ctx.push_str("Use this information naturally in your responses. ");
+            ctx.push_str("Do NOT repeat these facts back to the user unless relevant.\n\n");
+
+            // Group by category
+            let categories = ["personal", "preferences", "location", "work", "other"];
+            for cat in &categories {
+                let cat_facts: Vec<_> = facts.iter().filter(|f| f.category == *cat).collect();
+                if !cat_facts.is_empty() {
+                    let label = match *cat {
+                        "personal" => "Personal",
+                        "preferences" => "Preferences",
+                        "location" => "Location",
+                        "work" => "Work & Skills",
+                        _ => "Other",
+                    };
+                    ctx.push_str(&format!("### {}\n", label));
+                    for fact in cat_facts {
+                        ctx.push_str(&format!("- {}\n", fact.fact));
                     }
-                    messages.push(ChatMessage::system(memory_context));
-                }
-                Ok(_) => {} // No relevant messages found
-                Err(e) => {
-                    debug!("Memory retrieval failed (non-fatal): {e}");
+                    ctx.push('\n');
                 }
             }
+            messages.push(ChatMessage::system(ctx));
+        }
+        Ok(_) => {} // No personality facts yet
+        Err(e) => {
+            debug!("Personality loading failed (non-fatal): {e}");
         }
     }
 
     // ── Conversation history ──────────────────────────────────────────────────
     // If a thread_id is provided, pull messages for that specific thread.
     // This gives each thread its own isolated conversation history while
-    // sharing semantic memory across the session.
+    // sharing personality knowledge across all sessions.
     // If no thread_id (web chat, delegation), fall back to pipe+session history.
     if let Some(tid) = thread_id {
         let history = sqlx::query!(

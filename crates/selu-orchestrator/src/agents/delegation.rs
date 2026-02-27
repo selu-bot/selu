@@ -129,7 +129,6 @@ mod tests {
             name: name.to_string(),
             model: None,
             session: Default::default(),
-            memory: Default::default(),
             system_prompt: prompt.to_string(),
             capabilities: vec![],
             capability_manifests: HashMap::new(),
