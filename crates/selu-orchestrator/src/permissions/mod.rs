@@ -5,4 +5,3 @@ pub mod tool_policy;
 
 pub use enforcer::{resolve_credentials, PermissionError};
 pub use store::CredentialStore;
-pub use tool_policy::ToolPolicy;

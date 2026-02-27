@@ -15,6 +15,7 @@ use crate::web::auth::AuthUser;
 // ── View structs ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct FactRow {
     pub id: String,
     pub category: String,

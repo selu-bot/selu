@@ -67,6 +67,7 @@ impl ChannelRegistry {
     }
 
     /// Remove the channel sender for a pipe.
+    #[allow(dead_code)]
     pub async fn deregister(&self, pipe_id: &str) {
         self.senders.write().await.remove(pipe_id);
         debug!(pipe_id = %pipe_id, "Channel sender deregistered");
@@ -94,6 +95,7 @@ impl ChannelRegistry {
     }
 
     /// Check whether a sender is registered for a given pipe.
+    #[allow(dead_code)]
     pub async fn has_sender(&self, pipe_id: &str) -> bool {
         self.senders.read().await.contains_key(pipe_id)
     }

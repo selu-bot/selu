@@ -54,6 +54,7 @@ impl std::fmt::Display for ToolPolicy {
 // ── Stored policy record ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ToolPolicyRecord {
     pub user_id: String,
     pub agent_id: String,
@@ -161,6 +162,7 @@ pub async fn set_policies(
 /// in the given capability manifests (including built-in tools).
 ///
 /// Returns `true` if all tools have policies set.
+#[allow(dead_code)]
 pub async fn has_all_policies(
     db: &SqlitePool,
     user_id: &str,
@@ -195,6 +197,7 @@ pub async fn has_all_policies(
 /// Delete all policies a user has for a given agent.
 ///
 /// Called when an agent is uninstalled.
+#[allow(dead_code)]
 pub async fn delete_policies_for_agent(
     db: &SqlitePool,
     user_id: &str,

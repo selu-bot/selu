@@ -14,6 +14,7 @@ use tracing::debug;
 /// and asked to produce a single valid CEL expression.
 ///
 /// Requires an LLM API key (uses the same provider as chat).
+#[allow(dead_code)]
 pub async fn translate(
     description: &str,
     api_key: &str,

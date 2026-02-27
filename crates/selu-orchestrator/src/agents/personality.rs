@@ -17,6 +17,7 @@ use crate::permissions::store::CredentialStore;
 
 /// A single personality fact about a user.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PersonalityFact {
     pub id: String,
     pub user_id: String,
@@ -272,6 +273,7 @@ mod tests {
         let json = "[]";
 
         #[derive(Deserialize)]
+        #[allow(dead_code)]
         struct ExtractedFact {
             category: String,
             fact: String,
@@ -293,6 +295,7 @@ mod tests {
             .join("\n");
 
         #[derive(Deserialize)]
+        #[allow(dead_code)]
         struct ExtractedFact {
             category: String,
             fact: String,
