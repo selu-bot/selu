@@ -125,6 +125,7 @@ pub struct ToolView {
     pub name: String,
     pub description: String,
     pub policy: String,
+    pub capability_id: String,
 }
 
 #[derive(Debug, Clone)]
@@ -758,6 +759,7 @@ pub async fn agent_detail(
                 name: t.name.clone(),
                 description: desc,
                 policy,
+                capability_id: cap_id.clone(),
             }
         }).collect();
 

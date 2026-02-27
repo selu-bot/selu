@@ -72,13 +72,15 @@ pub struct ToolPolicyRecord {
 pub async fn get_policy(
     db: &SqlitePool,
     user_id: &str,
+    agent_id: &str,
     capability_id: &str,
     tool_name: &str,
 ) -> Result<Option<ToolPolicy>> {
     let row = sqlx::query(
-        "SELECT policy FROM tool_policies WHERE user_id = ? AND capability_id = ? AND tool_name = ?",
+        "SELECT policy FROM tool_policies WHERE user_id = ? AND agent_id = ? AND capability_id = ? AND tool_name = ?",
     )
     .bind(user_id)
+    .bind(agent_id)
     .bind(capability_id)
     .bind(tool_name)
     .fetch_optional(db)
@@ -135,7 +137,7 @@ pub async fn set_policies(
         sqlx::query(
             "INSERT INTO tool_policies (id, user_id, agent_id, capability_id, tool_name, policy)
              VALUES (?, ?, ?, ?, ?, ?)
-             ON CONFLICT(user_id, capability_id, tool_name)
+             ON CONFLICT(user_id, agent_id, capability_id, tool_name)
              DO UPDATE SET policy = excluded.policy, updated_at = datetime('now')",
         )
         .bind(&id)
