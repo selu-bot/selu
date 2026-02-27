@@ -282,9 +282,24 @@ impl CapabilityRunner {
         // as basic-auth credentials. The egress proxy uses this to identify the
         // container and look up its allowlist policy.
         let egress_token = Uuid::new_v4().as_simple().to_string();
+
+        // When Selu runs inside Docker, capability containers reach the egress
+        // proxy via the Selu container's IP on the shared bridge network (not
+        // host.docker.internal, which may be unreachable without IP masquerading).
+        let self_id = self.self_container_id.read().await;
+        let proxy_host = if let Some(ref id) = *self_id {
+            let self_inspect = self.docker.inspect_container(id, None).await
+                .context("Failed to inspect Selu container for egress proxy IP")?;
+            extract_container_ip(&self_inspect, network_name)
+                .unwrap_or_else(|| "host.docker.internal".to_string())
+        } else {
+            "host.docker.internal".to_string()
+        };
+        drop(self_id);
+
         let proxy_url = format!(
-            "http://selu:{}@host.docker.internal:{}",
-            egress_token, self.egress_proxy_port
+            "http://selu:{}@{}:{}",
+            egress_token, proxy_host, self.egress_proxy_port
         );
 
         // ── Environment variables ─────────────────────────────────────────────
