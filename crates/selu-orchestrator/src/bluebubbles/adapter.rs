@@ -50,6 +50,12 @@ struct BbMessage {
     /// If this message is a reply to another message, this is the GUID of
     /// the original message. Used to route replies into existing threads.
     thread_origin_guid: Option<String>,
+    /// Associated message GUID — BlueBubbles may use this instead of
+    /// `thread_origin_guid` for reply-chain info.
+    associated_message_guid: Option<String>,
+    /// The type of association (e.g. reply, tapback). Only relevant when
+    /// `associated_message_guid` is set.
+    associated_message_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -313,6 +319,18 @@ async fn poll_once(instance: &AdapterInstance, state: &AppState, after_ts: i64) 
         let message_guid = msg.guid.clone();
         let thread_origin_guid = msg.thread_origin_guid.clone();
 
+        // Log ALL threading-related fields from BlueBubbles so we can
+        // trace exactly what iMessage provides for reply-chain routing.
+        info!(
+            message_guid = ?message_guid,
+            thread_origin_guid = ?thread_origin_guid,
+            associated_message_guid = ?msg.associated_message_guid,
+            associated_message_type = ?msg.associated_message_type,
+            is_from_me = msg.is_from_me,
+            text_preview = %if text.len() > 50 { &text[..50] } else { &text },
+            "BB inbound message fields"
+        );
+
         // ── Sender resolution ─────────────────────────────────────────────
         let resolved_user_id = match resolve_sender(state, &instance.pipe_id, &sender_ref).await {
             Some(uid) => uid,
@@ -438,6 +456,12 @@ async fn dispatch_message(
     );
 
     // Find existing thread (reply-to chain) or create a new one
+    info!(
+        pipe_id = %pipe_id,
+        message_guid = ?message_guid,
+        thread_origin_guid = ?thread_origin_guid,
+        "Thread resolution: looking for existing thread"
+    );
     let thread = match thread_mgr::find_or_create_thread(
         &state.db,
         &pipe_id,
@@ -454,6 +478,14 @@ async fn dispatch_message(
     };
 
     let thread_id = thread.id.to_string();
+
+    info!(
+        thread_id = %thread_id,
+        thread_origin_message_ref = ?thread.origin_message_ref,
+        thread_last_reply_guid = ?thread.last_reply_guid,
+        thread_created_at = %thread.created_at,
+        "Thread resolved"
+    );
 
     // ── Approval interception ─────────────────────────────────────────────
     // If this thread has a pending tool approval, the user's reply (inline
@@ -506,6 +538,11 @@ async fn dispatch_message(
 
     // Send reply via BlueBubbles
     let clean_text = strip_markdown(&reply_text);
+    info!(
+        thread_id = %thread_id,
+        reply_to_guid = ?message_guid,
+        "Sending BB reply (will store returned GUID for thread matching)"
+    );
     let sent_guid = send_bb_reply(
         &http,
         &server_url,
@@ -518,8 +555,18 @@ async fn dispatch_message(
 
     // Store Selu's reply GUID so future incoming replies can be matched
     // back to this thread.
-    if let Some(guid) = sent_guid {
-        let _ = thread_mgr::update_reply_guid(&state.db, &thread_id, &pipe_id, &guid).await;
+    if let Some(ref guid) = sent_guid {
+        info!(
+            thread_id = %thread_id,
+            sent_guid = %guid,
+            "Storing outbound GUID for thread reply matching"
+        );
+        let _ = thread_mgr::update_reply_guid(&state.db, &thread_id, &pipe_id, guid).await;
+    } else {
+        warn!(
+            thread_id = %thread_id,
+            "No GUID returned from BB send — future replies won't match this thread"
+        );
     }
 }
 

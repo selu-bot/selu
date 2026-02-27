@@ -1,6 +1,6 @@
 use anyhow::Result;
 use sqlx::SqlitePool;
-use tracing::info;
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use selu_core::types::{Thread, ThreadStatus};
@@ -72,6 +72,12 @@ pub async fn find_thread_by_message_ref(
     pipe_id: &str,
     message_ref: &str,
 ) -> Result<Option<Thread>> {
+    debug!(
+        pipe_id = %pipe_id,
+        message_ref = %message_ref,
+        "find_thread_by_message_ref: searching"
+    );
+
     // First try origin_message_ref and last_reply_guid (fast path)
     let row = sqlx::query!(
         r#"SELECT id, pipe_id, session_id, user_id, status, title,
@@ -89,6 +95,12 @@ pub async fn find_thread_by_message_ref(
     .await?;
 
     if let Some(r) = row {
+        info!(
+            thread_id = ?r.id,
+            origin_message_ref = ?r.origin_message_ref,
+            last_reply_guid = ?r.last_reply_guid,
+            "find_thread_by_message_ref: MATCHED via origin/last_reply_guid"
+        );
         return Ok(Some(Thread {
             id: Uuid::parse_str(r.id.as_deref().unwrap_or_default())?,
             pipe_id: Uuid::parse_str(&r.pipe_id)?,
@@ -102,6 +114,11 @@ pub async fn find_thread_by_message_ref(
             completed_at: None,
         }));
     }
+
+    debug!(
+        message_ref = %message_ref,
+        "find_thread_by_message_ref: no match in threads table, checking thread_reply_guids"
+    );
 
     // Fall back to the thread_reply_guids lookup table (all outbound GUIDs)
     let row = sqlx::query!(
@@ -119,19 +136,32 @@ pub async fn find_thread_by_message_ref(
     .await?;
 
     match row {
-        Some(r) => Ok(Some(Thread {
-            id: Uuid::parse_str(r.id.as_deref().unwrap_or_default())?,
-            pipe_id: Uuid::parse_str(&r.pipe_id)?,
-            session_id: Uuid::parse_str(&r.session_id)?,
-            user_id: Uuid::parse_str(&r.user_id)?,
-            status: ThreadStatus::Active,
-            title: r.title,
-            origin_message_ref: r.origin_message_ref,
-            last_reply_guid: r.last_reply_guid,
-            created_at: r.created_at.parse().unwrap_or_default(),
-            completed_at: None,
-        })),
-        None => Ok(None),
+        Some(r) => {
+            info!(
+                thread_id = ?r.id,
+                "find_thread_by_message_ref: MATCHED via thread_reply_guids table"
+            );
+            Ok(Some(Thread {
+                id: Uuid::parse_str(r.id.as_deref().unwrap_or_default())?,
+                pipe_id: Uuid::parse_str(&r.pipe_id)?,
+                session_id: Uuid::parse_str(&r.session_id)?,
+                user_id: Uuid::parse_str(&r.user_id)?,
+                status: ThreadStatus::Active,
+                title: r.title,
+                origin_message_ref: r.origin_message_ref,
+                last_reply_guid: r.last_reply_guid,
+                created_at: r.created_at.parse().unwrap_or_default(),
+                completed_at: None,
+            }))
+        }
+        None => {
+            warn!(
+                pipe_id = %pipe_id,
+                message_ref = %message_ref,
+                "find_thread_by_message_ref: NO MATCH anywhere — will create new thread"
+            );
+            Ok(None)
+        }
     }
 }
 
@@ -148,6 +178,13 @@ pub async fn find_or_create_thread(
     origin_message_ref: Option<&str>,
     reply_to_ref: Option<&str>,
 ) -> Result<Thread> {
+    info!(
+        pipe_id = %pipe_id,
+        origin_message_ref = ?origin_message_ref,
+        reply_to_ref = ?reply_to_ref,
+        "find_or_create_thread: called"
+    );
+
     // Try to match an existing thread via the reply-to reference
     if let Some(ref_guid) = reply_to_ref {
         if let Some(existing) = find_thread_by_message_ref(db, pipe_id, ref_guid).await? {
@@ -158,6 +195,13 @@ pub async fn find_or_create_thread(
             );
             return Ok(existing);
         }
+        warn!(
+            pipe_id = %pipe_id,
+            reply_to_ref = %ref_guid,
+            "reply_to_ref provided but no matching thread found"
+        );
+    } else {
+        info!("find_or_create_thread: no reply_to_ref — will create new thread");
     }
 
     // No match — create a new thread
@@ -171,6 +215,13 @@ pub async fn find_or_create_thread(
 /// `thread_reply_guids` lookup table so that ALL outbound GUIDs are
 /// searchable (not just the most recent one).
 pub async fn update_reply_guid(db: &SqlitePool, thread_id: &str, pipe_id: &str, reply_guid: &str) -> Result<()> {
+    info!(
+        thread_id = %thread_id,
+        pipe_id = %pipe_id,
+        reply_guid = %reply_guid,
+        "update_reply_guid: storing outbound GUID"
+    );
+
     // Update the convenience column (latest reply)
     sqlx::query!(
         "UPDATE threads SET last_reply_guid = ? WHERE id = ?",
