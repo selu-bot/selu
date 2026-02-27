@@ -34,8 +34,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/api/subscriptions", post(subscriptions::create_subscription))
         .route("/api/subscriptions/{id}", delete(subscriptions::delete_subscription))
         // Tool policies
-        .route("/api/tool-policies", get(tool_policies::list_policies))
-        .route("/api/tool-policies", put(tool_policies::bulk_set_policies))
+        .route("/api/tool-policies", get(tool_policies::list_policies).put(tool_policies::bulk_set_policies).delete(tool_policies::delete_user_policy))
         // Pending tool approvals
         .route("/api/approvals", get(tool_policies::list_approvals))
         .route("/api/approvals/{id}", post(tool_policies::resolve_approval))

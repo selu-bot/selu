@@ -46,6 +46,7 @@ async fn main() -> Result<()> {
 
     // ── Ensure bundled default agent has a DB row ─────────────────────────────
     agents::bundled::ensure_db_row(&db).await?;
+    agents::bundled::ensure_global_policies(&db).await?;
 
     // ── Load installed agents from DB + filesystem ────────────────────────────
     let mut agent_defs = agents::loader::load_installed(&db, &cfg.installed_agents_dir).await?;

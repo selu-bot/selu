@@ -17,7 +17,8 @@ use crate::state::AppState;
 #[derive(Debug, Deserialize)]
 pub struct PoliciesQuery {
     pub agent_id: String,
-    pub user_id: String,
+    /// Optional user_id.  If omitted, returns global defaults only.
+    pub user_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -25,11 +26,14 @@ pub struct PolicyResponse {
     pub capability_id: String,
     pub tool_name: String,
     pub policy: String,
+    /// `"global"` for global defaults, `"user_override"` for per-user overrides.
+    pub scope: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct BulkPolicyRequest {
-    pub user_id: String,
+    /// If omitted, policies are saved as global defaults (admin only).
+    pub user_id: Option<String>,
     pub agent_id: String,
     pub policies: Vec<PolicyEntry>,
 }
@@ -39,6 +43,14 @@ pub struct PolicyEntry {
     pub capability_id: String,
     pub tool_name: String,
     pub policy: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeletePolicyRequest {
+    pub user_id: String,
+    pub agent_id: String,
+    pub capability_id: String,
+    pub tool_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,31 +78,61 @@ pub struct ApprovalAction {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-/// GET /api/tool-policies?agent_id=X&user_id=Y
+/// GET /api/tool-policies?agent_id=X[&user_id=Y]
+///
+/// Returns global defaults and, if `user_id` is provided, any per-user
+/// overrides.  Each entry includes a `scope` field.
 pub async fn list_policies(
     Query(q): Query<PoliciesQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    match tool_policy::get_policies_for_agent(&state.db, &q.user_id, &q.agent_id).await {
-        Ok(policies) => {
-            let resp: Vec<PolicyResponse> = policies
-                .into_iter()
-                .map(|p| PolicyResponse {
+    let mut resp: Vec<PolicyResponse> = Vec::new();
+
+    // Always return global defaults
+    match tool_policy::get_global_policies_for_agent(&state.db, &q.agent_id).await {
+        Ok(globals) => {
+            for p in globals {
+                resp.push(PolicyResponse {
                     capability_id: p.capability_id,
                     tool_name: p.tool_name,
                     policy: p.policy.as_str().to_string(),
-                })
-                .collect();
-            Json(resp).into_response()
+                    scope: "global".to_string(),
+                });
+            }
         }
         Err(e) => {
-            error!("Failed to list tool policies: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            error!("Failed to list global tool policies: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     }
+
+    // If user_id provided, also return per-user overrides
+    if let Some(ref user_id) = q.user_id {
+        match tool_policy::get_policies_for_agent(&state.db, user_id, &q.agent_id).await {
+            Ok(overrides) => {
+                for p in overrides {
+                    resp.push(PolicyResponse {
+                        capability_id: p.capability_id,
+                        tool_name: p.tool_name,
+                        policy: p.policy.as_str().to_string(),
+                        scope: "user_override".to_string(),
+                    });
+                }
+            }
+            Err(e) => {
+                error!("Failed to list user tool policies: {e}");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+    }
+
+    Json(resp).into_response()
 }
 
 /// PUT /api/tool-policies
+///
+/// If `user_id` is provided, saves per-user overrides.
+/// If `user_id` is omitted, saves global defaults.
 pub async fn bulk_set_policies(
     State(state): State<AppState>,
     Json(req): Json<BulkPolicyRequest>,
@@ -104,10 +146,43 @@ pub async fn bulk_set_policies(
         })
         .collect();
 
-    match tool_policy::set_policies(&state.db, &req.user_id, &req.agent_id, &policies).await {
+    let result = match req.user_id {
+        Some(ref user_id) => {
+            tool_policy::set_policies(&state.db, user_id, &req.agent_id, &policies).await
+        }
+        None => {
+            tool_policy::set_global_policies(&state.db, &req.agent_id, &policies).await
+        }
+    };
+
+    match result {
         Ok(()) => StatusCode::OK.into_response(),
         Err(e) => {
             error!("Failed to set tool policies: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// DELETE /api/tool-policies
+///
+/// Removes a per-user override, reverting to the global default.
+pub async fn delete_user_policy(
+    State(state): State<AppState>,
+    Json(req): Json<DeletePolicyRequest>,
+) -> impl IntoResponse {
+    match tool_policy::delete_user_policy(
+        &state.db,
+        &req.user_id,
+        &req.agent_id,
+        &req.capability_id,
+        &req.tool_name,
+    )
+    .await
+    {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(e) => {
+            error!("Failed to delete user tool policy: {e}");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }

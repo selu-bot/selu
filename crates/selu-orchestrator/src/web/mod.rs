@@ -54,6 +54,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/agents/{agent_id}/setup/test/{step_id}", post(agents::setup_test))
         .route("/agents/{agent_id}/model", post(agents::set_agent_model_handler))
         .route("/agents/{agent_id}/policy", post(agents::set_tool_policy_handler))
+        .route("/agents/{agent_id}/policy/reset", post(agents::reset_tool_policy_handler))
         .route("/agents/{agent_id}/uninstall", post(agents::uninstall_agent))
         .route("/agents/models/{provider_id}", get(agents::models_for_provider))
         // Credentials

@@ -4,6 +4,9 @@
 /// using `include_str!()`, so it works even with an empty installed agents
 /// directory.
 use crate::agents::loader::AgentDefinition;
+use crate::permissions::tool_policy::{
+    self, ToolPolicy, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT,
+};
 
 const DEFAULT_AGENT_YAML: &str = include_str!("../../../../agents/default/agent.yaml");
 const DEFAULT_AGENT_MD: &str = include_str!("../../../../agents/default/agent.md");
@@ -32,5 +35,36 @@ pub async fn ensure_db_row(db: &sqlx::SqlitePool) -> anyhow::Result<()> {
     .execute(db)
     .await?;
 
+    Ok(())
+}
+
+/// Ensure the bundled default agent has global tool policies for its built-in
+/// tools.
+///
+/// The bundled agent never goes through the setup wizard, so it won't get
+/// global policies automatically.  This seeds sensible defaults (Allow for
+/// delegation and events) if no global policies exist yet.
+pub async fn ensure_global_policies(db: &sqlx::SqlitePool) -> anyhow::Result<()> {
+    let existing = tool_policy::get_global_policies_for_agent(db, "default").await?;
+    if !existing.is_empty() {
+        return Ok(());
+    }
+
+    tracing::info!("Seeding global tool policies for bundled default agent");
+
+    let policies = vec![
+        (
+            BUILTIN_CAPABILITY_ID.to_string(),
+            BUILTIN_DELEGATE.to_string(),
+            ToolPolicy::Allow,
+        ),
+        (
+            BUILTIN_CAPABILITY_ID.to_string(),
+            BUILTIN_EMIT_EVENT.to_string(),
+            ToolPolicy::Allow,
+        ),
+    ];
+
+    tool_policy::set_global_policies(db, "default", &policies).await?;
     Ok(())
 }

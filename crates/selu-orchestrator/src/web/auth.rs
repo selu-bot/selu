@@ -46,6 +46,7 @@ pub struct AuthUser {
     pub user_id: String,
     pub username: String,
     pub display_name: String,
+    pub is_admin: bool,
 }
 
 /// Axum extractor that validates the session cookie.
@@ -67,7 +68,7 @@ impl FromRequestParts<AppState> for AuthUser {
 
         // Look up session + user
         let row = sqlx::query!(
-            r#"SELECT ws.user_id, u.username, u.display_name
+            r#"SELECT ws.user_id, u.username, u.display_name, u.is_admin
                FROM web_sessions ws
                JOIN users u ON u.id = ws.user_id
                WHERE ws.id = ? AND ws.expires_at > datetime('now')"#,
@@ -85,6 +86,7 @@ impl FromRequestParts<AppState> for AuthUser {
                 user_id: r.user_id,
                 username: r.username,
                 display_name: r.display_name,
+                is_admin: r.is_admin != 0,
             }),
             None => Err(Redirect::to("/login").into_response()),
         }
@@ -311,7 +313,7 @@ pub async fn setup_submit(
 
     // Create the admin user
     if let Err(e) = sqlx::query!(
-        "INSERT INTO users (id, username, display_name, password_hash) VALUES (?, ?, ?, ?)",
+        "INSERT INTO users (id, username, display_name, password_hash, is_admin) VALUES (?, ?, ?, ?, 1)",
         user_id,
         username,
         display_name,

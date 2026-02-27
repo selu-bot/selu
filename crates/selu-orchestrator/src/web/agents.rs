@@ -124,8 +124,13 @@ pub struct CapabilityView {
 pub struct ToolView {
     pub name: String,
     pub description: String,
+    /// The effective policy for the current viewer ("allow", "ask", "block", or "not set").
     pub policy: String,
     pub capability_id: String,
+    /// The global default policy ("allow", "ask", "block", or "not set").
+    pub global_default: String,
+    /// Whether the current user has a personal override.
+    pub has_override: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -145,7 +150,12 @@ pub struct BuiltinPolicyView {
     pub tool_name: String,
     pub display_name: String,
     pub description: String,
+    /// The effective policy for the current viewer.
     pub policy: String,
+    /// The global default policy.
+    pub global_default: String,
+    /// Whether the current user has a personal override.
+    pub has_override: bool,
 }
 
 #[derive(Template)]
@@ -154,6 +164,7 @@ struct AgentDetailTemplate {
     active_nav: &'static str,
     agent_id: String,
     agent_name: String,
+    is_admin: bool,
     capabilities: Vec<CapabilityView>,
     builtin_policies: Vec<BuiltinPolicyView>,
     egress_entries: Vec<EgressEntryView>,
@@ -175,6 +186,17 @@ pub struct SetToolPolicyForm {
     pub capability_id: String,
     pub tool_name: String,
     pub policy: String,
+    /// `"global"` to set the global default (admin only), `"user"` for a
+    /// personal override.  Defaults to `"user"` if omitted.
+    #[serde(default = "default_scope_user")]
+    pub scope: String,
+}
+fn default_scope_user() -> String { "user".into() }
+
+#[derive(Debug, Deserialize)]
+pub struct ResetToolPolicyForm {
+    pub capability_id: String,
+    pub tool_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -472,7 +494,7 @@ pub async fn setup_wizard(
 
 /// Submit setup wizard values
 pub async fn setup_submit(
-    user: AuthUser,
+    _user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
     Form(form): Form<SetupSubmitForm>,
@@ -535,6 +557,7 @@ pub async fn setup_submit(
     }
 
     // Process tool policies: extract policy_cap_*, policy_tool_*, policy_val_* fields
+    // These are saved as GLOBAL defaults (not per-user) — they apply to all users.
     {
         use crate::permissions::tool_policy::{self, ToolPolicy};
 
@@ -567,13 +590,12 @@ pub async fn setup_submit(
         }
 
         if !policies.is_empty() {
-            if let Err(e) = tool_policy::set_policies(
+            if let Err(e) = tool_policy::set_global_policies(
                 &state.db,
-                &user.user_id,
                 &agent_id,
                 &policies,
             ).await {
-                error!("Failed to save tool policies: {e}");
+                error!("Failed to save global tool policies: {e}");
                 let msg = urlencoding::encode("Failed to save tool permissions. Please try again.");
                 return Redirect::to(&format!("/agents/{agent_id}/setup?error={msg}")).into_response();
             }
@@ -718,8 +740,21 @@ pub async fn agent_detail(
     // Build capability views
     let mut capabilities: Vec<CapabilityView> = Vec::new();
 
-    // Get user's tool policies for this agent
-    let user_policies = crate::permissions::tool_policy::get_policies_for_agent(
+    // Get global default policies for this agent
+    let global_policies = crate::permissions::tool_policy::get_global_policies_for_agent(
+        &state.db,
+        &agent_id,
+    )
+    .await
+    .unwrap_or_default();
+
+    let global_policy_map: std::collections::HashMap<(String, String), String> = global_policies
+        .into_iter()
+        .map(|p| ((p.capability_id, p.tool_name), p.policy.as_str().to_string()))
+        .collect();
+
+    // Get per-user override policies (if any)
+    let user_overrides = crate::permissions::tool_policy::get_policies_for_agent(
         &state.db,
         &user.user_id,
         &agent_id,
@@ -727,7 +762,7 @@ pub async fn agent_detail(
     .await
     .unwrap_or_default();
 
-    let policy_map: std::collections::HashMap<(String, String), String> = user_policies
+    let override_map: std::collections::HashMap<(String, String), String> = user_overrides
         .into_iter()
         .map(|p| ((p.capability_id, p.tool_name), p.policy.as_str().to_string()))
         .collect();
@@ -746,10 +781,17 @@ pub async fn agent_detail(
         };
 
         let tools: Vec<ToolView> = manifest.tools.iter().map(|t| {
-            let policy = policy_map
-                .get(&(cap_id.clone(), t.name.clone()))
+            let key = (cap_id.clone(), t.name.clone());
+            let global_default = global_policy_map
+                .get(&key)
                 .cloned()
                 .unwrap_or_else(|| "not set".to_string());
+            let user_override = override_map.get(&key);
+            let has_override = user_override.is_some();
+            // Effective policy for "Your Permissions": override if set, else global default
+            let policy = user_override
+                .cloned()
+                .unwrap_or_else(|| global_default.clone());
             let desc = if t.description.len() > 120 {
                 format!("{}...", &t.description[..117])
             } else {
@@ -760,6 +802,8 @@ pub async fn agent_detail(
                 description: desc,
                 policy,
                 capability_id: cap_id.clone(),
+                global_default,
+                has_override,
             }
         }).collect();
 
@@ -819,16 +863,24 @@ pub async fn agent_detail(
     let builtin_policies: Vec<BuiltinPolicyView> = builtin_tools
         .iter()
         .map(|(tool_name, display, desc)| {
-            let policy = policy_map
-                .get(&(BUILTIN_CAPABILITY_ID.to_string(), tool_name.to_string()))
+            let key = (BUILTIN_CAPABILITY_ID.to_string(), tool_name.to_string());
+            let global_default = global_policy_map
+                .get(&key)
                 .cloned()
                 .unwrap_or_else(|| "not set".to_string());
+            let user_override = override_map.get(&key);
+            let has_override = user_override.is_some();
+            let policy = user_override
+                .cloned()
+                .unwrap_or_else(|| global_default.clone());
             BuiltinPolicyView {
                 capability_id: BUILTIN_CAPABILITY_ID.to_string(),
                 tool_name: tool_name.to_string(),
                 display_name: display.to_string(),
                 description: desc.to_string(),
                 policy,
+                global_default,
+                has_override,
             }
         })
         .collect();
@@ -837,6 +889,7 @@ pub async fn agent_detail(
         active_nav: "agents",
         agent_id,
         agent_name,
+        is_admin: user.is_admin,
         capabilities,
         builtin_policies,
         egress_entries,
@@ -878,6 +931,10 @@ pub async fn set_agent_model_handler(
 
 /// HTMX endpoint: update a single tool policy for an agent.
 ///
+/// The `scope` form field determines where the policy is saved:
+/// - `"global"` — updates the global default (admin only)
+/// - `"user"` (default) — creates a personal override for the current user
+///
 /// Returns an updated badge fragment so the UI reflects the new state
 /// without a full page reload.
 pub async fn set_tool_policy_handler(
@@ -891,20 +948,64 @@ pub async fn set_tool_policy_handler(
         Err(_) => return StatusCode::BAD_REQUEST.into_response(),
     };
 
-    if let Err(e) = crate::permissions::tool_policy::set_policies(
-        &state.db,
-        &user.user_id,
-        &agent_id,
-        &[(form.capability_id, form.tool_name, policy)],
-    )
-    .await
-    {
+    let result = if form.scope == "global" && user.is_admin {
+        // Admin setting the global default
+        crate::permissions::tool_policy::set_global_policies(
+            &state.db,
+            &agent_id,
+            &[(form.capability_id, form.tool_name, policy)],
+        )
+        .await
+    } else {
+        // Per-user override (any user, or admin editing their own)
+        crate::permissions::tool_policy::set_policies(
+            &state.db,
+            &user.user_id,
+            &agent_id,
+            &[(form.capability_id, form.tool_name, policy)],
+        )
+        .await
+    };
+
+    if let Err(e) = result {
         error!("Failed to set tool policy: {e}");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
     // Return empty 200 — the radio buttons already reflect the new state client-side
     StatusCode::OK.into_response()
+}
+
+/// HTMX endpoint: reset a user's personal tool policy override back to the global default.
+///
+/// Deletes the per-user override from `tool_policies`, so the user falls back
+/// to the global default.
+pub async fn reset_tool_policy_handler(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    State(state): State<AppState>,
+    Form(form): Form<ResetToolPolicyForm>,
+) -> Response {
+    if let Err(e) = crate::permissions::tool_policy::delete_user_policy(
+        &state.db,
+        &user.user_id,
+        &agent_id,
+        &form.capability_id,
+        &form.tool_name,
+    )
+    .await
+    {
+        error!("Failed to reset tool policy: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    // Tell HTMX to reload the page so the UI reflects the reset state
+    (
+        StatusCode::OK,
+        [("HX-Redirect", format!("/agents/{agent_id}"))],
+        "",
+    )
+        .into_response()
 }
 
 /// Uninstall an agent

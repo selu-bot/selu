@@ -269,12 +269,19 @@ pub async fn uninstall_agent(
         map.remove(agent_id);
     }
 
-    // Remove tool policies for this agent (all users)
+    // Remove tool policies for this agent (all users — per-user overrides)
     sqlx::query("DELETE FROM tool_policies WHERE agent_id = ?")
         .bind(agent_id)
         .execute(db)
         .await
         .context("Failed to delete tool policies")?;
+
+    // Remove global tool policies for this agent
+    sqlx::query("DELETE FROM global_tool_policies WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(db)
+        .await
+        .context("Failed to delete global tool policies")?;
 
     // Remove pending approvals for this agent
     sqlx::query("DELETE FROM pending_tool_approvals WHERE agent_id = ?")

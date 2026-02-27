@@ -384,7 +384,7 @@ where
         return Ok(ToolDispatchResult::Done(result));
     }
 
-    let policy = tool_policy::get_policy(&state.db, user_id, agent_id, capability_id, tool_name)
+    let policy = tool_policy::get_effective_policy(&state.db, user_id, agent_id, capability_id, tool_name)
         .await
         .unwrap_or(None);
 
