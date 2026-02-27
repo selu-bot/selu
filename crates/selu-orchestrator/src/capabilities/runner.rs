@@ -23,6 +23,7 @@ use bollard::Docker;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -61,7 +62,8 @@ pub struct CapabilityRunner {
     egress_proxy_port: u16,
     /// When Selu itself runs inside Docker, this holds our own container ID
     /// so we can join the capability bridge networks and connect via container IP.
-    self_container_id: Option<String>,
+    /// Populated during `ensure_networks()` at startup.
+    self_container_id: Arc<RwLock<Option<String>>>,
 }
 
 impl CapabilityRunner {
@@ -74,23 +76,11 @@ impl CapabilityRunner {
             .and_then(|(_, p)| p.parse::<u16>().ok())
             .unwrap_or(8888);
 
-        // Detect if we are running inside Docker by checking /.dockerenv
-        let self_container_id = if std::path::Path::new("/.dockerenv").exists() {
-            // Read our container ID from /proc/self/mountinfo (most reliable method)
-            read_self_container_id()
-        } else {
-            None
-        };
-
-        if self_container_id.is_some() {
-            info!("Running inside Docker — will connect to capabilities via container network IP");
-        }
-
         Ok(Self {
             docker: Arc::new(docker),
             egress_registry,
             egress_proxy_port: port,
-            self_container_id,
+            self_container_id: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -148,16 +138,29 @@ impl CapabilityRunner {
         Ok(())
     }
 
-    /// Ensure the isolated bridge networks exist (called once at startup)
+    /// Ensure the isolated bridge networks exist (called once at startup).
+    /// Also detects if Selu is running inside Docker and if so, joins
+    /// the capability networks so we can reach containers by internal IP.
     pub async fn ensure_networks(&self) -> Result<()> {
         self.ensure_network(TOOLS_NETWORK).await?;
         self.ensure_network(ENVS_NETWORK).await?;
 
-        // When running inside Docker, join the Selu container to both capability
-        // networks so we can reach capability containers by their internal IP.
-        if let Some(ref self_id) = self.self_container_id {
+        // Detect if we are running inside Docker.
+        // First try filesystem heuristics, then fall back to the Docker API.
+        let mut container_id = detect_self_container_id();
+
+        // Fallback: ask Docker if our hostname matches a running container.
+        // This is the most reliable method because it works regardless of
+        // cgroup version or runtime quirks.
+        if container_id.is_none() {
+            container_id = self.detect_via_docker_api().await;
+        }
+
+        if let Some(ref self_id) = container_id {
+            info!(container_id = %self_id, "Running inside Docker — will connect to capabilities via container network IP");
             self.join_network_if_needed(self_id, TOOLS_NETWORK).await?;
             self.join_network_if_needed(self_id, ENVS_NETWORK).await?;
+            *self.self_container_id.write().await = Some(self_id.clone());
         }
 
         Ok(())
@@ -219,6 +222,30 @@ impl CapabilityRunner {
 
         info!(network = network, "Connected Selu container to capability network");
         Ok(())
+    }
+
+    /// Use the Docker API to check if our hostname corresponds to a running
+    /// container.  Docker sets the hostname to the short (12-char) container ID
+    /// by default, so we can inspect it to get the full ID.
+    async fn detect_via_docker_api(&self) -> Option<String> {
+        let hostname = std::fs::read_to_string("/etc/hostname")
+            .ok()
+            .map(|h| h.trim().to_string())
+            .unwrap_or_default();
+
+        if hostname.is_empty() {
+            return None;
+        }
+
+        // Try to inspect a container matching our hostname
+        match self.docker.inspect_container(&hostname, None).await {
+            Ok(inspect) => {
+                let id = inspect.id?;
+                debug!(container_id = %id, "Detected own container via Docker API");
+                Some(id)
+            }
+            Err(_) => None,
+        }
     }
 
     /// Start a capability container for the given manifest + session.
@@ -359,7 +386,7 @@ impl CapabilityRunner {
             .await
             .with_context(|| format!("Failed to inspect container '{}'", container_id))?;
 
-        let grpc_addr = if self.self_container_id.is_some() {
+        let grpc_addr = if self.self_container_id.read().await.is_some() {
             // Running inside Docker — connect via the container's IP on the shared network
             let container_ip = extract_container_ip(&inspect, network_name)
                 .ok_or_else(|| anyhow!(
@@ -453,18 +480,24 @@ fn extract_container_ip(inspect: &ContainerInspectResponse, network_name: &str) 
     }
 }
 
-/// Read our own container ID when running inside Docker.
-/// Parses /proc/self/mountinfo looking for the docker container ID in the path.
-fn read_self_container_id() -> Option<String> {
-    // Try /proc/self/mountinfo first — look for the container ID in the cgroup path
+/// Detect whether we are running inside a Docker container and return our
+/// container ID if so.  Uses multiple heuristics for robustness:
+///
+/// 1. `/proc/self/mountinfo`  — look for `/docker/containers/<id>/`
+/// 2. `/proc/1/cgroup`        — look for `docker-<id>.scope` or `/<id>` paths
+/// 3. `/etc/hostname`         — Docker sets this to the short container ID
+///
+/// Returns `None` when running directly on the host.
+fn detect_self_container_id() -> Option<String> {
+    // Strategy 1: /proc/self/mountinfo (most reliable on standard Docker)
     if let Ok(contents) = std::fs::read_to_string("/proc/self/mountinfo") {
         for line in contents.lines() {
-            // Look for Docker overlay paths like /var/lib/docker/containers/<id>/...
             if let Some(pos) = line.find("/docker/containers/") {
                 let after = &line[pos + "/docker/containers/".len()..];
                 if let Some(end) = after.find('/') {
                     let id = &after[..end];
                     if id.len() >= 12 && id.chars().all(|c| c.is_ascii_hexdigit()) {
+                        debug!("Detected container ID from mountinfo: {}", id);
                         return Some(id.to_string());
                     }
                 }
@@ -472,11 +505,50 @@ fn read_self_container_id() -> Option<String> {
         }
     }
 
-    // Fallback: read the hostname, which Docker sets to the short container ID
-    if let Ok(hostname) = std::fs::read_to_string("/etc/hostname") {
-        let hostname = hostname.trim();
-        if hostname.len() == 12 && hostname.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Some(hostname.to_string());
+    // Strategy 2: /proc/1/cgroup — works on cgroup v1 and some v2 setups
+    if let Ok(contents) = std::fs::read_to_string("/proc/1/cgroup") {
+        for line in contents.lines() {
+            // cgroup v1: `.../docker/<container_id>`
+            if let Some(pos) = line.rfind("/docker/") {
+                let after = &line[pos + "/docker/".len()..];
+                let id = after.split('/').next().unwrap_or("");
+                if id.len() >= 12 && id.chars().all(|c| c.is_ascii_hexdigit()) {
+                    debug!("Detected container ID from cgroup (v1): {}", id);
+                    return Some(id.to_string());
+                }
+            }
+            // cgroup v2 / systemd: `docker-<container_id>.scope`
+            if let Some(pos) = line.find("docker-") {
+                let after = &line[pos + "docker-".len()..];
+                if let Some(end) = after.find('.') {
+                    let id = &after[..end];
+                    if id.len() >= 12 && id.chars().all(|c| c.is_ascii_hexdigit()) {
+                        debug!("Detected container ID from cgroup (v2/systemd): {}", id);
+                        return Some(id.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Strategy 3: /etc/hostname — Docker sets this to the short (12-char) container ID.
+    // Only trust this if we also see evidence of being in a container (/.dockerenv or
+    // /proc/1/cgroup contains "docker" or "containerd").
+    let likely_container = std::path::Path::new("/.dockerenv").exists()
+        || std::fs::read_to_string("/proc/1/cgroup")
+            .map(|c| c.contains("docker") || c.contains("containerd") || c.contains("/lxc/"))
+            .unwrap_or(false)
+        || std::fs::read_to_string("/proc/self/mountinfo")
+            .map(|c| c.contains("/docker/"))
+            .unwrap_or(false);
+
+    if likely_container {
+        if let Ok(hostname) = std::fs::read_to_string("/etc/hostname") {
+            let hostname = hostname.trim();
+            if hostname.len() == 12 && hostname.chars().all(|c| c.is_ascii_hexdigit()) {
+                debug!("Detected container ID from hostname: {}", hostname);
+                return Some(hostname.to_string());
+            }
         }
     }
 
