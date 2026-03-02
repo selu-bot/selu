@@ -1175,8 +1175,11 @@ pub async fn update_agent(
         Ok(e) => e,
         Err(e) => {
             error!("Invalid entry JSON: {e}");
-            return Redirect::to("/agents?error=Invalid+agent+data.+Please+try+again.")
-                .into_response();
+            return Redirect::to(&format!(
+                "{}/agents?error=Invalid+agent+data.+Please+try+again.",
+                state.base_path
+            ))
+            .into_response();
         }
     };
 
@@ -1184,8 +1187,11 @@ pub async fn update_agent(
         Ok(d) => d,
         Err(e) => {
             error!("Failed to connect to Docker: {e}");
-            return Redirect::to("/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F")
-                .into_response();
+            return Redirect::to(&format!(
+                "{}/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F",
+                state.base_path
+            ))
+            .into_response();
         }
     };
 
@@ -1206,17 +1212,20 @@ pub async fn update_agent(
                 .values()
                 .any(|m| !m.tools.is_empty());
             if !agent_def.install_steps.is_empty() || has_tools {
-                Redirect::to(&format!("/agents/{}/setup", entry.id)).into_response()
+                Redirect::to(&format!("{}/agents/{}/setup", state.base_path, entry.id))
+                    .into_response()
             } else {
                 let msg = urlencoding::encode("Agent updated successfully.");
-                Redirect::to(&format!("/agents?success={msg}")).into_response()
+                Redirect::to(&format!("{}/agents?success={msg}", state.base_path))
+                    .into_response()
             }
         }
         Err(e) => {
             error!("Agent update failed: {e}");
             let text = format!("Agent update failed: {e}");
             let msg = urlencoding::encode(&text);
-            Redirect::to(&format!("/agents?error={msg}")).into_response()
+            Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+                .into_response()
         }
     }
 }

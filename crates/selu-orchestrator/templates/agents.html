@@ -138,7 +138,7 @@
                 <td class="px-5 py-3.5 text-right">
                   <div class="flex items-center justify-end gap-2">
                     {% if agent.update_available %}
-                    <form method="POST" action="/agents/update" class="inline"
+                    <form method="POST" action="{{ base_path }}/agents/update" class="inline"
                           onsubmit="return confirm(t('agents.update.confirm').replace('{name}', '{{ agent.name }}').replace('{version}', '{{ agent.marketplace_version }}'))">
                       <input type="hidden" name="entry_json" id="update-entry-{{ agent.id }}" value="" />
                       <button type="submit"
@@ -281,7 +281,7 @@
             {% endif %}
             <div class="mt-4 flex items-center gap-2">
               {% if agent.update_available %}
-              <form method="POST" action="/agents/update">
+              <form method="POST" action="{{ base_path }}/agents/update">
                 <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
                 <button type="submit"
                         class="bg-gradient-to-r from-amber to-coral text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-amber/20"
