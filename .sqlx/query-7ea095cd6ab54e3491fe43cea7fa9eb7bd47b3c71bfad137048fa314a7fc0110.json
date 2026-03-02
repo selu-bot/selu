@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, username, display_name, is_admin, created_at FROM users ORDER BY created_at",
+  "query": "SELECT id, username, display_name, is_admin, language, created_at FROM users ORDER BY created_at",
   "describe": {
     "columns": [
       {
@@ -24,8 +24,13 @@
         "type_info": "Integer"
       },
       {
-        "name": "created_at",
+        "name": "language",
         "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 5,
         "type_info": "Text"
       }
     ],
@@ -37,8 +42,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "3f39cec806876d9cb8bfbfdfcc2f73ffb55c7fdcafa061a1088bbfc2dde3dc44"
+  "hash": "7ea095cd6ab54e3491fe43cea7fa9eb7bd47b3c71bfad137048fa314a7fc0110"
 }

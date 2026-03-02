@@ -25,6 +25,7 @@
               <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.username">Username</th>
               <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.displayname">Display Name</th>
               <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.role">Role</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.language">Language</th>
               <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Created</th>
               <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted"></th>
             </tr>
@@ -49,6 +50,16 @@
                         hx-post="{{ base_path }}/users/{{ user.id }}/toggle-admin"
                 {% endif %}
               </td>
+              <td class="px-5 py-3.5">
+                <select name="language"
+                        hx-post="{{ base_path }}/users/{{ user.id }}/language"
+                        hx-target="closest td"
+                        hx-swap="innerHTML"
+                        class="bg-surface-input border border-edge rounded-lg px-2 py-1 text-xs text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition cursor-pointer">
+                  <option value="de" {% if user.language == "de" %}selected{% endif %}>Deutsch</option>
+                  <option value="en" {% if user.language == "en" %}selected{% endif %}>English</option>
+                </select>
+              </td>
               <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ user.created_at }}</td>
               <td class="px-5 py-3.5 text-right">
                 {% if user.id != current_user_id %}
@@ -64,7 +75,7 @@
             {% endfor %}
             {% if users.is_empty() %}
             <tr>
-              <td colspan="5" class="px-5 py-8 text-center text-txt-muted text-sm">No users yet. Create one below.</td>
+              <td colspan="6" class="px-5 py-8 text-center text-txt-muted text-sm" data-i18n="users.empty">No users yet. Create one below.</td>
             </tr>
             {% endif %}
           </tbody>
@@ -79,7 +90,7 @@
       </div>
       <form method="post" action="{{ base_path }}/users">
         <div class="p-5 space-y-4">
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div>
               <label for="u-username" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.username">Username</label>
               <input id="u-username" name="username" type="text" placeholder="alice" required autocomplete="off"
@@ -96,6 +107,15 @@
               <label for="u-password" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.password">Password</label>
               <input id="u-password" name="password" type="password" required autocomplete="new-password"
                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+            </div>
+            <div>
+              <label for="u-language" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.language">Language</label>
+              <select id="u-language" name="language"
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+              </select>
+              <p class="text-[11px] text-txt-faint mt-1" data-i18n="users.language.hint">The language agents will reply in.</p>
             </div>
           </div>
           <div class="flex items-center justify-between">

@@ -154,6 +154,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/users", get(users::users_index).post(users::users_create))
         .route("/users/{id}", delete(users::users_delete))
         .route("/users/{id}/toggle-admin", post(users::users_toggle_admin))
+        .route("/users/{id}/language", post(users::users_set_language))
         // Personality
         .route(
             "/personality",

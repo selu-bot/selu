@@ -163,6 +163,8 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         Some(&delegated_agents)
     };
 
+    let user_language = crate::i18n::user_language(&state.db, &user_id).await;
+
     let context_fut = context::build(
         &state.db,
         &agent,
@@ -170,6 +172,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         &session_id,
         thread_id.as_deref(),
         &user_id,
+        &user_language,
         &effective_text,
         &inlined_manifests,
         delegated_ref,

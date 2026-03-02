@@ -21,6 +21,7 @@ pub async fn build(
     session_id: &str,
     thread_id: Option<&str>,
     user_id: &str,
+    user_language: &str,
     latest_message: &str,
     inlined_manifests: &HashMap<String, CapabilityManifest>,
     delegated_agents: Option<&HashMap<String, Arc<AgentDefinition>>>,
@@ -71,6 +72,18 @@ pub async fn build(
     system.push_str(&format!(
         "\n\n## Current date and time\n{}",
         now.format("%A, %B %-d, %Y, %H:%M (%Z)")
+    ));
+
+    // ── User language preference ──────────────────────────────────────────────
+    // Instruct the model to respond in the user's preferred language.
+    let lang_name = match user_language {
+        "de" => "German (Deutsch)",
+        "en" => "English",
+        _ => "German (Deutsch)",
+    };
+    system.push_str(&format!(
+        "\n\n## Response language\nAlways reply in {}. This is the user's preferred language.",
+        lang_name
     ));
 
     messages.push(ChatMessage::system(system));

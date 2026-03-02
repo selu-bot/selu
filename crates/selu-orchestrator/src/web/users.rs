@@ -26,6 +26,7 @@ pub struct UserRow {
     pub username: String,
     pub display_name: String,
     pub is_admin: bool,
+    pub language: String,
     pub created_at: String,
 }
 
@@ -54,6 +55,7 @@ pub struct CreateUserForm {
     pub username: String,
     pub display_name: String,
     pub password: String,
+    pub language: String,
     #[serde(default)]
     pub is_admin: Option<String>,
 }
@@ -70,7 +72,7 @@ pub async fn users_index(
     }
 
     let users = sqlx::query!(
-        "SELECT id, username, display_name, is_admin, created_at FROM users ORDER BY created_at"
+        "SELECT id, username, display_name, is_admin, language, created_at FROM users ORDER BY created_at"
     )
     .fetch_all(&state.db)
     .await
@@ -81,6 +83,7 @@ pub async fn users_index(
         username: r.username,
         display_name: r.display_name,
         is_admin: r.is_admin != 0,
+        language: r.language,
         created_at: r.created_at,
     })
     .collect();
@@ -148,14 +151,19 @@ pub async fn users_create(
 
     let id = Uuid::new_v4().to_string();
     let username = form.username.trim().to_string();
+    let language = match form.language.as_str() {
+        "en" | "de" => form.language.clone(),
+        _ => "de".to_string(),
+    };
 
     let result = sqlx::query!(
-        "INSERT INTO users (id, username, display_name, password_hash, is_admin) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO users (id, username, display_name, password_hash, is_admin, language) VALUES (?, ?, ?, ?, ?, ?)",
         id,
         username,
         display_name,
         hash,
         is_admin,
+        language,
     )
     .execute(&state.db)
     .await;
@@ -257,4 +265,57 @@ pub async fn users_toggle_admin(
             id = target_id,
         )).into_response()
     }
+}
+
+// ── Language ──────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct SetLanguageForm {
+    pub language: String,
+}
+
+/// POST /users/{id}/language — change the output language for a user (HTMX, returns updated select)
+pub async fn users_set_language(
+    user: AuthUser,
+    Path(target_id): Path<String>,
+    State(state): State<AppState>,
+    Form(form): Form<SetLanguageForm>,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let language = match form.language.as_str() {
+        "en" | "de" => form.language.clone(),
+        _ => "de".to_string(),
+    };
+
+    if let Err(e) = sqlx::query!(
+        "UPDATE users SET language = ? WHERE id = ?",
+        language,
+        target_id,
+    )
+    .execute(&state.db)
+    .await
+    {
+        error!("Failed to set language for user {target_id}: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    let bp = &state.base_path;
+
+    Html(format!(
+        r#"<select name="language"
+                hx-post="{bp}/users/{id}/language"
+                hx-target="closest td"
+                hx-swap="innerHTML"
+                class="bg-surface-input border border-edge rounded-lg px-2 py-1 text-xs text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition cursor-pointer">
+            <option value="de" {de_sel}>Deutsch</option>
+            <option value="en" {en_sel}>English</option>
+        </select>"#,
+        bp = bp,
+        id = target_id,
+        de_sel = if language == "de" { r#"selected"# } else { "" },
+        en_sel = if language == "en" { r#"selected"# } else { "" },
+    )).into_response()
 }

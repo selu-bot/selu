@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT ws.user_id, u.username, u.display_name, u.is_admin\n               FROM web_sessions ws\n               JOIN users u ON u.id = ws.user_id\n               WHERE ws.id = ? AND ws.expires_at > datetime('now')",
+  "query": "SELECT ws.user_id, u.username, u.display_name, u.is_admin, u.language\n               FROM web_sessions ws\n               JOIN users u ON u.id = ws.user_id\n               WHERE ws.id = ? AND ws.expires_at > datetime('now')",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
         "name": "is_admin",
         "ordinal": 3,
         "type_info": "Integer"
+      },
+      {
+        "name": "language",
+        "ordinal": 4,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -31,8 +36,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "83ea176cfc62d0f257f72610e1402a5169da6157d3739b47b276f77aadba3c6c"
+  "hash": "26f2c125a42c49a8d695214c2e84e533e5fec884dec401be01f8d0df983cd950"
 }

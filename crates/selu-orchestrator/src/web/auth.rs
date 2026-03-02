@@ -49,6 +49,7 @@ pub struct AuthUser {
     pub username: String,
     pub display_name: String,
     pub is_admin: bool,
+    pub language: String,
 }
 
 /// Axum extractor that validates the session cookie.
@@ -70,7 +71,7 @@ impl FromRequestParts<AppState> for AuthUser {
 
         // Look up session + user
         let row = sqlx::query!(
-            r#"SELECT ws.user_id, u.username, u.display_name, u.is_admin
+            r#"SELECT ws.user_id, u.username, u.display_name, u.is_admin, u.language
                FROM web_sessions ws
                JOIN users u ON u.id = ws.user_id
                WHERE ws.id = ? AND ws.expires_at > datetime('now')"#,
@@ -89,6 +90,7 @@ impl FromRequestParts<AppState> for AuthUser {
                 username: r.username,
                 display_name: r.display_name,
                 is_admin: r.is_admin != 0,
+                language: r.language,
             }),
             None => Err(Redirect::to(&prefixed(state.base_path.as_str(), "/login")).into_response()),
         }
