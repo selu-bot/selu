@@ -174,8 +174,19 @@ async fn install_agent_inner(
     }
 
     // 5. Insert DB row (setup_complete = 0 if the agent has install steps)
-    let agent_def = loader::load_one(agent_dir).await
+    let mut agent_def = loader::load_one(agent_dir).await
         .with_context(|| format!("Failed to load extracted agent from {}", agent_dir.display()))?;
+
+    // The marketplace entry ID is authoritative (used for DB + filesystem).
+    // Override the YAML id to keep the in-memory map consistent.
+    if agent_def.id != entry.id {
+        warn!(
+            agent = %entry.id,
+            yaml_id = %agent_def.id,
+            "agent.yaml id differs from marketplace id — using marketplace id"
+        );
+        agent_def.id = entry.id.clone();
+    }
 
     let has_steps = !agent_def.install_steps.is_empty();
     let setup_complete = if has_steps { 0 } else { 1 };
@@ -222,7 +233,17 @@ pub async fn complete_setup(
         .context("Failed to mark setup complete")?;
 
     let agent_dir = Path::new(installed_dir).join(agent_id);
-    let agent_def = loader::load_one(&agent_dir).await?;
+    let mut agent_def = loader::load_one(&agent_dir).await?;
+
+    // The DB/marketplace ID is authoritative — override YAML id if it differs.
+    if agent_def.id != agent_id {
+        warn!(
+            agent = %agent_id,
+            yaml_id = %agent_def.id,
+            "agent.yaml id differs from DB id — using DB id"
+        );
+        agent_def.id = agent_id.to_owned();
+    }
 
     {
         let current = agents.load();
@@ -372,8 +393,18 @@ async fn update_agent_inner(
     }
 
     // Load the new agent definition
-    let agent_def = loader::load_one(agent_dir).await
+    let mut agent_def = loader::load_one(agent_dir).await
         .with_context(|| format!("Failed to load updated agent from {}", agent_dir.display()))?;
+
+    // The marketplace entry ID is authoritative — override YAML id if it differs.
+    if agent_def.id != entry.id {
+        warn!(
+            agent = %entry.id,
+            yaml_id = %agent_def.id,
+            "agent.yaml id differs from marketplace id — using marketplace id"
+        );
+        agent_def.id = entry.id.clone();
+    }
 
     let has_steps = !agent_def.install_steps.is_empty();
     let setup_complete = if has_steps { 0 } else { 1 };

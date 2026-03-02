@@ -199,7 +199,18 @@ pub async fn load_installed(
     for (agent_id,) in rows {
         let agent_dir = dir.join(&agent_id);
         match load_one(&agent_dir).await {
-            Ok(agent) => {
+            Ok(mut agent) => {
+                // The DB ID (= marketplace ID) is authoritative.  Override the
+                // YAML id so the in-memory map is keyed consistently with the
+                // DB and filesystem.
+                if agent.id != agent_id {
+                    tracing::warn!(
+                        db_id = %agent_id,
+                        yaml_id = %agent.id,
+                        "agent.yaml id differs from DB id — using DB id"
+                    );
+                    agent.id = agent_id.clone();
+                }
                 tracing::info!(agent = %agent.id, "Loaded installed agent");
                 agents.insert(agent.id.clone(), agent);
             }
