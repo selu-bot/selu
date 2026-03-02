@@ -42,6 +42,12 @@ pub struct MarketplaceEntry {
     /// Docker images to pull for the agent's capabilities
     #[serde(default)]
     pub capability_images: Vec<String>,
+    /// Optional marketplace rating average (1.0-5.0).
+    #[serde(default)]
+    pub average_rating: Option<f64>,
+    /// Number of ratings the average is based on.
+    #[serde(default)]
+    pub rating_count: Option<u32>,
 }
 
 // ── Catalogue fetching ────────────────────────────────────────────────────────
@@ -174,8 +180,12 @@ async fn install_agent_inner(
     }
 
     // 5. Insert DB row (setup_complete = 0 if the agent has install steps)
-    let mut agent_def = loader::load_one(agent_dir).await
-        .with_context(|| format!("Failed to load extracted agent from {}", agent_dir.display()))?;
+    let mut agent_def = loader::load_one(agent_dir).await.with_context(|| {
+        format!(
+            "Failed to load extracted agent from {}",
+            agent_dir.display()
+        )
+    })?;
 
     // The marketplace entry ID is authoritative (used for DB + filesystem).
     // Override the YAML id to keep the in-memory map consistent.
@@ -314,17 +324,13 @@ pub async fn update_agent(
     }
 
     // Don't allow updating the bundled default
-    let row = sqlx::query_as::<_, (i32,)>(
-        "SELECT is_bundled FROM agents WHERE id = ?",
-    )
-    .bind(&entry.id)
-    .fetch_optional(db)
-    .await?;
+    let row = sqlx::query_as::<_, (i32,)>("SELECT is_bundled FROM agents WHERE id = ?")
+        .bind(&entry.id)
+        .fetch_optional(db)
+        .await?;
 
     if let Some((1,)) = row {
-        return Err(anyhow::anyhow!(
-            "Cannot update the bundled default agent"
-        ));
+        return Err(anyhow::anyhow!("Cannot update the bundled default agent"));
     }
 
     info!(agent = %entry.id, from_url = %entry.archive_url, version = %entry.version, "Updating agent");
@@ -359,7 +365,8 @@ pub async fn update_agent(
     }
 
     // 5. Remove old agent directory
-    tokio::fs::remove_dir_all(&agent_dir).await
+    tokio::fs::remove_dir_all(&agent_dir)
+        .await
         .with_context(|| format!("Failed to remove old agent dir {}", agent_dir.display()))?;
 
     // 6. Extract new archive
@@ -393,7 +400,8 @@ async fn update_agent_inner(
     }
 
     // Load the new agent definition
-    let mut agent_def = loader::load_one(agent_dir).await
+    let mut agent_def = loader::load_one(agent_dir)
+        .await
         .with_context(|| format!("Failed to load updated agent from {}", agent_dir.display()))?;
 
     // The marketplace entry ID is authoritative — override YAML id if it differs.
@@ -501,12 +509,10 @@ pub async fn uninstall_agent(
     agents: &Arc<ArcSwap<AgentMap>>,
 ) -> Result<()> {
     // Don't allow uninstalling the bundled default
-    let row = sqlx::query_as::<_, (i32,)>(
-        "SELECT is_bundled FROM agents WHERE id = ?",
-    )
-    .bind(agent_id)
-    .fetch_optional(db)
-    .await?;
+    let row = sqlx::query_as::<_, (i32,)>("SELECT is_bundled FROM agents WHERE id = ?")
+        .bind(agent_id)
+        .fetch_optional(db)
+        .await?;
 
     if let Some((1,)) = row {
         return Err(anyhow::anyhow!(
@@ -589,7 +595,8 @@ pub async fn uninstall_agent(
     // Remove filesystem
     let agent_dir = Path::new(installed_dir).join(agent_id);
     if agent_dir.exists() {
-        tokio::fs::remove_dir_all(&agent_dir).await
+        tokio::fs::remove_dir_all(&agent_dir)
+            .await
             .with_context(|| format!("Failed to remove agent dir {}", agent_dir.display()))?;
     }
 
@@ -600,12 +607,10 @@ pub async fn uninstall_agent(
 /// Check if an agent is installed.
 #[allow(dead_code)]
 pub async fn is_installed(db: &SqlitePool, agent_id: &str) -> Result<bool> {
-    let row = sqlx::query_as::<_, (i32,)>(
-        "SELECT COUNT(*) FROM agents WHERE id = ?",
-    )
-    .bind(agent_id)
-    .fetch_one(db)
-    .await?;
+    let row = sqlx::query_as::<_, (i32,)>("SELECT COUNT(*) FROM agents WHERE id = ?")
+        .bind(agent_id)
+        .fetch_one(db)
+        .await?;
 
     Ok(row.0 > 0)
 }
@@ -632,10 +637,7 @@ async fn download_archive(url: &str) -> Result<Vec<u8>> {
         ));
     }
 
-    let bytes = resp
-        .bytes()
-        .await
-        .context("Failed to read archive bytes")?;
+    let bytes = resp.bytes().await.context("Failed to read archive bytes")?;
 
     info!(bytes = bytes.len(), "Downloaded archive");
     Ok(bytes.to_vec())
@@ -680,7 +682,10 @@ fn extract_archive(data: &[u8], installed_dir: &str, agent_id: &str) -> Result<(
     let mut archive2 = tar::Archive::new(decoder2);
     let mut top_dirs = std::collections::HashSet::new();
 
-    for entry in archive2.entries().context("Failed to read archive entries")? {
+    for entry in archive2
+        .entries()
+        .context("Failed to read archive entries")?
+    {
         let entry = entry.context("Failed to read archive entry")?;
         if let Ok(path) = entry.path() {
             if let Some(first) = path.components().next() {
@@ -696,9 +701,15 @@ fn extract_archive(data: &[u8], installed_dir: &str, agent_id: &str) -> Result<(
         None
     };
 
-    for entry in archive.entries().context("Failed to read archive entries")? {
+    for entry in archive
+        .entries()
+        .context("Failed to read archive entries")?
+    {
         let mut entry = entry.context("Failed to read archive entry")?;
-        let path = entry.path().context("Invalid path in archive")?.into_owned();
+        let path = entry
+            .path()
+            .context("Invalid path in archive")?
+            .into_owned();
 
         let relative = if let Some(ref prefix) = strip_prefix {
             match path.strip_prefix(prefix) {
@@ -767,11 +778,7 @@ async fn pull_image(docker: &bollard::Docker, image: &str) -> Result<()> {
                 }
             }
             Err(e) => {
-                return Err(anyhow::anyhow!(
-                    "Failed to pull image '{}': {}",
-                    image,
-                    e
-                ));
+                return Err(anyhow::anyhow!("Failed to pull image '{}': {}", image, e));
             }
         }
     }

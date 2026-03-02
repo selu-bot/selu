@@ -98,6 +98,15 @@
                    <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral" data-i18n="agents.bundled">Bundled</span>
                   {% endif %}
                   <div class="text-[10px] text-txt-faint font-mono mt-0.5">{{ agent.id }}{% if agent.capability_count > 0 %} &middot; {{ agent.capability_count }} cap{% endif %}</div>
+                  {% if !agent.is_bundled %}
+                  <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/rate" class="mt-2 flex items-center gap-1.5">
+                    <span class="text-[11px] text-txt-muted" data-i18n="agents.rating.label">Rate:</span>
+                    {% for i in 1..=5 %}
+                    <button type="submit" name="rating" value="{{ i }}"
+                            class="text-sm text-amber/40 hover:text-amber transition-colors cursor-pointer leading-none">★</button>
+                    {% endfor %}
+                  </form>
+                  {% endif %}
                 </td>
                 <td class="px-5 py-3.5">
                   <span class="text-txt-muted text-xs">v{{ agent.version }}</span>
@@ -263,6 +272,12 @@
             <p class="text-xs text-txt-muted leading-relaxed flex-1">{{ agent.description }}</p>
             {% if !agent.author.is_empty() %}
             <p class="text-[11px] text-txt-faint mt-2">By {{ agent.author }}</p>
+            {% endif %}
+            {% if let Some(average_rating) = agent.average_rating %}
+            <div class="mt-2 flex items-center gap-2">
+              <span class="text-amber text-sm leading-none">★★★★★</span>
+              <span class="text-[11px] text-txt-muted">{{ average_rating }} ({{ agent.rating_count.unwrap_or(0) }})</span>
+            </div>
             {% endif %}
             <div class="mt-4 flex items-center gap-2">
               {% if agent.update_available %}

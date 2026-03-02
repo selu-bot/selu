@@ -1,11 +1,11 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
-    Form,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 
 use crate::agents::{
@@ -51,6 +51,8 @@ pub struct MarketplaceAgentView {
     pub update_available: bool,
     /// JSON-encoded MarketplaceEntry for the install/update form
     pub entry_json: String,
+    pub average_rating: Option<f64>,
+    pub rating_count: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -196,7 +198,9 @@ pub struct SetAgentModelForm {
     #[serde(default = "default_temp_str")]
     pub temperature: String,
 }
-fn default_temp_str() -> String { "0.7".into() }
+fn default_temp_str() -> String {
+    "0.7".into()
+}
 
 #[derive(Debug, Deserialize)]
 pub struct SetToolPolicyForm {
@@ -208,7 +212,9 @@ pub struct SetToolPolicyForm {
     #[serde(default = "default_scope_user")]
     pub scope: String,
 }
-fn default_scope_user() -> String { "user".into() }
+fn default_scope_user() -> String {
+    "user".into()
+}
 
 #[derive(Debug, Deserialize)]
 pub struct ResetToolPolicyForm {
@@ -236,6 +242,16 @@ pub struct ToggleAutoUpdateForm {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct RateAgentForm {
+    pub rating: u8,
+}
+
+#[derive(Debug, Serialize)]
+struct SubmitRatingRequest {
+    rating: u8,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct SetupSubmitForm {
     /// Step values as step_<id>=<value> pairs
     #[serde(flatten)]
@@ -245,7 +261,11 @@ pub struct SetupSubmitForm {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 /// Main agents page: installed agents + marketplace catalogue
-pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(state): State<AppState>) -> Response {
+pub async fn agents_index(
+    user: AuthUser,
+    Query(q): Query<AgentsQuery>,
+    State(state): State<AppState>,
+) -> Response {
     if !user.is_admin {
         return prefixed_redirect(&state, "/chat").into_response();
     }
@@ -254,16 +274,17 @@ pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(st
     let mut agents: Vec<InstalledAgentView> = Vec::new();
 
     for def in agents_map.values() {
-        let db_row = sqlx::query_as::<_, (Option<String>, Option<String>, f64, i32, i32, String, i32)>(
-            "SELECT provider_id, model_id, temperature, is_bundled, setup_complete, \
+        let db_row =
+            sqlx::query_as::<_, (Option<String>, Option<String>, f64, i32, i32, String, i32)>(
+                "SELECT provider_id, model_id, temperature, is_bundled, setup_complete, \
              version, auto_update \
              FROM agents WHERE id = ?",
-        )
-        .bind(&def.id)
-        .fetch_optional(&state.db)
-        .await
-        .ok()
-        .flatten();
+            )
+            .bind(&def.id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten();
 
         let (provider_id, model_id, _temp, is_bundled, setup_complete, version, auto_update) =
             db_row.unwrap_or((None, None, 0.7, 0, 1, "0.1.0".into(), 0));
@@ -319,59 +340,62 @@ pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(st
 
     // Marketplace catalogue
     let marketplace_url = state.config.marketplace_url.clone();
-    let (marketplace_agents, marketplace_error) = match marketplace::fetch_catalogue(&marketplace_url).await {
-        Ok(catalogue) => {
-            // Build a map of installed agent ID -> installed version
-            let installed_versions: std::collections::HashMap<String, String> = agents
-                .iter()
-                .map(|a| (a.id.clone(), a.version.clone()))
-                .collect();
+    let (marketplace_agents, marketplace_error) =
+        match marketplace::fetch_catalogue(&marketplace_url).await {
+            Ok(catalogue) => {
+                // Build a map of installed agent ID -> installed version
+                let installed_versions: std::collections::HashMap<String, String> = agents
+                    .iter()
+                    .map(|a| (a.id.clone(), a.version.clone()))
+                    .collect();
 
-            let views: Vec<MarketplaceAgentView> = catalogue
-                .agents
-                .iter()
-                .map(|entry| {
-                    let entry_json = serde_json::to_string(entry).unwrap_or_default();
-                    let is_installed = installed_versions.contains_key(&entry.id);
-                    let installed_version = installed_versions
-                        .get(&entry.id)
-                        .cloned()
-                        .unwrap_or_default();
-                    let update_available = is_installed
-                        && marketplace::is_newer_version(&installed_version, &entry.version);
+                let views: Vec<MarketplaceAgentView> = catalogue
+                    .agents
+                    .iter()
+                    .map(|entry| {
+                        let entry_json = serde_json::to_string(entry).unwrap_or_default();
+                        let is_installed = installed_versions.contains_key(&entry.id);
+                        let installed_version = installed_versions
+                            .get(&entry.id)
+                            .cloned()
+                            .unwrap_or_default();
+                        let update_available = is_installed
+                            && marketplace::is_newer_version(&installed_version, &entry.version);
 
-                    // Also update the installed agents list with marketplace info
-                    MarketplaceAgentView {
-                        id: entry.id.clone(),
-                        name: entry.name.clone(),
-                        description: entry.description.clone(),
-                        version: entry.version.clone(),
-                        author: entry.author.clone(),
-                        is_installed,
-                        installed_version,
-                        update_available,
-                        entry_json,
-                    }
-                })
-                .collect();
+                        // Also update the installed agents list with marketplace info
+                        MarketplaceAgentView {
+                            id: entry.id.clone(),
+                            name: entry.name.clone(),
+                            description: entry.description.clone(),
+                            version: entry.version.clone(),
+                            author: entry.author.clone(),
+                            is_installed,
+                            installed_version,
+                            update_available,
+                            entry_json,
+                            average_rating: entry.average_rating,
+                            rating_count: entry.rating_count,
+                        }
+                    })
+                    .collect();
 
-            // Back-fill update_available into the installed agents list
-            for mv in &views {
-                if mv.update_available {
-                    if let Some(agent) = agents.iter_mut().find(|a| a.id == mv.id) {
-                        agent.update_available = true;
-                        agent.marketplace_version = mv.version.clone();
+                // Back-fill update_available into the installed agents list
+                for mv in &views {
+                    if mv.update_available {
+                        if let Some(agent) = agents.iter_mut().find(|a| a.id == mv.id) {
+                            agent.update_available = true;
+                            agent.marketplace_version = mv.version.clone();
+                        }
                     }
                 }
-            }
 
-            (views, String::new())
-        }
-        Err(e) => {
-            tracing::warn!("Failed to fetch marketplace: {e}");
-            (vec![], format!("Failed to fetch marketplace: {e}"))
-        }
-    };
+                (views, String::new())
+            }
+            Err(e) => {
+                tracing::warn!("Failed to fetch marketplace: {e}");
+                (vec![], format!("Failed to fetch marketplace: {e}"))
+            }
+        };
 
     // Available providers for model assignment
     let providers = load_provider_options(&state).await;
@@ -422,7 +446,11 @@ pub async fn install_agent(
         Ok(e) => e,
         Err(e) => {
             error!("Invalid entry JSON: {e}");
-            return Redirect::to(&format!("{}/agents?error=Invalid+agent+data.+Please+try+again.", state.base_path)).into_response();
+            return Redirect::to(&format!(
+                "{}/agents?error=Invalid+agent+data.+Please+try+again.",
+                state.base_path
+            ))
+            .into_response();
         }
     };
 
@@ -430,7 +458,11 @@ pub async fn install_agent(
         Ok(d) => d,
         Err(e) => {
             error!("Failed to connect to Docker: {e}");
-            return Redirect::to(&format!("{}/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F", state.base_path)).into_response();
+            return Redirect::to(&format!(
+                "{}/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F",
+                state.base_path
+            ))
+            .into_response();
         }
     };
 
@@ -445,12 +477,15 @@ pub async fn install_agent(
     {
         Ok(agent_def) => {
             // Always redirect to setup if there are install steps or tools that need policies
-            let has_tools = agent_def.capability_manifests.values()
+            let has_tools = agent_def
+                .capability_manifests
+                .values()
                 .any(|m| !m.tools.is_empty());
             if agent_def.install_steps.is_empty() && !has_tools {
                 prefixed_redirect(&state, "/agents").into_response()
             } else {
-                Redirect::to(&format!("{}/agents/{}/setup", state.base_path, entry.id)).into_response()
+                Redirect::to(&format!("{}/agents/{}/setup", state.base_path, entry.id))
+                    .into_response()
             }
         }
         Err(e) => {
@@ -521,7 +556,9 @@ pub async fn setup_wizard(
         capability_id: "__builtin__".to_string(),
         tool_name: "emit_event".to_string(),
         display_name: "Emit Event".to_string(),
-        description: "Allows the agent to emit events that can trigger other agents or notifications.".to_string(),
+        description:
+            "Allows the agent to emit events that can trigger other agents or notifications."
+                .to_string(),
         recommended: "ask".to_string(),
     });
     tool_policies.push(ToolPolicyView {
@@ -533,16 +570,14 @@ pub async fn setup_wizard(
         recommended: "ask".to_string(),
     });
 
-    let name = sqlx::query_as::<_, (String,)>(
-        "SELECT display_name FROM agents WHERE id = ?",
-    )
-    .bind(&agent_id)
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .map(|(n,)| n)
-    .unwrap_or_else(|| agent_def.name.clone());
+    let name = sqlx::query_as::<_, (String,)>("SELECT display_name FROM agents WHERE id = ?")
+        .bind(&agent_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .map(|(n,)| n)
+        .unwrap_or_else(|| agent_def.name.clone());
 
     match (AgentSetupTemplate {
         active_nav: "agents",
@@ -583,7 +618,8 @@ pub async fn setup_submit(
             error!("Failed to load agent for setup: {e}");
             let text = format!("Failed to load agent: {e}");
             let msg = urlencoding::encode(&text);
-            return Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response();
+            return Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+                .into_response();
         }
     };
 
@@ -604,8 +640,13 @@ pub async fn setup_submit(
                 Ok(e) => e,
                 Err(e) => {
                     error!("Failed to encrypt credential: {e}");
-                    let msg = urlencoding::encode("Failed to encrypt credential. Please try again.");
-                    return Redirect::to(&format!("{}/agents/{agent_id}/setup?error={msg}", state.base_path)).into_response();
+                    let msg =
+                        urlencoding::encode("Failed to encrypt credential. Please try again.");
+                    return Redirect::to(&format!(
+                        "{}/agents/{agent_id}/setup?error={msg}",
+                        state.base_path
+                    ))
+                    .into_response();
                 }
             };
 
@@ -639,7 +680,9 @@ pub async fn setup_submit(
         let mut policies: Vec<(String, String, ToolPolicy)> = Vec::new();
 
         // Collect all unique keys from form values that match the pattern
-        let keys: Vec<String> = form.values.keys()
+        let keys: Vec<String> = form
+            .values
+            .keys()
             .filter(|k| k.starts_with("policy_val_"))
             .map(|k| k.strip_prefix("policy_val_").unwrap().to_string())
             .collect();
@@ -665,26 +708,22 @@ pub async fn setup_submit(
         }
 
         if !policies.is_empty() {
-            if let Err(e) = tool_policy::set_global_policies(
-                &state.db,
-                &agent_id,
-                &policies,
-            ).await {
+            if let Err(e) = tool_policy::set_global_policies(&state.db, &agent_id, &policies).await
+            {
                 error!("Failed to save global tool policies: {e}");
                 let msg = urlencoding::encode("Failed to save tool permissions. Please try again.");
-                return Redirect::to(&format!("{}/agents/{agent_id}/setup?error={msg}", state.base_path)).into_response();
+                return Redirect::to(&format!(
+                    "{}/agents/{agent_id}/setup?error={msg}",
+                    state.base_path
+                ))
+                .into_response();
             }
         }
     }
 
     // Mark setup complete + load agent into memory
-    if let Err(e) = marketplace::complete_setup(
-        &agent_id,
-        installed_dir,
-        &state.db,
-        &state.agents,
-    )
-    .await
+    if let Err(e) =
+        marketplace::complete_setup(&agent_id, installed_dir, &state.db, &state.agents).await
     {
         error!("Failed to complete setup: {e}");
         let text = format!("Failed to complete setup: {e}");
@@ -819,16 +858,19 @@ pub async fn agent_detail(
     let mut capabilities: Vec<CapabilityView> = Vec::new();
 
     // Get global default policies for this agent
-    let global_policies = crate::permissions::tool_policy::get_global_policies_for_agent(
-        &state.db,
-        &agent_id,
-    )
-    .await
-    .unwrap_or_default();
+    let global_policies =
+        crate::permissions::tool_policy::get_global_policies_for_agent(&state.db, &agent_id)
+            .await
+            .unwrap_or_default();
 
     let global_policy_map: std::collections::HashMap<(String, String), String> = global_policies
         .into_iter()
-        .map(|p| ((p.capability_id, p.tool_name), p.policy.as_str().to_string()))
+        .map(|p| {
+            (
+                (p.capability_id, p.tool_name),
+                p.policy.as_str().to_string(),
+            )
+        })
         .collect();
 
     // Get per-user override policies (if any)
@@ -842,7 +884,12 @@ pub async fn agent_detail(
 
     let override_map: std::collections::HashMap<(String, String), String> = user_overrides
         .into_iter()
-        .map(|p| ((p.capability_id, p.tool_name), p.policy.as_str().to_string()))
+        .map(|p| {
+            (
+                (p.capability_id, p.tool_name),
+                p.policy.as_str().to_string(),
+            )
+        })
         .collect();
 
     for (cap_id, manifest) in &agent.capability_manifests {
@@ -858,32 +905,36 @@ pub async fn agent_detail(
             crate::capabilities::manifest::FilesystemPolicy::Workspace => "workspace",
         };
 
-        let tools: Vec<ToolView> = manifest.tools.iter().map(|t| {
-            let key = (cap_id.clone(), t.name.clone());
-            let global_default = global_policy_map
-                .get(&key)
-                .cloned()
-                .unwrap_or_else(|| "not set".to_string());
-            let user_override = override_map.get(&key);
-            let has_override = user_override.is_some();
-            // Effective policy for "Your Permissions": override if set, else global default
-            let policy = user_override
-                .cloned()
-                .unwrap_or_else(|| global_default.clone());
-            let desc = if t.description.len() > 120 {
-                format!("{}...", &t.description[..117])
-            } else {
-                t.description.clone()
-            };
-            ToolView {
-                name: t.name.clone(),
-                description: desc,
-                policy,
-                capability_id: cap_id.clone(),
-                global_default,
-                has_override,
-            }
-        }).collect();
+        let tools: Vec<ToolView> = manifest
+            .tools
+            .iter()
+            .map(|t| {
+                let key = (cap_id.clone(), t.name.clone());
+                let global_default = global_policy_map
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or_else(|| "not set".to_string());
+                let user_override = override_map.get(&key);
+                let has_override = user_override.is_some();
+                // Effective policy for "Your Permissions": override if set, else global default
+                let policy = user_override
+                    .cloned()
+                    .unwrap_or_else(|| global_default.clone());
+                let desc = if t.description.len() > 120 {
+                    format!("{}...", &t.description[..117])
+                } else {
+                    t.description.clone()
+                };
+                ToolView {
+                    name: t.name.clone(),
+                    description: desc,
+                    policy,
+                    capability_id: cap_id.clone(),
+                    global_default,
+                    has_override,
+                }
+            })
+            .collect();
 
         capabilities.push(CapabilityView {
             id: cap_id.clone(),
@@ -908,7 +959,7 @@ pub async fn agent_detail(
              FROM egress_log
              WHERE capability_id = ?
              ORDER BY created_at DESC
-             LIMIT 100"
+             LIMIT 100",
         )
         .bind(cap_id)
         .fetch_all(&state.db)
@@ -933,10 +984,20 @@ pub async fn agent_detail(
     egress_entries.truncate(100);
 
     // Build built-in tool policy views
-    use crate::permissions::tool_policy::{BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT};
+    use crate::permissions::tool_policy::{
+        BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT,
+    };
     let builtin_tools = [
-        (BUILTIN_DELEGATE, "Delegate to Agent", "Allows the agent to hand off tasks to other specialist agents."),
-        (BUILTIN_EMIT_EVENT, "Emit Event", "Allows the agent to emit events that can trigger other agents or notifications."),
+        (
+            BUILTIN_DELEGATE,
+            "Delegate to Agent",
+            "Allows the agent to hand off tasks to other specialist agents.",
+        ),
+        (
+            BUILTIN_EMIT_EVENT,
+            "Emit Event",
+            "Allows the agent to emit events that can trigger other agents or notifications.",
+        ),
     ];
     let builtin_policies: Vec<BuiltinPolicyView> = builtin_tools
         .iter()
@@ -1005,10 +1066,18 @@ pub async fn set_agent_model_handler(
     .await
     {
         error!("Failed to set agent model: {e}");
-        return Redirect::to(&format!("{}/agents?error=Failed+to+update+model+assignment.+Please+try+again.", state.base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/agents?error=Failed+to+update+model+assignment.+Please+try+again.",
+            state.base_path
+        ))
+        .into_response();
     }
 
-    Redirect::to(&format!("{}/agents?success=Model+updated+successfully.", state.base_path)).into_response()
+    Redirect::to(&format!(
+        "{}/agents?success=Model+updated+successfully.",
+        state.base_path
+    ))
+    .into_response()
 }
 
 /// HTMX endpoint: update a single tool policy for an agent.
@@ -1084,7 +1153,10 @@ pub async fn reset_tool_policy_handler(
     // Tell HTMX to reload the page so the UI reflects the reset state
     (
         StatusCode::OK,
-        [("HX-Redirect", format!("{}/agents/{agent_id}", state.base_path))],
+        [(
+            "HX-Redirect",
+            format!("{}/agents/{agent_id}", state.base_path),
+        )],
         "",
     )
         .into_response()
@@ -1103,7 +1175,8 @@ pub async fn update_agent(
         Ok(e) => e,
         Err(e) => {
             error!("Invalid entry JSON: {e}");
-            return Redirect::to("/agents?error=Invalid+agent+data.+Please+try+again.").into_response();
+            return Redirect::to("/agents?error=Invalid+agent+data.+Please+try+again.")
+                .into_response();
         }
     };
 
@@ -1111,7 +1184,8 @@ pub async fn update_agent(
         Ok(d) => d,
         Err(e) => {
             error!("Failed to connect to Docker: {e}");
-            return Redirect::to("/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F").into_response();
+            return Redirect::to("/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F")
+                .into_response();
         }
     };
 
@@ -1127,7 +1201,9 @@ pub async fn update_agent(
     {
         Ok(agent_def) => {
             // If the updated agent has new install steps or tools, redirect to setup
-            let has_tools = agent_def.capability_manifests.values()
+            let has_tools = agent_def
+                .capability_manifests
+                .values()
                 .any(|m| !m.tools.is_empty());
             if !agent_def.install_steps.is_empty() || has_tools {
                 Redirect::to(&format!("/agents/{}/setup", entry.id)).into_response()
@@ -1156,7 +1232,8 @@ pub async fn toggle_auto_update(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let enabled = form.auto_update.as_deref() == Some("on") || form.auto_update.as_deref() == Some("1");
+    let enabled =
+        form.auto_update.as_deref() == Some("on") || form.auto_update.as_deref() == Some("1");
     let value: i32 = if enabled { 1 } else { 0 };
 
     if let Err(e) = sqlx::query("UPDATE agents SET auto_update = ? WHERE id = ? AND is_bundled = 0")
@@ -1166,10 +1243,108 @@ pub async fn toggle_auto_update(
         .await
     {
         error!("Failed to toggle auto-update: {e}");
-        return Redirect::to(&format!("{}/agents?error=Failed+to+update+setting.+Please+try+again.", state.base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/agents?error=Failed+to+update+setting.+Please+try+again.",
+            state.base_path
+        ))
+        .into_response();
     }
 
-    Redirect::to(&format!("{}/agents?success=Auto-update+setting+saved.", state.base_path)).into_response()
+    Redirect::to(&format!(
+        "{}/agents?success=Auto-update+setting+saved.",
+        state.base_path
+    ))
+    .into_response()
+}
+
+/// Submit a 1-5 star rating for an installed agent.
+pub async fn rate_agent(
+    _user: AuthUser,
+    Path(agent_id): Path<String>,
+    State(state): State<AppState>,
+    Form(form): Form<RateAgentForm>,
+) -> Response {
+    let is_installed = sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM agents WHERE id = ? AND setup_complete = 1 LIMIT 1",
+    )
+    .bind(&agent_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .is_some();
+
+    if !is_installed {
+        let msg = urlencoding::encode("This agent is not installed yet.");
+        return Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response();
+    }
+
+    if !(1..=5).contains(&form.rating) {
+        let msg = urlencoding::encode("Please choose a rating between 1 and 5 stars.");
+        return Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response();
+    }
+
+    let instance_id = match crate::persistence::db::get_instance_id(&state.db).await {
+        Ok(id) => id,
+        Err(e) => {
+            error!("Failed to load instance ID: {e}");
+            let msg = urlencoding::encode("Couldn't submit your rating. Please try again.");
+            return Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+                .into_response();
+        }
+    };
+
+    let ratings_base = match ratings_api_base_url(&state.config.marketplace_url) {
+        Some(base) => base,
+        None => {
+            error!("Invalid marketplace URL: {}", state.config.marketplace_url);
+            let msg = urlencoding::encode("Couldn't submit your rating right now.");
+            return Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+                .into_response();
+        }
+    };
+
+    let url = format!("{ratings_base}/ratings/agents/{agent_id}");
+    let payload = SubmitRatingRequest {
+        rating: form.rating,
+    };
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to build HTTP client for rating submit: {e}");
+            let msg = urlencoding::encode("Couldn't submit your rating right now.");
+            return Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+                .into_response();
+        }
+    };
+
+    let response = client
+        .post(&url)
+        .header("x-instance-id", instance_id)
+        .json(&payload)
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) if resp.status().is_success() => {
+            let msg = urlencoding::encode("Thanks. Your rating was saved.");
+            Redirect::to(&format!("{}/agents?success={msg}", state.base_path)).into_response()
+        }
+        Ok(resp) => {
+            error!("Rating submission failed with status {}", resp.status());
+            let msg = urlencoding::encode("Couldn't save your rating. Please try again.");
+            Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response()
+        }
+        Err(e) => {
+            error!("Rating submission request failed: {e}");
+            let msg = urlencoding::encode("Couldn't save your rating. Please try again.");
+            Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response()
+        }
+    }
 }
 
 /// Uninstall an agent
@@ -1195,7 +1370,11 @@ pub async fn uninstall_agent(
         return Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response();
     }
 
-    Redirect::to(&format!("{}/agents?success=Agent+uninstalled+successfully.", state.base_path)).into_response()
+    Redirect::to(&format!(
+        "{}/agents?success=Agent+uninstalled+successfully.",
+        state.base_path
+    ))
+    .into_response()
 }
 
 /// Set the global default model
@@ -1209,14 +1388,22 @@ pub async fn set_default_model(
     }
     let temp: f32 = form.temperature.parse().unwrap_or(0.7);
 
-    if let Err(e) = model::set_global_default(&state.db, &form.provider_id, &form.model_id, temp)
-        .await
+    if let Err(e) =
+        model::set_global_default(&state.db, &form.provider_id, &form.model_id, temp).await
     {
         error!("Failed to set default model: {e}");
-        return Redirect::to(&format!("{}/agents?error=Failed+to+update+global+default+model.+Please+try+again.", state.base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/agents?error=Failed+to+update+global+default+model.+Please+try+again.",
+            state.base_path
+        ))
+        .into_response();
     }
 
-    Redirect::to(&format!("{}/agents?success=Global+default+model+updated.", state.base_path)).into_response()
+    Redirect::to(&format!(
+        "{}/agents?success=Global+default+model+updated.",
+        state.base_path
+    ))
+    .into_response()
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1251,24 +1438,18 @@ pub async fn models_for_provider(
     Path(provider_id): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
-    let models = crate::llm::models::list_models(
-        &state.db,
-        &state.credentials,
-        &provider_id,
-    )
-    .await;
+    let models = crate::llm::models::list_models(&state.db, &state.credentials, &provider_id).await;
 
     if models.is_empty() {
-        return Html(r#"<option value="">No models available for this provider</option>"#.to_string())
-            .into_response();
+        return Html(
+            r#"<option value="">No models available for this provider</option>"#.to_string(),
+        )
+        .into_response();
     }
 
     let mut html = String::from(r#"<option value="">-- Select a model --</option>"#);
     for m in models {
-        html.push_str(&format!(
-            r#"<option value="{}">{}</option>"#,
-            m.id, m.name,
-        ));
+        html.push_str(&format!(r#"<option value="{}">{}</option>"#, m.id, m.name,));
     }
 
     Html(html).into_response()
@@ -1288,4 +1469,11 @@ fn resolve_model_display_name(provider_id: &str, model_id: &str) -> String {
     }
     // No match — return the raw ID
     model_id.to_string()
+}
+
+fn ratings_api_base_url(marketplace_url: &str) -> Option<String> {
+    let trimmed = marketplace_url.trim_end_matches('/');
+    let marker = "/marketplace/agents";
+    let idx = trimmed.find(marker)?;
+    Some(trimmed[..idx].to_string())
 }

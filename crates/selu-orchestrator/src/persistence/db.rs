@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use tracing::info;
 
@@ -30,4 +30,15 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     sqlx::migrate!("./migrations").run(pool).await?;
     info!("Migrations complete");
     Ok(())
+}
+
+pub async fn get_instance_id(db: &SqlitePool) -> Result<String> {
+    let id = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM instance_meta WHERE key = 'instance_id'",
+    )
+    .fetch_one(db)
+    .await
+    .context("Failed to load instance_id from instance_meta")?;
+
+    Ok(id)
 }
