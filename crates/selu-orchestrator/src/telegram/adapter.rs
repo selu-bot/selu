@@ -429,9 +429,10 @@ async fn webhook_handler(
 /// Set the webhook URL for the bot via Telegram Bot API.
 async fn set_webhook(bot_token: &str, webhook_url: &str) -> Result<()> {
     let http = Client::new();
+    let token = bot_token.trim();
     let url = format!(
         "https://api.telegram.org/bot{}/setWebhook",
-        bot_token
+        token
     );
 
     let body = serde_json::json!({
@@ -465,9 +466,10 @@ async fn set_webhook(bot_token: &str, webhook_url: &str) -> Result<()> {
 /// Remove the webhook for the bot.
 pub async fn delete_webhook(bot_token: &str) -> Result<()> {
     let http = Client::new();
+    let token = bot_token.trim();
     let url = format!(
         "https://api.telegram.org/bot{}/deleteWebhook",
-        bot_token
+        token
     );
 
     let resp = http
@@ -499,7 +501,7 @@ async fn send_telegram_message(
 ) -> Option<i64> {
     let url = format!(
         "https://api.telegram.org/bot{}/sendMessage",
-        bot_token
+        bot_token.trim()
     );
 
     let body = TgSendMessage {
@@ -550,7 +552,7 @@ async fn send_telegram_plain(
     text: &str,
     reply_to_message_id: Option<i64>,
 ) -> Option<i64> {
-    let url = format!("https://api.telegram.org/bot{}/sendMessage", bot_token);
+    let url = format!("https://api.telegram.org/bot{}/sendMessage", bot_token.trim());
 
     let body = TgSendMessage {
         chat_id: chat_id.to_string(),
@@ -596,7 +598,7 @@ async fn send_message_draft(
 ) -> Option<i64> {
     let url = format!(
         "https://api.telegram.org/bot{}/sendMessageDraft",
-        bot_token
+        bot_token.trim()
     );
 
     let body = TgSendMessageDraft {
@@ -629,7 +631,7 @@ async fn send_message_draft(
 async fn send_typing(http: &Client, bot_token: &str, chat_id: &str) {
     let url = format!(
         "https://api.telegram.org/bot{}/sendChatAction",
-        bot_token
+        bot_token.trim()
     );
 
     let body = TgChatAction {
@@ -658,7 +660,12 @@ pub async fn verify_bot_token(bot_token: &str) -> Result<String> {
         .build()
         .unwrap_or_default();
 
-    let url = format!("https://api.telegram.org/bot{}/getMe", bot_token);
+    let token = bot_token.trim();
+    if token.is_empty() {
+        anyhow::bail!("Bot token is empty.");
+    }
+
+    let url = format!("https://api.telegram.org/bot{}/getMe", token);
 
     let resp = http.get(&url).send().await
         .context("Failed to reach Telegram API")?;
@@ -666,8 +673,8 @@ pub async fn verify_bot_token(bot_token: &str) -> Result<String> {
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        if status.as_u16() == 401 {
-            anyhow::bail!("Invalid bot token. Please check the token from BotFather.");
+        if status.as_u16() == 401 || status.as_u16() == 404 {
+            anyhow::bail!("Invalid bot token. Double-check the token you got from @BotFather — it should look like 123456:ABC-DEF1234ghIkl-zyx57W2v.");
         }
         anyhow::bail!("Telegram API error {status}: {body}");
     }
@@ -702,7 +709,8 @@ pub async fn get_recent_chats(bot_token: &str) -> Result<Vec<TgRecentChat>> {
         .build()
         .unwrap_or_default();
 
-    let url = format!("https://api.telegram.org/bot{}/getUpdates", bot_token);
+    let token = bot_token.trim();
+    let url = format!("https://api.telegram.org/bot{}/getUpdates", token);
 
     let body = serde_json::json!({
         "limit": 100,
@@ -996,8 +1004,8 @@ async fn load_active_configs(state: &AppState) -> Result<Vec<TgConfig>> {
     Ok(rows.into_iter().map(|r| TgConfig {
         id: r.id.unwrap_or_default(),
         name: r.name,
-        bot_token: r.bot_token,
-        chat_id: r.chat_id,
+        bot_token: r.bot_token.trim().to_string(),
+        chat_id: r.chat_id.trim().to_string(),
         pipe_id: r.pipe_id,
         inbound_token: r.inbound_token,
     }).collect())
@@ -1021,8 +1029,8 @@ async fn load_config_by_id(state: &AppState, config_id: &str) -> Result<TgConfig
     Ok(TgConfig {
         id: row.id.unwrap_or_default(),
         name: row.name,
-        bot_token: row.bot_token,
-        chat_id: row.chat_id,
+        bot_token: row.bot_token.trim().to_string(),
+        chat_id: row.chat_id.trim().to_string(),
         pipe_id: row.pipe_id,
         inbound_token: row.inbound_token,
     })

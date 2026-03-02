@@ -205,10 +205,11 @@ pub async fn telegram_setup_submit(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    if form.name.trim().is_empty()
-        || form.bot_token.trim().is_empty()
-        || form.chat_id.trim().is_empty()
-    {
+    let bot_token = form.bot_token.trim().to_string();
+    let chat_id = form.chat_id.trim().to_string();
+    let name = form.name.trim().to_string();
+
+    if name.is_empty() || bot_token.is_empty() || chat_id.is_empty() {
         return Redirect::to(&format!(
             "{}/pipes/telegram/setup?error=Please+fill+in+all+required+fields",
             state.base_path
@@ -230,7 +231,7 @@ pub async fn telegram_setup_submit(
     let pipe_id = Uuid::new_v4().to_string();
     let inbound_token = Uuid::new_v4().to_string().replace('-', "");
     let default_agent_id: Option<&str> = None;
-    let pipe_name = format!("Telegram: {}", form.name.trim());
+    let pipe_name = format!("Telegram: {}", name);
     let transport = "webhook";
     let outbound_url = "internal://telegram";
 
@@ -255,7 +256,7 @@ pub async fn telegram_setup_submit(
     if let Err(e) = sqlx::query!(
         "INSERT INTO telegram_configs (id, name, bot_token, chat_id, pipe_id)
          VALUES (?, ?, ?, ?, ?)",
-        tg_config_id, form.name, form.bot_token, form.chat_id, pipe_id,
+        tg_config_id, name, bot_token, chat_id, pipe_id,
     )
     .execute(&state.db)
     .await
