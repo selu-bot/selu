@@ -230,42 +230,41 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
     let pipe_id = cfg.pipe_id.clone();
     state.channel_registry.register(&pipe_id, sender).await;
 
-    // Auto-upgrade: register webhook with BB if not yet done
-    if cfg.bb_webhook_id.is_none() {
-        info!(
-            config_id = %cfg.id,
-            name = %cfg.name,
-            "No webhook registered yet — registering with BlueBubbles"
-        );
-        let callback_url = format!(
-            "{}/api/bb/webhook/{}?token={}",
-            base_url, cfg.id, cfg.inbound_token
-        );
-        match register_webhook_with_bb(&cfg.server_url, &cfg.server_password, &callback_url).await {
-            Ok(webhook_id) => {
-                let wh_id_str = webhook_id.to_string();
-                if let Err(e) = sqlx::query!(
-                    "UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?",
-                    wh_id_str, cfg.id,
-                )
-                .execute(&state.db)
-                .await
-                {
-                    error!(config_id = %cfg.id, "Failed to store bb_webhook_id: {e}");
-                }
-                info!(config_id = %cfg.id, webhook_id = webhook_id, "Webhook registered with BlueBubbles");
+    // Ensure webhook is registered with BlueBubbles.
+    // If we already have a webhook ID, delete and re-register to make sure
+    // the event subscription is correct (handles upgrades from older formats).
+    let callback_url = format!(
+        "{}/api/bb/webhook/{}?token={}",
+        base_url, cfg.id, cfg.inbound_token
+    );
+
+    // Clean up any stale webhook first
+    if let Some(ref old_id) = cfg.bb_webhook_id {
+        let _ = deregister_webhook_from_bb(&cfg.server_url, &cfg.server_password, old_id).await;
+    }
+
+    info!(
+        config_id = %cfg.id,
+        name = %cfg.name,
+        "Registering webhook with BlueBubbles"
+    );
+    match register_webhook_with_bb(&cfg.server_url, &cfg.server_password, &callback_url).await {
+        Ok(webhook_id) => {
+            let wh_id_str = webhook_id.to_string();
+            if let Err(e) = sqlx::query!(
+                "UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?",
+                wh_id_str, cfg.id,
+            )
+            .execute(&state.db)
+            .await
+            {
+                error!(config_id = %cfg.id, "Failed to store bb_webhook_id: {e}");
             }
-            Err(e) => {
-                warn!(config_id = %cfg.id, "Failed to register webhook with BlueBubbles: {e}. Will retry on next startup.");
-            }
+            info!(config_id = %cfg.id, webhook_id = webhook_id, "Webhook registered with BlueBubbles");
         }
-    } else {
-        info!(
-            config_id = %cfg.id,
-            name = %cfg.name,
-            chat = %cfg.chat_guid,
-            "BlueBubbles adapter ready (webhook)"
-        );
+        Err(e) => {
+            warn!(config_id = %cfg.id, "Failed to register webhook with BlueBubbles: {e}. Will retry on next startup.");
+        }
     }
 }
 
@@ -294,12 +293,24 @@ async fn webhook_handler(
     State(state): State<AppState>,
     Path(config_id): Path<String>,
     Query(query): Query<WebhookQuery>,
-    axum::Json(payload): axum::Json<BbWebhookPayload>,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
+    // Log the raw payload for debugging
+    let body_str = String::from_utf8_lossy(&body);
+    debug!(
+        config_id = %config_id,
+        body_len = body.len(),
+        body_preview = %if body_str.len() > 500 { &body_str[..500] } else { &body_str },
+        "BB webhook received"
+    );
+
     // 1. Authenticate via token
     let provided_token = match query.token {
         Some(t) => t,
-        None => return StatusCode::UNAUTHORIZED,
+        None => {
+            warn!(config_id = %config_id, "BB webhook: no token provided");
+            return StatusCode::UNAUTHORIZED;
+        }
     };
 
     // Look up the pipe's inbound_token for this config
@@ -322,13 +333,27 @@ async fn webhook_handler(
         return StatusCode::UNAUTHORIZED;
     }
 
-    // 2. Only process new-message events
+    // 2. Parse the webhook envelope from raw body
+    let payload: BbWebhookPayload = match serde_json::from_slice(&body) {
+        Ok(p) => p,
+        Err(e) => {
+            warn!(
+                config_id = %config_id,
+                error = %e,
+                body = %body_str,
+                "Failed to parse BB webhook payload"
+            );
+            return StatusCode::OK; // Don't make BB retry on parse errors
+        }
+    };
+
+    // 3. Only process new-message events
     if payload.event_type != "new-message" {
         debug!(event_type = %payload.event_type, "Ignoring non-message webhook event");
         return StatusCode::OK;
     }
 
-    // 3. Parse the message from the payload data
+    // 4. Parse the message from the payload data
     let msg: BbMessage = match serde_json::from_value(payload.data) {
         Ok(m) => m,
         Err(e) => {
@@ -337,7 +362,7 @@ async fn webhook_handler(
         }
     };
 
-    // 4. Look up adapter state from registry
+    // 5. Look up adapter state from registry
     let reg = registry().read().await;
     let adapter = match reg.get(&config_id) {
         Some(a) => a,
@@ -347,7 +372,7 @@ async fn webhook_handler(
         }
     };
 
-    // 5. Skip messages we sent ourselves (loop prevention)
+    // 6. Skip messages we sent ourselves (loop prevention)
     if let Some(ref guid) = msg.guid {
         let sent = adapter.sent_guids.read().await;
         if sent.contains(guid) {
@@ -356,7 +381,7 @@ async fn webhook_handler(
         }
     }
 
-    // 6. Skip empty messages
+    // 7. Skip empty messages
     let text = match &msg.text {
         Some(t) if !t.is_empty() => t.clone(),
         _ => return StatusCode::OK,
@@ -384,7 +409,7 @@ async fn webhook_handler(
         "BB webhook inbound message"
     );
 
-    // 7. Resolve sender
+    // 8. Resolve sender
     let pipe_id = adapter.pipe_id.clone();
     let resolved_user_id = match resolve_sender(&state, &pipe_id, &sender_ref).await {
         Some(uid) => uid,
@@ -405,7 +430,7 @@ async fn webhook_handler(
         "Processing BlueBubbles webhook message"
     );
 
-    // 8. Dispatch in background (return 200 immediately)
+    // 9. Dispatch in background (return 200 immediately)
     let chat_guid = adapter.chat_guid.clone();
     let server_url = adapter.server_url.clone();
     let server_password = adapter.server_password.clone();
@@ -449,7 +474,9 @@ pub async fn register_webhook_with_bb(
 
     let body = serde_json::json!({
         "url": callback_url,
-        "events": ["new-message"],
+        "events": [
+            { "label": "New Message", "value": "new-message" }
+        ],
     });
 
     let resp = http
