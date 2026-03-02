@@ -177,14 +177,35 @@ async fn handle_connection(
     registry: EgressRegistry,
     log_tx: EgressLogSender,
 ) -> Result<()> {
-    // Read the initial request
+    // Read the initial request.  We must accumulate until we see the full
+    // header terminator (\r\n\r\n) because a single read() may not return
+    // the complete HTTP headers — or it may return MORE than just the
+    // headers (e.g. the TLS ClientHello pipelined after CONNECT headers).
     let mut buf = vec![0u8; 8192];
-    let mut n = stream.read(&mut buf).await?;
-    if n == 0 {
-        return Ok(());
-    }
+    let mut filled = 0usize;
 
-    let mut request_str = String::from_utf8_lossy(&buf[..n]).to_string();
+    let header_end = loop {
+        let n = stream.read(&mut buf[filled..]).await?;
+        if n == 0 {
+            return Ok(());
+        }
+        filled += n;
+        if let Some(pos) = find_header_end(&buf[..filled]) {
+            break pos; // position right after the \r\n\r\n
+        }
+        if filled >= buf.len() {
+            // Headers too large
+            stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n").await?;
+            return Ok(());
+        }
+    };
+
+    // Everything from buf[header_end..filled] is leftover data that was
+    // read beyond the request headers (possibly TLS ClientHello bytes for
+    // CONNECT, or a request body for HTTP).
+    let mut leftover: Vec<u8> = buf[header_end..filled].to_vec();
+
+    let mut request_str = String::from_utf8_lossy(&buf[..header_end]).to_string();
     let first_line = request_str.lines().next().unwrap_or("").to_string();
 
     // Parse method, target, version from "METHOD target HTTP/x.x"
@@ -216,13 +237,27 @@ async fn handle_connection(
             )
             .await?;
 
-        // Read the retried request (now with Proxy-Authorization)
-        n = stream.read(&mut buf).await?;
-        if n == 0 {
-            return Ok(());
-        }
+        // Read the retried request (now with Proxy-Authorization).
+        // Again, accumulate until we see the full header terminator, and
+        // preserve any leftover bytes that come after the headers.
+        filled = 0;
+        let retry_header_end = loop {
+            let n = stream.read(&mut buf[filled..]).await?;
+            if n == 0 {
+                return Ok(());
+            }
+            filled += n;
+            if let Some(pos) = find_header_end(&buf[..filled]) {
+                break pos;
+            }
+            if filled >= buf.len() {
+                stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n").await?;
+                return Ok(());
+            }
+        };
 
-        request_str = String::from_utf8_lossy(&buf[..n]).to_string();
+        leftover = buf[retry_header_end..filled].to_vec();
+        request_str = String::from_utf8_lossy(&buf[..retry_header_end]).to_string();
         token = extract_proxy_auth_token(&request_str);
     }
 
@@ -238,8 +273,8 @@ async fn handle_connection(
     let ident = token.as_deref().unwrap_or("no-token");
 
     match method.as_str() {
-        "CONNECT" => handle_connect(stream, &target, ident, policy, &log_tx).await,
-        _ => handle_http(stream, &method, &target, &buf[..n], ident, policy, &log_tx).await,
+        "CONNECT" => handle_connect(stream, &target, ident, policy, &log_tx, leftover).await,
+        _ => handle_http(stream, &method, &target, &buf[..header_end], ident, policy, &log_tx).await,
     }
 }
 
@@ -271,13 +306,28 @@ fn base64_decode(input: &str) -> Option<Vec<u8>> {
         .ok()
 }
 
-/// Handle HTTPS CONNECT tunnelling
+/// Find the end of HTTP headers in a byte buffer.
+/// Returns the byte offset immediately after the `\r\n\r\n` terminator,
+/// or `None` if the terminator hasn't been received yet.
+fn find_header_end(data: &[u8]) -> Option<usize> {
+    data.windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .map(|pos| pos + 4)
+}
+
+/// Handle HTTPS CONNECT tunnelling.
+///
+/// `leftover` contains any bytes that were already read from the client
+/// socket beyond the CONNECT request headers (e.g. a TLS ClientHello).
+/// These must be forwarded to the upstream before starting the
+/// bidirectional copy loop.
 async fn handle_connect(
     mut client: TcpStream,
     target: &str, // "hostname:port"
     ident: &str,
     policy: Option<ContainerEgressPolicy>,
     log_tx: &EgressLogSender,
+    leftover: Vec<u8>,
 ) -> Result<()> {
     let (host, port) = parse_host_port(target, 443);
     let allowed = is_allowed(&host, port, ident, &policy);
@@ -308,10 +358,23 @@ async fn handle_connect(
     debug!(ident = %ident, target = %target, "EGRESS ALLOWED (CONNECT)");
 
     // Connect to the real destination
-    let upstream = TcpStream::connect(format!("{}:{}", host, port)).await?;
+    let mut upstream = TcpStream::connect(format!("{}:{}", host, port)).await?;
 
     // Tell the client the tunnel is ready
     client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
+
+    // Forward any bytes that were already read beyond the CONNECT headers
+    // (e.g. TLS ClientHello that the browser pipelined on the same TCP
+    // segment) before starting the bidirectional copy.
+    if !leftover.is_empty() {
+        debug!(
+            ident = %ident,
+            target = %target,
+            leftover_bytes = leftover.len(),
+            "Forwarding leftover bytes to upstream"
+        );
+        upstream.write_all(&leftover).await?;
+    }
 
     // Bidirectional byte tunnel
     let (mut cr, mut cw) = client.into_split();
