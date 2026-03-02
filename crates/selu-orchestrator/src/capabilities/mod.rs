@@ -99,6 +99,25 @@ impl CapabilityEngine {
         }
     }
 
+    /// Shut down all containers for a specific capability (across all sessions).
+    /// Used during agent updates to stop old containers before replacing files.
+    pub async fn close_capability(&self, capability_id: &str) {
+        let mut active = self.active.write().await;
+
+        let keys_to_remove: Vec<String> = active
+            .keys()
+            .filter(|k| k.ends_with(&format!("::{}", capability_id)))
+            .cloned()
+            .collect();
+
+        for key in keys_to_remove {
+            if let Some(ac) = active.remove(&key) {
+                self.runner.stop(&ac.running).await;
+                info!(capability = %capability_id, "Stopped capability container for update");
+            }
+        }
+    }
+
     /// Shut down **all** active containers (used during graceful shutdown).
     pub async fn close_all(&self) {
         let mut active = self.active.write().await;
