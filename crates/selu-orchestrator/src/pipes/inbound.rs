@@ -122,10 +122,17 @@ async fn handle_inbound(
     );
 
     // ── Extract message refs from metadata ────────────────────────────────────
-    let origin_message_ref = envelope.metadata.as_ref()
-        .and_then(|m: &serde_json::Value| m.get("message_guid"))
-        .and_then(|v: &serde_json::Value| v.as_str())
-        .map(|s: &str| s.to_string());
+    // If the adapter doesn't supply a message_guid, generate a synthetic one
+    // so that each webhook message gets its own thread (prevents the
+    // `find_recent_active_thread` fallback from merging concurrent messages
+    // into a single thread).
+    let origin_message_ref = Some(
+        envelope.metadata.as_ref()
+            .and_then(|m: &serde_json::Value| m.get("message_guid"))
+            .and_then(|v: &serde_json::Value| v.as_str())
+            .map(|s: &str| s.to_string())
+            .unwrap_or_else(|| Uuid::new_v4().to_string()),
+    );
 
     // reply_to_ref: if the adapter provides threading info, use it to
     // continue an existing thread (same as the BB adapter does).
@@ -186,9 +193,12 @@ async fn handle_inbound(
             return;
         }
 
-        // Determine channel kind based on whether outbound is configured
-        // and the adapter supports threading (has reply_to_ref).
-        let channel_kind = if !outbound_url.is_empty() && reply_to_ref.is_some() {
+        // Determine channel kind based on whether outbound is configured.
+        // Any pipe with an outbound URL can receive async tool-approval
+        // prompts, so it qualifies as ThreadedNonInteractive even on the
+        // first message (before reply_to_ref is available).
+        let is_threaded = !outbound_url.is_empty();
+        let channel_kind = if is_threaded {
             ChannelKind::ThreadedNonInteractive {
                 pipe_id: pipe_id_str.clone(),
                 thread_id: thread_id.clone(),
@@ -212,8 +222,10 @@ async fn handle_inbound(
         let reply_text = match reply {
             Ok(t) if !t.is_empty() => t,
             Ok(_) => {
-                // Mark thread completed even if reply is empty
-                let _ = thread_mgr::complete_thread(&state.db, &thread_id).await;
+                // Empty reply — complete thread for non-threaded pipes only
+                if !is_threaded {
+                    let _ = thread_mgr::complete_thread(&state.db, &thread_id).await;
+                }
                 return;
             }
             Err(e) => {
@@ -236,8 +248,12 @@ async fn handle_inbound(
             error!("Outbound send failed: {e}");
         }
 
-        // Mark thread completed
-        let _ = thread_mgr::complete_thread(&state.db, &thread_id).await;
+        // Only complete the thread immediately for non-threaded pipes
+        // (no outbound URL). Threaded pipes stay active for multi-turn
+        // conversations; the 48-hour idle cleanup handles eventual closure.
+        if !is_threaded {
+            let _ = thread_mgr::complete_thread(&state.db, &thread_id).await;
+        }
     });
 
     StatusCode::OK.into_response()

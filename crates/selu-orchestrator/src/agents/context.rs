@@ -97,10 +97,11 @@ pub async fn build(
     if let Some(tid) = thread_id {
         let history = sqlx::query!(
             r#"SELECT role, content FROM messages
-               WHERE thread_id = ?
+               WHERE thread_id = ? AND pipe_id = ?
                ORDER BY created_at DESC
                LIMIT 30"#,
             tid,
+            pipe_id,
         )
         .fetch_all(db)
         .await?;

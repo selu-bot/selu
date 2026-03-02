@@ -16,6 +16,7 @@ use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::agents::engine::{run_turn, ChannelKind, TurnParams};
+use crate::agents::router as agent_router;
 use crate::agents::thread as thread_mgr;
 use crate::llm::tool_loop::LoopEvent;
 use crate::state::AppState;
@@ -502,6 +503,14 @@ async fn process_message(
     .flatten()
     .and_then(|r| r.default_agent_id);
 
+    // Resolve @mention routing (same as webhook/iMessage adapters)
+    let agents_snapshot = state.agents.read().await.clone();
+    let (agent_id, effective_text) = agent_router::route(
+        &text,
+        default_agent_id.as_deref(),
+        &agents_snapshot,
+    );
+
     // Retrieve the SSE sender registered by chat_stream
     let tx = match state.active_streams.lock().await.get(&stream_id).cloned() {
         Some(t) => t,
@@ -515,8 +524,8 @@ async fn process_message(
     let params = TurnParams {
         pipe_id,
         user_id,
-        agent_id: default_agent_id,
-        message: text,
+        agent_id: Some(agent_id),
+        message: effective_text,
         thread_id: Some(thread_id),
         chain_depth: 0,
         channel_kind: ChannelKind::Interactive,
