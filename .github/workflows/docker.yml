@@ -92,6 +92,8 @@ jobs:
 
       - name: Setup Blacksmith Builder
         uses: useblacksmith/setup-docker-builder@v1
+        with:
+          stickyDisk: false
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -138,6 +140,8 @@ jobs:
     steps:
       - name: Setup Blacksmith Builder
         uses: useblacksmith/setup-docker-builder@v1
+        with:
+          stickyDisk: false
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
