@@ -30,6 +30,11 @@ base64 = { workspace = true }
 reqwest = { workspace = true }
 eventsource-stream = { workspace = true }
 
+# HTTP server (egress proxy)
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+http-body-util = { workspace = true }
+
 # Templating
 askama = { workspace = true }
 askama_axum = { workspace = true }

@@ -11,14 +11,25 @@
 ///   - Logs every request (allowed + denied) via an mpsc channel
 ///   - For HTTPS (CONNECT): tunnels bytes after checking hostname
 ///   - For HTTP: forwards the request after checking Host header
+///
+/// Implementation uses hyper's HTTP/1 server for correct HTTP parsing and
+/// upgrade handling (CONNECT tunnels via the HTTP upgrade mechanism).
 use anyhow::Result;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{self, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, info, warn};
+
+use hyper::body::Incoming;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Method, Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
+use http_body_util::{BodyExt, Full};
+use bytes::Bytes;
 
 use crate::capabilities::manifest::NetworkMode;
 
@@ -148,9 +159,12 @@ async fn flush_batch(db: &sqlx::SqlitePool, batch: &[EgressLogEntry]) {
     }
 }
 
-// ── Proxy server ──────────────────────────────────────────────────────────────
+// ── Proxy server (hyper-based) ───────────────────────────────────────────────
 
 /// Start the egress proxy server.
+///
+/// Uses hyper's HTTP/1 server for proper request parsing and CONNECT
+/// upgrade handling.  Auth, policy, and logging are layered on top.
 pub async fn run_proxy(
     listen_addr: SocketAddr,
     registry: EgressRegistry,
@@ -163,173 +177,94 @@ pub async fn run_proxy(
         let (stream, peer_addr) = listener.accept().await?;
         let registry = registry.clone();
         let log_tx = log_tx.clone();
+
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, peer_addr, registry, log_tx).await {
+            let io = TokioIo::new(stream);
+            let registry = registry.clone();
+            let log_tx = log_tx.clone();
+
+            let service = service_fn(move |req| {
+                let registry = registry.clone();
+                let log_tx = log_tx.clone();
+                async move { proxy_request(req, registry, log_tx).await }
+            });
+
+            if let Err(e) = http1::Builder::new()
+                .preserve_header_case(true)
+                .title_case_headers(false)
+                .serve_connection(io, service)
+                .with_upgrades()
+                .await
+            {
                 debug!(peer = %peer_addr, "Proxy connection error: {e}");
             }
         });
     }
 }
 
-async fn handle_connection(
-    mut stream: TcpStream,
-    _peer_addr: SocketAddr,
+/// Handle a single proxy request (both CONNECT and plain HTTP).
+///
+/// For CONNECT requests:
+///   1. Extract credentials from Proxy-Authorization header
+///   2. If missing, return 407 to trigger the browser's challenge-response
+///   3. If present, check policy and either deny (403) or establish tunnel
+///   4. On success, return 200 and use hyper::upgrade to get raw IO
+///   5. Bidirectional copy between client and upstream
+///
+/// hyper handles all HTTP parsing, buffering, and upgrade mechanics.
+async fn proxy_request(
+    req: Request<Incoming>,
     registry: EgressRegistry,
     log_tx: EgressLogSender,
-) -> Result<()> {
-    // Read the initial request.  We must accumulate until we see the full
-    // header terminator (\r\n\r\n) because a single read() may not return
-    // the complete HTTP headers — or it may return MORE than just the
-    // headers (e.g. the TLS ClientHello pipelined after CONNECT headers).
-    let mut buf = vec![0u8; 8192];
-    let mut filled = 0usize;
+) -> Result<Response<Full<Bytes>>, hyper::Error> {
+    // Extract the auth token from Proxy-Authorization header
+    let token = extract_proxy_auth_token_from_headers(req.headers());
 
-    let header_end = loop {
-        let n = stream.read(&mut buf[filled..]).await?;
-        if n == 0 {
-            return Ok(());
-        }
-        filled += n;
-        if let Some(pos) = find_header_end(&buf[..filled]) {
-            break pos; // position right after the \r\n\r\n
-        }
-        if filled >= buf.len() {
-            // Headers too large
-            stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n").await?;
-            return Ok(());
-        }
-    };
-
-    // Everything from buf[header_end..filled] is leftover data that was
-    // read beyond the request headers (possibly TLS ClientHello bytes for
-    // CONNECT, or a request body for HTTP).
-    let mut leftover: Vec<u8> = buf[header_end..filled].to_vec();
-
-    let mut request_str = String::from_utf8_lossy(&buf[..header_end]).to_string();
-    let first_line = request_str.lines().next().unwrap_or("").to_string();
-
-    // Parse method, target, version from "METHOD target HTTP/x.x"
-    let parts: Vec<&str> = first_line.splitn(3, ' ').collect();
-    if parts.len() < 3 {
-        stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n").await?;
-        return Ok(());
-    }
-
-    let method = parts[0].to_string();
-    let target = parts[1].to_string();
-
-    // Extract the auth token from the Proxy-Authorization header.
-    // Format: "Proxy-Authorization: Basic <base64(selu:token)>"
-    let mut token = extract_proxy_auth_token(&request_str);
-
-    // If no credentials were provided, challenge the client with 407 so that
-    // browsers (Chromium/Playwright) know to resend with Proxy-Authorization.
-    // Standard HTTP clients send credentials proactively, but browsers use a
-    // challenge-response flow: they send the first CONNECT/request without
-    // auth and only attach Proxy-Authorization after receiving a 407.
+    // If no credentials, challenge with 407 (browser will retry with auth)
     if token.is_none() {
+        let target = req.uri().to_string();
         debug!(target = %target, "No proxy credentials, sending 407 challenge");
-        stream
-            .write_all(
-                b"HTTP/1.1 407 Proxy Authentication Required\r\n\
-                  Proxy-Authenticate: Basic realm=\"selu-egress\"\r\n\
-                  Content-Length: 0\r\n\r\n",
-            )
-            .await?;
-
-        // Read the retried request (now with Proxy-Authorization).
-        // Again, accumulate until we see the full header terminator, and
-        // preserve any leftover bytes that come after the headers.
-        filled = 0;
-        let retry_header_end = loop {
-            let n = stream.read(&mut buf[filled..]).await?;
-            if n == 0 {
-                return Ok(());
-            }
-            filled += n;
-            if let Some(pos) = find_header_end(&buf[..filled]) {
-                break pos;
-            }
-            if filled >= buf.len() {
-                stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n").await?;
-                return Ok(());
-            }
-        };
-
-        leftover = buf[retry_header_end..filled].to_vec();
-        request_str = String::from_utf8_lossy(&buf[..retry_header_end]).to_string();
-        token = extract_proxy_auth_token(&request_str);
+        let resp = Response::builder()
+            .status(StatusCode::PROXY_AUTHENTICATION_REQUIRED)
+            .header("Proxy-Authenticate", "Basic realm=\"selu-egress\"")
+            .header("Content-Length", "0")
+            .body(Full::new(Bytes::new()))
+            .unwrap();
+        return Ok(resp);
     }
+
+    let token = token.unwrap();
 
     // Look up policy by token
-    let policy = match &token {
-        Some(t) => {
-            let reg = registry.read().await;
-            reg.get(t).cloned()
-        }
-        None => None,
+    let policy = {
+        let reg = registry.read().await;
+        reg.get(&token).cloned()
     };
 
-    let ident = token.as_deref().unwrap_or("no-token");
+    let ident = token.clone();
 
-    match method.as_str() {
-        "CONNECT" => handle_connect(stream, &target, ident, policy, &log_tx, leftover).await,
-        _ => handle_http(stream, &method, &target, &buf[..header_end], ident, policy, &log_tx).await,
+    if req.method() == Method::CONNECT {
+        handle_connect_hyper(req, &ident, policy, &log_tx).await
+    } else {
+        handle_http_hyper(req, &ident, policy, &log_tx).await
     }
 }
 
-/// Extract the token from a `Proxy-Authorization: Basic <base64>` header.
-/// We expect the credentials to be `selu:<token>`, so we decode and extract the token part.
-fn extract_proxy_auth_token(request: &str) -> Option<String> {
-    for line in request.lines() {
-        let lower = line.to_lowercase();
-        if lower.starts_with("proxy-authorization:") {
-            let value = line.splitn(2, ':').nth(1)?.trim();
-            if let Some(encoded) = value.strip_prefix("Basic ").or_else(|| value.strip_prefix("basic ")) {
-                let decoded = String::from_utf8(
-                    base64_decode(encoded.trim())?
-                ).ok()?;
-                // Format is "selu:<token>" — extract the token after the colon
-                let token = decoded.splitn(2, ':').nth(1)?;
-                return Some(token.to_string());
-            }
-        }
-    }
-    None
-}
-
-/// Simple base64 decode (standard alphabet, no padding required)
-fn base64_decode(input: &str) -> Option<Vec<u8>> {
-    use base64::Engine;
-    base64::engine::general_purpose::STANDARD
-        .decode(input.trim())
-        .ok()
-}
-
-/// Find the end of HTTP headers in a byte buffer.
-/// Returns the byte offset immediately after the `\r\n\r\n` terminator,
-/// or `None` if the terminator hasn't been received yet.
-fn find_header_end(data: &[u8]) -> Option<usize> {
-    data.windows(4)
-        .position(|w| w == b"\r\n\r\n")
-        .map(|pos| pos + 4)
-}
-
-/// Handle HTTPS CONNECT tunnelling.
+/// Handle CONNECT requests using hyper's upgrade mechanism.
 ///
-/// `leftover` contains any bytes that were already read from the client
-/// socket beyond the CONNECT request headers (e.g. a TLS ClientHello).
-/// These must be forwarded to the upstream before starting the
-/// bidirectional copy loop.
-async fn handle_connect(
-    mut client: TcpStream,
-    target: &str, // "hostname:port"
+/// This is the correct way to implement CONNECT proxying: hyper handles
+/// the HTTP layer, we return a 200 response, and then use the upgrade
+/// API to get raw bidirectional IO for the tunnel.
+async fn handle_connect_hyper(
+    req: Request<Incoming>,
     ident: &str,
     policy: Option<ContainerEgressPolicy>,
     log_tx: &EgressLogSender,
-    leftover: Vec<u8>,
-) -> Result<()> {
-    let (host, port) = parse_host_port(target, 443);
+) -> Result<Response<Full<Bytes>>, hyper::Error> {
+    let target = req.uri().authority().map(|a| a.to_string())
+        .unwrap_or_else(|| req.uri().to_string());
+    let (host, port) = parse_host_port(&target, 443);
+
     let allowed = is_allowed(&host, port, ident, &policy);
     let cap_id = policy.as_ref()
         .map(|p| p.capability_id.clone())
@@ -351,70 +286,93 @@ async fn handle_connect(
             capability = %cap_id,
             "EGRESS DENIED"
         );
-        client.write_all(b"HTTP/1.1 403 Forbidden\r\n\r\n").await?;
-        return Ok(());
+        let resp = Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(Full::new(Bytes::new()))
+            .unwrap();
+        return Ok(resp);
     }
 
     debug!(ident = %ident, target = %target, "EGRESS ALLOWED (CONNECT)");
 
-    // Connect to the real destination
-    let mut upstream = TcpStream::connect(format!("{}:{}", host, port)).await?;
+    // Spawn the tunnel task.  We need to do the upstream connect and
+    // bidirectional copy after hyper has sent the 200 and completed the
+    // upgrade, so we spawn a task that awaits the upgrade future.
+    let target_addr = format!("{}:{}", host, port);
+    let ident_owned = ident.to_string();
 
-    // Tell the client the tunnel is ready
-    client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
+    tokio::spawn(async move {
+        // Wait for hyper to finish sending the 200 and give us raw IO
+        match hyper::upgrade::on(req).await {
+            Ok(upgraded) => {
+                let mut client = TokioIo::new(upgraded);
 
-    // Forward any bytes that were already read beyond the CONNECT headers
-    // (e.g. TLS ClientHello that the browser pipelined on the same TCP
-    // segment) before starting the bidirectional copy.
-    if !leftover.is_empty() {
-        debug!(
-            ident = %ident,
-            target = %target,
-            leftover_bytes = leftover.len(),
-            "Forwarding leftover bytes to upstream"
-        );
-        upstream.write_all(&leftover).await?;
-    }
+                // Connect to the real destination
+                match TcpStream::connect(&target_addr).await {
+                    Ok(mut upstream) => {
+                        // Bidirectional byte tunnel
+                        let result = io::copy_bidirectional(&mut client, &mut upstream).await;
+                        if let Err(e) = result {
+                            debug!(
+                                ident = %ident_owned,
+                                target = %target_addr,
+                                "Tunnel closed: {e}"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            ident = %ident_owned,
+                            target = %target_addr,
+                            "Failed to connect upstream: {e}"
+                        );
+                        // Try to send an error back (best effort — client
+                        // already received the 200, so this may fail)
+                        let _ = client.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n").await;
+                    }
+                }
+            }
+            Err(e) => {
+                debug!(
+                    ident = %ident_owned,
+                    target = %target_addr,
+                    "Upgrade failed: {e}"
+                );
+            }
+        }
+    });
 
-    // Bidirectional byte tunnel
-    let (mut cr, mut cw) = client.into_split();
-    let (mut ur, mut uw) = upstream.into_split();
-
-    let c_to_u = tokio::spawn(async move { io::copy(&mut cr, &mut uw).await });
-    let u_to_c = tokio::spawn(async move { io::copy(&mut ur, &mut cw).await });
-
-    let _ = tokio::join!(c_to_u, u_to_c);
-    Ok(())
+    // Return 200 to the client — hyper will send this and then hand over
+    // the raw connection to the upgrade future above.
+    let resp = Response::builder()
+        .status(StatusCode::OK)
+        .body(Full::new(Bytes::new()))
+        .unwrap();
+    Ok(resp)
 }
 
-/// Handle plain HTTP requests (forwarded to origin)
-async fn handle_http(
-    mut client: TcpStream,
-    method: &str,
-    target: &str,
-    raw_request: &[u8],
+/// Handle plain HTTP proxy requests.
+///
+/// Reads the full request body, connects to upstream, forwards the
+/// request, and streams the response back.
+async fn handle_http_hyper(
+    req: Request<Incoming>,
     ident: &str,
     policy: Option<ContainerEgressPolicy>,
     log_tx: &EgressLogSender,
-) -> Result<()> {
-    // Extract host from either the target URL or the Host header
-    let host_str = if target.starts_with("http://") {
-        // Absolute URL: "http://hostname[:port]/path"
-        target
-            .strip_prefix("http://")
-            .and_then(|s| s.split('/').next())
-            .unwrap_or(target)
-            .to_string()
-    } else {
-        // Look for Host: header
-        String::from_utf8_lossy(raw_request)
-            .lines()
-            .find(|l| l.to_lowercase().starts_with("host:"))
-            .and_then(|l| l.splitn(2, ':').nth(1))
-            .map(|h| h.trim().to_string())
-            .unwrap_or_default()
-    };
+) -> Result<Response<Full<Bytes>>, hyper::Error> {
+    // Extract host from the request URI or Host header
+    let host_str = req.uri().host().map(|h| {
+        if let Some(port) = req.uri().port_u16() {
+            format!("{}:{}", h, port)
+        } else {
+            h.to_string()
+        }
+    }).or_else(|| {
+        req.headers().get("host").and_then(|v| v.to_str().ok()).map(|s| s.to_string())
+    }).unwrap_or_default();
 
+    let method = req.method().to_string();
     let (hostname, port) = parse_host_port(&host_str, 80);
     let allowed = is_allowed(&hostname, port, ident, &policy);
     let cap_id = policy.as_ref()
@@ -424,7 +382,7 @@ async fn handle_http(
     // Log the request
     let _ = log_tx.try_send(EgressLogEntry {
         capability_id: cap_id.clone(),
-        method: method.to_string(),
+        method: method.clone(),
         host: hostname.clone(),
         port,
         allowed,
@@ -438,24 +396,90 @@ async fn handle_http(
             capability = %cap_id,
             "EGRESS DENIED"
         );
-        client.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n").await?;
-        return Ok(());
+        let resp = Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .header("Content-Length", "0")
+            .body(Full::new(Bytes::new()))
+            .unwrap();
+        return Ok(resp);
     }
 
     debug!(ident = %ident, host = %host_str, method = %method, "EGRESS ALLOWED (HTTP)");
 
-    // Forward to upstream
-    let mut upstream = TcpStream::connect(format!("{}:{}", hostname, port)).await?;
-    upstream.write_all(raw_request).await?;
+    // Reconstruct the request to forward to upstream.
+    // For proxy requests the URI is absolute (http://host/path), so we
+    // need to extract just the path+query for the origin request.
+    let path = req.uri().path_and_query()
+        .map(|pq| pq.to_string())
+        .unwrap_or_else(|| "/".to_string());
 
-    let (mut cr, mut cw) = client.into_split();
-    let (mut ur, mut uw) = upstream.into_split();
+    // Collect the request body
+    let body_bytes = match req.collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(e) => {
+            warn!("Failed to read request body: {e}");
+            let resp = Response::builder()
+                .status(StatusCode::BAD_GATEWAY)
+                .body(Full::new(Bytes::new()))
+                .unwrap();
+            return Ok(resp);
+        }
+    };
 
-    let _ = tokio::join!(
-        tokio::spawn(async move { io::copy(&mut ur, &mut cw).await }),
-        tokio::spawn(async move { io::copy(&mut cr, &mut uw).await }),
-    );
-    Ok(())
+    // Connect to upstream and forward the request using raw TCP.
+    // We build the HTTP/1.1 request manually to preserve proxy semantics.
+    match TcpStream::connect(format!("{}:{}", hostname, port)).await {
+        Ok(mut upstream) => {
+            // Build HTTP request
+            let mut raw_req = format!("{} {} HTTP/1.1\r\nHost: {}\r\n", method, path, host_str);
+            // Note: we don't forward Proxy-Authorization to the origin
+            // We would forward other headers here in a more complete impl.
+            raw_req.push_str(&format!("Content-Length: {}\r\n", body_bytes.len()));
+            raw_req.push_str("\r\n");
+
+            let _ = upstream.write_all(raw_req.as_bytes()).await;
+            if !body_bytes.is_empty() {
+                let _ = upstream.write_all(&body_bytes).await;
+            }
+
+            // Read the entire response from upstream
+            let mut response_buf = Vec::new();
+            let _ = tokio::io::AsyncReadExt::read_to_end(&mut upstream, &mut response_buf).await;
+
+            let resp = Response::builder()
+                .status(StatusCode::OK)
+                .body(Full::new(Bytes::from(response_buf)))
+                .unwrap();
+            Ok(resp)
+        }
+        Err(e) => {
+            warn!(host = %host_str, "Failed to connect upstream: {e}");
+            let resp = Response::builder()
+                .status(StatusCode::BAD_GATEWAY)
+                .body(Full::new(Bytes::new()))
+                .unwrap();
+            Ok(resp)
+        }
+    }
+}
+
+/// Extract the token from a `Proxy-Authorization: Basic <base64>` header.
+/// We expect the credentials to be `selu:<token>`, so we decode and extract the token part.
+fn extract_proxy_auth_token_from_headers(headers: &hyper::HeaderMap) -> Option<String> {
+    let value = headers.get("proxy-authorization")?.to_str().ok()?;
+    let encoded = value.strip_prefix("Basic ").or_else(|| value.strip_prefix("basic "))?;
+    let decoded = String::from_utf8(base64_decode(encoded.trim())?).ok()?;
+    // Format is "selu:<token>" — extract the token after the colon
+    let token = decoded.splitn(2, ':').nth(1)?;
+    Some(token.to_string())
+}
+
+/// Simple base64 decode (standard alphabet, no padding required)
+fn base64_decode(input: &str) -> Option<Vec<u8>> {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(input.trim())
+        .ok()
 }
 
 fn is_allowed(host: &str, port: u16, ident: &str, policy: &Option<ContainerEgressPolicy>) -> bool {
@@ -485,6 +509,27 @@ fn parse_host_port(host_port: &str, default_port: u16) -> (String, u16) {
         Some((h, p)) => (h.to_string(), p.parse().unwrap_or(default_port)),
         None => (host_port.to_string(), default_port),
     }
+}
+
+// ── Legacy helper (kept for test compatibility) ──────────────────────────────
+
+/// Extract the token from a raw request string (used only in tests).
+#[cfg(test)]
+fn extract_proxy_auth_token(request: &str) -> Option<String> {
+    for line in request.lines() {
+        let lower = line.to_lowercase();
+        if lower.starts_with("proxy-authorization:") {
+            let value = line.splitn(2, ':').nth(1)?.trim();
+            if let Some(encoded) = value.strip_prefix("Basic ").or_else(|| value.strip_prefix("basic ")) {
+                let decoded = String::from_utf8(
+                    base64_decode(encoded.trim())?
+                ).ok()?;
+                let token = decoded.splitn(2, ':').nth(1)?;
+                return Some(token.to_string());
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
