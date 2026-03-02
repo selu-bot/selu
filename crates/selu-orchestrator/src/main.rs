@@ -180,6 +180,30 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Agent auto-update: checks the marketplace every 30 minutes
+    let autoupdate_state = state.clone();
+    tokio::spawn(async move {
+        // Wait 2 minutes after startup before first check
+        tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1800));
+        loop {
+            interval.tick().await;
+            match agents::marketplace::auto_update_agents(
+                &autoupdate_state.config.marketplace_url,
+                &autoupdate_state.config.installed_agents_dir,
+                &autoupdate_state.db,
+                &autoupdate_state.agents,
+                &autoupdate_state.capabilities,
+            )
+            .await
+            {
+                Ok(0) => {}
+                Ok(n) => info!("Auto-updated {n} agent(s)"),
+                Err(e) => tracing::warn!("Agent auto-update check failed: {e}"),
+            }
+        }
+    });
+
     let shutdown_state = state.clone();
 
     let app = axum::Router::new()

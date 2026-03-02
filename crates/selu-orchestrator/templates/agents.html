@@ -82,10 +82,9 @@
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b border-edge">
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.id">ID</th>
                 <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.name">Name</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.version">Version</th>
                 <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.providermodel">Provider / Model</th>
-                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.capabilities">Capabilities</th>
                 <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.status">Status</th>
                 <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.actions">Actions</th>
               </tr>
@@ -93,11 +92,20 @@
             <tbody class="divide-y divide-edge">
               {% for agent in agents %}
               <tr class="hover:bg-sidebar-hover transition-colors">
-                <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ agent.id }}</td>
                 <td class="px-5 py-3.5">
                   <a href="/agents/{{ agent.id }}" class="font-medium text-txt-heading hover:text-coral transition-colors">{{ agent.name }}</a>
                   {% if agent.is_bundled %}
                    <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral" data-i18n="agents.bundled">Bundled</span>
+                  {% endif %}
+                  <div class="text-[10px] text-txt-faint font-mono mt-0.5">{{ agent.id }}{% if agent.capability_count > 0 %} &middot; {{ agent.capability_count }} cap{% endif %}</div>
+                </td>
+                <td class="px-5 py-3.5">
+                  <span class="text-txt-muted text-xs">v{{ agent.version }}</span>
+                  {% if agent.update_available %}
+                  <span class="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber/10 text-amber border border-amber/20">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                    <span>v{{ agent.marketplace_version }}</span>
+                  </span>
                   {% endif %}
                 </td>
                 <td class="px-5 py-3.5">
@@ -108,7 +116,6 @@
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-alt text-txt-muted" data-i18n="agents.globaldefault">Global default</span>
                   {% endif %}
                 </td>
-                <td class="px-5 py-3.5 text-txt">{{ agent.capability_count }}</td>
                 <td class="px-5 py-3.5">
                   {% if agent.setup_complete %}
                   <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -121,6 +128,15 @@
                 </td>
                 <td class="px-5 py-3.5 text-right">
                   <div class="flex items-center justify-end gap-2">
+                    {% if agent.update_available %}
+                    <form method="POST" action="/agents/update" class="inline"
+                          onsubmit="return confirm(t('agents.update.confirm').replace('{name}', '{{ agent.name }}').replace('{version}', '{{ agent.marketplace_version }}'))">
+                      <input type="hidden" name="entry_json" id="update-entry-{{ agent.id }}" value="" />
+                      <button type="submit"
+                              class="text-xs font-medium text-amber hover:text-amber/80 bg-amber/10 border border-amber/20 hover:border-amber/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              data-i18n="agents.update">Update</button>
+                    </form>
+                    {% endif %}
                     {% if !agent.setup_complete %}
                     <a href="/agents/{{ agent.id }}/setup"
                        class="text-xs font-medium text-coral hover:text-amber bg-coral/10 border border-coral/20 hover:border-coral/40 px-2.5 py-1 rounded-lg transition-colors"
@@ -164,6 +180,17 @@
                       </form>
                     </div>
                     {% if !agent.is_bundled %}
+                    <!-- Auto-update toggle -->
+                    <form method="POST" action="/agents/{{ agent.id }}/auto-update" class="inline">
+                      <input type="hidden" name="auto_update" value="{% if agent.auto_update %}0{% else %}1{% endif %}" />
+                      <button type="submit" title="{% if agent.auto_update %}Disable auto-update{% else %}Enable auto-update{% endif %}"
+                              class="text-xs border px-2.5 py-1 rounded-lg transition-colors cursor-pointer {% if agent.auto_update %}text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:border-emerald-500/40{% else %}text-txt-muted border-edge hover:border-muted hover:text-txt{% endif %}">
+                        <span class="flex items-center gap-1">
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                          <span data-i18n="agents.autoupdate.short">Auto</span>
+                        </span>
+                      </button>
+                    </form>
                     <form method="POST" action="/agents/{{ agent.id }}/uninstall" class="inline"
                           onsubmit="return confirm(t('agents.uninstall.confirm').replace('{name}', '{{ agent.name }}'))">
                       <button type="submit"
@@ -177,7 +204,7 @@
               {% endfor %}
               {% if agents.is_empty() %}
               <tr>
-                <td colspan="6" class="px-5 py-8 text-center text-txt-muted text-sm" data-i18n="agents.noagents">No agents installed. Visit the Marketplace tab to install agents.</td>
+                <td colspan="5" class="px-5 py-8 text-center text-txt-muted text-sm" data-i18n="agents.noagents">No agents installed. Visit the Marketplace tab to install agents.</td>
               </tr>
               {% endif %}
             </tbody>
@@ -189,7 +216,25 @@
     <!-- Marketplace Tab -->
     <div id="panel-marketplace" class="hidden">
       {% if !marketplace_error.is_empty() %}
-      <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ marketplace_error }}</div>
+      <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm mb-4">{{ marketplace_error }}</div>
+      {% endif %}
+
+      <!-- Filter buttons -->
+      {% if !marketplace_agents.is_empty() %}
+      <div class="flex items-center gap-2 mb-4">
+        <button onclick="filterMarketplace('all')" id="mp-filter-all"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer border-coral text-coral bg-coral/10"
+                data-i18n="agents.filter.all">All</button>
+        <button onclick="filterMarketplace('available')" id="mp-filter-available"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer border-edge text-txt-muted hover:text-txt hover:border-muted"
+                data-i18n="agents.filter.available">Available</button>
+        <button onclick="filterMarketplace('installed')" id="mp-filter-installed"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer border-edge text-txt-muted hover:text-txt hover:border-muted"
+                data-i18n="agents.filter.installed">Installed</button>
+        <button onclick="filterMarketplace('updates')" id="mp-filter-updates"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer border-edge text-txt-muted hover:text-txt hover:border-muted"
+                data-i18n="agents.filter.updates">Update available</button>
+      </div>
       {% endif %}
 
       {% if marketplace_agents.is_empty() && marketplace_error.is_empty() %}
@@ -198,20 +243,40 @@
       </div>
       {% endif %}
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="marketplace-grid">
         {% for agent in marketplace_agents %}
-        <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden flex flex-col">
+        <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden flex flex-col mp-card"
+             data-installed="{{ agent.is_installed }}" data-update="{{ agent.update_available }}">
           <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
             <span class="text-sm font-semibold text-txt-heading">{{ agent.name }}</span>
-            <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted">v{{ agent.version }}</span>
+            <div class="flex items-center gap-1.5">
+              {% if agent.update_available %}
+              <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber/10 text-amber border border-amber/20">
+                v{{ agent.installed_version }} &rarr; v{{ agent.version }}
+              </span>
+              {% else %}
+              <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted">v{{ agent.version }}</span>
+              {% endif %}
+            </div>
           </div>
           <div class="p-5 flex flex-col flex-1">
             <p class="text-xs text-txt-muted leading-relaxed flex-1">{{ agent.description }}</p>
             {% if !agent.author.is_empty() %}
             <p class="text-[11px] text-txt-faint mt-2">By {{ agent.author }}</p>
             {% endif %}
-            <div class="mt-4">
-              {% if agent.is_installed %}
+            <div class="mt-4 flex items-center gap-2">
+              {% if agent.update_available %}
+              <form method="POST" action="/agents/update">
+                <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
+                <button type="submit"
+                        class="bg-gradient-to-r from-amber to-coral text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-amber/20"
+                        data-i18n="agents.update">Update</button>
+              </form>
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
+                <span data-i18n="agents.installed.badge">Installed</span>
+              </span>
+              {% else if agent.is_installed %}
               <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
                 <span data-i18n="agents.installed.badge">Installed</span>
@@ -250,6 +315,34 @@ function showTab(tab) {
     tabInstalled.classList.remove('border-coral', 'text-txt-heading');
     tabInstalled.classList.add('border-transparent', 'text-txt-muted');
   }
+}
+
+/* Marketplace filter */
+function filterMarketplace(filter) {
+  var cards = document.querySelectorAll('.mp-card');
+  cards.forEach(function(card) {
+    var isInstalled = card.dataset.installed === 'true';
+    var hasUpdate = card.dataset.update === 'true';
+    var show = false;
+    if (filter === 'all') show = true;
+    else if (filter === 'available') show = !isInstalled;
+    else if (filter === 'installed') show = isInstalled;
+    else if (filter === 'updates') show = hasUpdate;
+    card.style.display = show ? '' : 'none';
+  });
+  /* Update active filter button styling */
+  var buttons = ['all', 'available', 'installed', 'updates'];
+  buttons.forEach(function(f) {
+    var btn = document.getElementById('mp-filter-' + f);
+    if (!btn) return;
+    if (f === filter) {
+      btn.classList.add('border-coral', 'text-coral', 'bg-coral/10');
+      btn.classList.remove('border-edge', 'text-txt-muted');
+    } else {
+      btn.classList.remove('border-coral', 'text-coral', 'bg-coral/10');
+      btn.classList.add('border-edge', 'text-txt-muted');
+    }
+  });
 }
 
 function toggleModelPopover(btn) {
@@ -294,9 +387,23 @@ function fetchModels(providerId, target) {
     .catch(function() { sel.innerHTML = '<option value="">' + t('agents.loadmodelsfailed') + '</option>'; });
 }
 
+/* Inject marketplace entry_json into the installed table update forms */
 document.addEventListener('DOMContentLoaded', function() {
   var gp = document.getElementById('global-provider-select');
   if (gp && gp.value) fetchModels(gp.value, '#global-model-select');
+
+  /* Copy entry_json from marketplace cards to installed-table update forms */
+  var mpCards = document.querySelectorAll('.mp-card');
+  mpCards.forEach(function(card) {
+    var entryInput = card.querySelector('input[name=entry_json]');
+    if (!entryInput) return;
+    var json = entryInput.value;
+    try {
+      var entry = JSON.parse(json);
+      var target = document.getElementById('update-entry-' + entry.id);
+      if (target) target.value = json;
+    } catch(e) {}
+  });
 });
 </script>
 {% endblock %}
