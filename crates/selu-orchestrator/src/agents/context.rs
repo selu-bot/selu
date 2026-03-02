@@ -64,6 +64,15 @@ pub async fn build(
         }
     }
 
+    // ── Current date & time (per-turn) ─────────────────────────────────────
+    // Injected fresh every turn so the agent always knows the current date
+    // and time — even when a user picks up a thread days later.
+    let now = chrono::Local::now();
+    system.push_str(&format!(
+        "\n\n## Current date and time\n{}",
+        now.format("%A, %B %-d, %Y, %H:%M (%Z)")
+    ));
+
     messages.push(ChatMessage::system(system));
 
     // ── User personality ──────────────────────────────────────────────────────
