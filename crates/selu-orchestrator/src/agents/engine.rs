@@ -467,18 +467,27 @@ where
     // If the user already approved this call, skip policy lookup and invoke.
     if approved {
         let result = invoke_fn().await
-            .unwrap_or_else(|e| format!("Tool error: {}", e));
+            .unwrap_or_else(|e| {
+                warn!(tool = %namespaced_name, "Pre-approved tool invocation failed: {e}");
+                format!("Tool error: {}", e)
+            });
         return Ok(ToolDispatchResult::Done(result));
     }
 
     let policy = tool_policy::get_effective_policy(&state.db, user_id, agent_id, capability_id, tool_name)
         .await
-        .unwrap_or(None);
+        .unwrap_or_else(|e| {
+            warn!(tool = %namespaced_name, "Failed to look up tool policy (defaulting to blocked): {e}");
+            None
+        });
 
     match policy {
         Some(ToolPolicy::Allow) => {
             let result = invoke_fn().await
-                .unwrap_or_else(|e| format!("Tool error: {}", e));
+                .unwrap_or_else(|e| {
+                    warn!(tool = %namespaced_name, "Tool invocation failed: {e}");
+                    format!("Tool error: {}", e)
+                });
             Ok(ToolDispatchResult::Done(result))
         }
 

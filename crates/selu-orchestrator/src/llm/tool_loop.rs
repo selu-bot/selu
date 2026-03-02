@@ -292,7 +292,10 @@ pub async fn run_loop(
 
         for (call, result) in calls.iter().zip(dispatch_results) {
             let dispatch_result = result
-                .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
+                .unwrap_or_else(|e| {
+                    warn!(tool = %call.name, "Tool dispatch failed: {e}");
+                    ToolDispatchResult::Done(format!("Tool error: {}", e))
+                });
 
             match dispatch_result {
                 ToolDispatchResult::Done(result) => {
@@ -346,7 +349,10 @@ pub async fn run_loop(
             // dispatcher should skip the policy check and invoke directly.
             let result = tool_dispatcher(call.name.clone(), call.arguments.clone(), true)
                 .await
-                .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
+                .unwrap_or_else(|e| {
+                    warn!(tool = %call.name, "Tool dispatch failed after confirmation: {e}");
+                    ToolDispatchResult::Done(format!("Tool error: {}", e))
+                });
 
             match result {
                 ToolDispatchResult::Done(r) => {
@@ -402,7 +408,10 @@ pub async fn run_loop(
             // Re-dispatch after approval
             let result = tool_dispatcher(call.name.clone(), call.arguments.clone(), true)
                 .await
-                .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
+                .unwrap_or_else(|e| {
+                    warn!(tool = %call.name, "Tool dispatch failed after async approval: {e}");
+                    ToolDispatchResult::Done(format!("Tool error: {}", e))
+                });
 
             match result {
                 ToolDispatchResult::Done(r) => {

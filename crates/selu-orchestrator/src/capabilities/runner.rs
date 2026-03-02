@@ -12,7 +12,7 @@
 ///   - HTTP_PROXY / HTTPS_PROXY pointing at the orchestrator's egress proxy
 use anyhow::{anyhow, Context, Result};
 use bollard::container::{
-    Config, CreateContainerOptions, ListContainersOptions, RemoveContainerOptions,
+    Config, CreateContainerOptions, ListContainersOptions, LogsOptions, RemoveContainerOptions,
     StartContainerOptions,
 };
 use bollard::models::{
@@ -20,12 +20,13 @@ use bollard::models::{
 };
 use bollard::network::CreateNetworkOptions;
 use bollard::Docker;
+use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::capabilities::egress_proxy::{ContainerEgressPolicy, EgressRegistry};
@@ -437,7 +438,7 @@ impl CapabilityRunner {
         crate::capabilities::egress_proxy::register(&self.egress_registry, egress_token.clone(), policy).await;
 
         // ── Wait for gRPC healthcheck ─────────────────────────────────────────
-        wait_for_grpc_ready(&grpc_addr, 30).await
+        wait_for_grpc_ready(&self.docker, &container_id, &grpc_addr, 30).await
             .with_context(|| format!("Capability '{}' did not become ready in time", manifest.id))?;
 
         Ok(RunningCapability {
@@ -584,7 +585,15 @@ fn detect_self_container_id() -> Option<String> {
 }
 
 /// Polls the gRPC healthcheck until the container is ready or timeout expires.
-async fn wait_for_grpc_ready(grpc_addr: &str, timeout_secs: u64) -> Result<()> {
+///
+/// On failure, inspects the container state and fetches its logs to provide
+/// actionable diagnostics (e.g. crash on startup, missing dependencies).
+async fn wait_for_grpc_ready(
+    docker: &Docker,
+    container_id: &str,
+    grpc_addr: &str,
+    timeout_secs: u64,
+) -> Result<()> {
     use tonic::transport::Channel;
     use crate::capabilities::grpc::selu_capability::capability_client::CapabilityClient;
     use crate::capabilities::grpc::selu_capability::HealthRequest;
@@ -593,7 +602,79 @@ async fn wait_for_grpc_ready(grpc_addr: &str, timeout_secs: u64) -> Result<()> {
 
     loop {
         if std::time::Instant::now() > deadline {
-            return Err(anyhow!("gRPC healthcheck timed out after {}s", timeout_secs));
+            // Timeout — try to fetch container logs to explain why
+            let logs = fetch_container_logs(docker, container_id).await;
+            let state = fetch_container_state(docker, container_id).await;
+
+            error!(
+                container_id = %container_id,
+                addr = %grpc_addr,
+                container_state = %state,
+                "gRPC healthcheck timed out after {}s", timeout_secs,
+            );
+            if !logs.is_empty() {
+                error!(container_id = %container_id, "Container logs:\n{}", logs);
+            }
+
+            return Err(anyhow!(
+                "gRPC healthcheck timed out after {}s (container state: {})",
+                timeout_secs, state,
+            ));
+        }
+
+        // Check if the container is still running before trying gRPC
+        match docker.inspect_container(container_id, None).await {
+            Ok(inspect) => {
+                let status = inspect
+                    .state
+                    .as_ref()
+                    .and_then(|s| s.status.as_ref())
+                    .map(|s| format!("{:?}", s))
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                let running = inspect
+                    .state
+                    .as_ref()
+                    .and_then(|s| s.running)
+                    .unwrap_or(false);
+
+                if !running {
+                    let exit_code = inspect
+                        .state
+                        .as_ref()
+                        .and_then(|s| s.exit_code)
+                        .unwrap_or(-1);
+
+                    let logs = fetch_container_logs(docker, container_id).await;
+
+                    error!(
+                        container_id = %container_id,
+                        status = %status,
+                        exit_code = exit_code,
+                        "Capability container exited before becoming ready"
+                    );
+                    if !logs.is_empty() {
+                        error!(container_id = %container_id, "Container logs:\n{}", logs);
+                    }
+
+                    return Err(anyhow!(
+                        "Container exited (status={}, exit_code={}) before gRPC became ready",
+                        status, exit_code,
+                    ));
+                }
+            }
+            Err(_) => {
+                // Container already removed (auto_remove) — it crashed and was cleaned up
+                error!(
+                    container_id = %container_id,
+                    "Capability container disappeared (likely crashed and was auto-removed)"
+                );
+                return Err(anyhow!(
+                    "Container disappeared before gRPC became ready \
+                     (crashed and auto-removed). Run the container image \
+                     manually with `docker run --rm -it <image>` to see the error."
+                ));
+            }
         }
 
         match Channel::from_shared(grpc_addr.to_string())
@@ -610,13 +691,66 @@ async fn wait_for_grpc_ready(grpc_addr: &str, timeout_secs: u64) -> Result<()> {
                             return Ok(());
                         }
                     }
-                    Err(_) => {}
+                    Err(e) => {
+                        debug!(addr = grpc_addr, "Healthcheck RPC failed (retrying): {e}");
+                    }
                 }
             }
-            Err(_) => {}
+            Err(e) => {
+                debug!(addr = grpc_addr, "gRPC connect failed (retrying): {e}");
+            }
         }
 
         sleep(Duration::from_millis(200)).await;
+    }
+}
+
+/// Fetch the last N lines of a container's stdout/stderr logs.
+/// Returns an empty string if the container is already gone or logs are unavailable.
+async fn fetch_container_logs(docker: &Docker, container_id: &str) -> String {
+    let options = LogsOptions::<String> {
+        stdout: true,
+        stderr: true,
+        tail: "50".to_string(),
+        ..Default::default()
+    };
+
+    let mut stream = docker.logs(container_id, Some(options));
+    let mut output = String::new();
+
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(log) => {
+                output.push_str(&log.to_string());
+            }
+            Err(_) => break,
+        }
+    }
+
+    output.trim().to_string()
+}
+
+/// Fetch a human-readable description of the container's current state.
+/// Returns "removed/unknown" if the container no longer exists.
+async fn fetch_container_state(docker: &Docker, container_id: &str) -> String {
+    match docker.inspect_container(container_id, None).await {
+        Ok(inspect) => {
+            let status = inspect
+                .state
+                .as_ref()
+                .and_then(|s| s.status.as_ref())
+                .map(|s| format!("{:?}", s))
+                .unwrap_or_else(|| "unknown".to_string());
+            let exit_code = inspect
+                .state
+                .as_ref()
+                .and_then(|s| s.exit_code);
+            match exit_code {
+                Some(code) => format!("{}, exit_code={}", status, code),
+                None => status,
+            }
+        }
+        Err(_) => "removed/unknown (auto-removed after exit)".to_string(),
     }
 }
 

@@ -12,8 +12,9 @@ pub mod selu_capability {
 use anyhow::{anyhow, Result};
 use futures::StreamExt;
 use serde_json::Value;
+use std::time::Duration;
 use tonic::transport::Channel;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use selu_capability::capability_client::CapabilityClient;
 use selu_capability::{InvokeRequest, InvokeChunk};
@@ -26,11 +27,21 @@ pub struct CapabilityGrpcClient {
     capability_id: String,
 }
 
+/// Timeout for a single gRPC tool invocation (2 minutes).
+/// Playwright's navigation timeout is 30s, so this gives plenty of headroom
+/// for slower tools while preventing indefinite hangs.
+const INVOKE_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Timeout for establishing the initial gRPC channel connection.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
 impl CapabilityGrpcClient {
     /// Connect to a container by its gRPC address (e.g. `http://127.0.0.1:55001`).
     pub async fn connect(grpc_addr: &str, capability_id: impl Into<String>) -> Result<Self> {
         let channel = Channel::from_shared(grpc_addr.to_string())
             .map_err(|e| anyhow!("Invalid gRPC address: {}", e))?
+            .connect_timeout(CONNECT_TIMEOUT)
+            .timeout(INVOKE_TIMEOUT)
             .connect()
             .await
             .map_err(|e| anyhow!("Failed to connect to capability gRPC: {}", e))?;
@@ -76,10 +87,22 @@ impl CapabilityGrpcClient {
         let response = client
             .invoke(request)
             .await
-            .map_err(|e| anyhow!("gRPC invoke failed: {}", e))?
+            .map_err(|e| {
+                warn!(
+                    capability = %self.capability_id,
+                    tool = %tool_name,
+                    "gRPC invoke failed: {}", e
+                );
+                anyhow!("gRPC invoke failed: {}", e)
+            })?
             .into_inner();
 
         if !response.error.is_empty() {
+            warn!(
+                capability = %self.capability_id,
+                tool = %tool_name,
+                "Capability returned error: {}", response.error
+            );
             return Err(anyhow!("Capability '{}' tool '{}' returned error: {}", self.capability_id, tool_name, response.error));
         }
 
