@@ -2,6 +2,7 @@
 /// hand off a request to a specialised agent and return the result.
 use anyhow::{Context as _, Result};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::agents::loader::AgentDefinition;
 use crate::llm::provider::ToolSpec;
@@ -16,7 +17,7 @@ pub const TOOL_NAME: &str = "delegate_to_agent";
 /// excluded to prevent self-delegation loops.
 pub fn tool_spec(
     current_agent_id: &str,
-    available_agents: &HashMap<String, AgentDefinition>,
+    available_agents: &HashMap<String, Arc<AgentDefinition>>,
 ) -> ToolSpec {
     let agent_ids: Vec<&str> = available_agents
         .keys()
@@ -56,7 +57,7 @@ pub fn tool_spec(
 /// what they can do, so it can make informed delegation decisions.
 pub fn agent_registry_prompt(
     current_agent_id: &str,
-    available_agents: &HashMap<String, AgentDefinition>,
+    available_agents: &HashMap<String, Arc<AgentDefinition>>,
 ) -> String {
     let mut lines = Vec::new();
     lines.push("## Available specialist agents\n".to_string());
@@ -71,6 +72,7 @@ pub fn agent_registry_prompt(
     let mut agents: Vec<&AgentDefinition> = available_agents
         .values()
         .filter(|a| a.id != current_agent_id)
+        .map(|a| a.as_ref())
         .collect();
     agents.sort_by_key(|a| &a.id);
 
@@ -123,17 +125,18 @@ mod tests {
     use super::*;
     use crate::agents::loader::AgentDefinition;
 
-    fn make_agent(id: &str, name: &str, prompt: &str) -> AgentDefinition {
-        AgentDefinition {
+    fn make_agent(id: &str, name: &str, prompt: &str) -> Arc<AgentDefinition> {
+        Arc::new(AgentDefinition {
             id: id.to_string(),
             name: name.to_string(),
             model: None,
+            routing: Default::default(),
             session: Default::default(),
             system_prompt: prompt.to_string(),
             capabilities: vec![],
             capability_manifests: HashMap::new(),
             install_steps: vec![],
-        }
+        })
     }
 
     #[test]

@@ -720,7 +720,7 @@ async fn dispatch_message(
     http: Client,
 ) {
     // Route to agent
-    let agents_snapshot = state.agents.read().await.clone();
+    let agents_snapshot = state.agents.load();
     let default_agent_id = sqlx::query!(
         "SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id
     )

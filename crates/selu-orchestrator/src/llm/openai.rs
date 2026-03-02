@@ -25,6 +25,8 @@ impl OpenAiProvider {
         Self {
             client: Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(10))
+                .pool_max_idle_per_host(4)
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
                 .build()
                 .expect("Failed to build HTTP client"),
             api_key: api_key.into(),
@@ -38,6 +40,8 @@ impl OpenAiProvider {
         Self {
             client: Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(10))
+                .pool_max_idle_per_host(4)
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
                 .build()
                 .expect("Failed to build HTTP client"),
             api_key: "ollama".into(), // Ollama doesn't need a real key
@@ -213,12 +217,22 @@ impl LlmProvider for OpenAiProvider {
             let data: Value = serde_json::from_str(&event.data).ok()?;
             let delta = &data["choices"][0]["delta"];
 
-            // Tool call start
+            // Tool call delta
             if let Some(tool_calls) = delta["tool_calls"].as_array() {
                 if let Some(first) = tool_calls.first() {
-                    if first["function"]["name"].as_str().is_some() {
-                        return Some(Ok(StreamChunk::ToolCallStart));
-                    }
+                    let index = first["index"].as_u64().unwrap_or(0) as usize;
+                    let id = first["id"].as_str().map(|s| s.to_string());
+                    let name = first["function"]["name"].as_str().map(|s| s.to_string());
+                    let args_delta = first["function"]["arguments"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string();
+                    return Some(Ok(StreamChunk::ToolCallDelta {
+                        index,
+                        id,
+                        name,
+                        arguments_delta: args_delta,
+                    }));
                 }
                 return None;
             }

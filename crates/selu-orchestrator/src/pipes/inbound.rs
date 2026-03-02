@@ -142,7 +142,7 @@ async fn handle_inbound(
         .map(|s: &str| s.to_string());
 
     // ── Route to agent ────────────────────────────────────────────────────────
-    let agents_snapshot = state.agents.read().await.clone();
+    let agents_snapshot = state.agents.load();
     let (agent_id, effective_text) = agent_router::route(
         &envelope.text,
         pipe.default_agent_id.as_deref(),

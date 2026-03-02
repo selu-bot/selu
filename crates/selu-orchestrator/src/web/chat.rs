@@ -504,7 +504,7 @@ async fn process_message(
     .and_then(|r| r.default_agent_id);
 
     // Resolve @mention routing (same as webhook/iMessage adapters)
-    let agents_snapshot = state.agents.read().await.clone();
+    let agents_snapshot = state.agents.load();
     let (agent_id, effective_text) = agent_router::route(
         &text,
         default_agent_id.as_deref(),

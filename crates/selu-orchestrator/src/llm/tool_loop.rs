@@ -1,11 +1,12 @@
 use anyhow::Result;
 use futures::StreamExt;
+use futures::future::join_all;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, info, warn};
 
-use super::provider::{ChatMessage, LlmProvider, LlmResponse, StreamChunk, ToolSpec};
+use super::provider::{ChatMessage, LlmProvider, LlmResponse, StreamChunk, ToolCall, ToolSpec};
 
 // ── Tool dispatch result ──────────────────────────────────────────────────────
 
@@ -79,13 +80,13 @@ pub type LoopSender = mpsc::Sender<LoopEvent>;
 
 /// Runs the agentic tool-call loop.
 ///
-/// Every iteration starts with streaming for real-time token delivery.
-/// If the stream completes with text, we're done. If it detects a tool
-/// call (ToolCallStart), we fall back to a non-streaming call to get
-/// complete tool arguments, dispatch the tools, and loop again.
+/// Every iteration streams the LLM response in real-time. Text deltas are
+/// forwarded immediately as `LoopEvent::Token`. Tool-call arguments are
+/// accumulated from `ToolCallDelta` chunks during the stream, then dispatched
+/// when the stream completes.
 ///
-/// This means pure text responses (no tools) use a single streaming call,
-/// and post-tool responses also stream directly — no redundant calls.
+/// This means both pure-text and tool-call responses use a **single** streaming
+/// call per iteration — no redundant non-streaming fallback.
 ///
 /// The `tool_dispatcher` closure is responsible for:
 ///   1. Checking the user's tool policy (unless `approved` is `true`)
@@ -112,13 +113,13 @@ pub async fn run_loop(
     for iteration in 0..max_iterations {
         debug!(iteration, "Tool loop iteration");
 
-        // ── Step 1: Always try streaming first ────────────────────────────
-        // For text responses this delivers tokens in real-time.
-        // For tool call responses, we detect ToolCallStart early and fall
-        // back to non-streaming to get complete tool arguments.
+        // ── State for accumulating tool calls from the stream ─────────────
+        // Each entry: (id, name, accumulated_arguments_json)
+        let mut pending_tool_calls: Vec<(String, String, String)> = Vec::new();
         let mut streamed_text = String::new();
-        let mut needs_non_streaming = false;
+        let mut stream_ok = true;
 
+        // ── Stream the response ──────────────────────────────────────────
         match provider.chat_stream(&messages, &tools, temperature).await {
             Ok(mut stream) => {
                 let stream_start = Instant::now();
@@ -138,20 +139,33 @@ pub async fn run_loop(
                             streamed_text.push_str(&t);
                             let _ = tx.send(LoopEvent::Token(t)).await;
                         }
-                        StreamChunk::ToolCallStart => {
-                            debug!(
-                                iteration,
-                                elapsed_ms = stream_start.elapsed().as_millis(),
-                                "Tool call detected in stream, need non-streaming for args"
-                            );
-                            needs_non_streaming = true;
-                            break;
+                        StreamChunk::ToolCallDelta { index, id, name, arguments_delta } => {
+                            if !got_first_token {
+                                debug!(
+                                    iteration,
+                                    elapsed_ms = stream_start.elapsed().as_millis(),
+                                    "First token received (tool call)"
+                                );
+                                got_first_token = true;
+                            }
+                            // Grow the vec if needed
+                            while pending_tool_calls.len() <= index {
+                                pending_tool_calls.push((String::new(), String::new(), String::new()));
+                            }
+                            if let Some(id) = id {
+                                pending_tool_calls[index].0 = id;
+                            }
+                            if let Some(name) = name {
+                                pending_tool_calls[index].1 = name;
+                            }
+                            pending_tool_calls[index].2.push_str(&arguments_delta);
                         }
                         StreamChunk::Done => {
                             debug!(
                                 iteration,
                                 elapsed_ms = stream_start.elapsed().as_millis(),
                                 text_len = streamed_text.len(),
+                                tool_calls = pending_tool_calls.len(),
                                 "Stream complete"
                             );
                             break;
@@ -161,12 +175,14 @@ pub async fn run_loop(
             }
             Err(e) => {
                 warn!(iteration, "Streaming failed, falling back: {e}");
-                needs_non_streaming = true;
+                stream_ok = false;
             }
         }
 
-        // ── Step 2: If we got a complete text response, we're done ────────
-        if !needs_non_streaming {
+        // ── Handle the streamed result ───────────────────────────────────
+
+        if stream_ok && pending_tool_calls.is_empty() {
+            // Pure text response — we're done
             if !streamed_text.is_empty() {
                 debug!(
                     total_ms = loop_start.elapsed().as_millis(),
@@ -177,167 +193,231 @@ pub async fn run_loop(
                 let _ = tx.send(LoopEvent::Done).await;
                 return Ok(streamed_text);
             }
-            // Stream completed but returned no text — fall through
-            debug!(iteration, "Stream returned no text, falling back to non-streaming");
+            // Stream completed but returned no text and no tool calls — fall through to non-streaming
+            debug!(iteration, "Stream returned no content, falling back to non-streaming");
         }
 
-        // ── Step 3: Non-streaming call for tool args or empty fallback ────
-        let llm_start = Instant::now();
-        let response = provider.chat(&messages, &tools, temperature).await?;
+        // ── Build ToolCall objects from stream deltas (or fall back) ─────
+
+        let calls: Vec<ToolCall> = if !pending_tool_calls.is_empty() {
+            pending_tool_calls
+                .into_iter()
+                .filter(|(_, name, _)| !name.is_empty())
+                .map(|(id, name, args_json)| {
+                    let arguments: serde_json::Value = serde_json::from_str(&args_json)
+                        .unwrap_or_else(|_| {
+                            warn!(tool = %name, "Failed to parse streamed tool args, using raw string");
+                            serde_json::Value::String(args_json)
+                        });
+                    ToolCall {
+                        id: if id.is_empty() {
+                            format!("call_{}", uuid::Uuid::new_v4())
+                        } else {
+                            id
+                        },
+                        name,
+                        arguments,
+                    }
+                })
+                .collect()
+        } else {
+            // Fallback: streaming failed entirely or returned nothing useful.
+            // Use a non-streaming call as last resort.
+            let llm_start = Instant::now();
+            let response = provider.chat(&messages, &tools, temperature).await?;
+            debug!(
+                iteration,
+                elapsed_ms = llm_start.elapsed().as_millis(),
+                "LLM non-streaming fallback completed"
+            );
+
+            match response {
+                LlmResponse::Text(text) => {
+                    let _ = tx.send(LoopEvent::Token(text.clone())).await;
+                    let _ = tx.send(LoopEvent::Done).await;
+                    debug!(
+                        total_ms = loop_start.elapsed().as_millis(),
+                        iterations = iteration + 1,
+                        "Tool loop complete (non-streaming fallback)"
+                    );
+                    return Ok(text);
+                }
+                LlmResponse::ToolCalls(c) => c,
+            }
+        };
+
+        // ── Dispatch tool calls (parallel where possible) ─────────────
+
+        // Add the assistant's tool call message with the actual
+        // ToolCall data so providers can emit proper toolUse blocks.
+        let summary = calls.iter().map(|c| format!("[calling {}]", c.name)).collect::<Vec<_>>().join(", ");
+        messages.push(ChatMessage::assistant_with_tool_calls(summary, calls.clone()));
+
+        // Send all status events upfront so the UI shows activity immediately
+        for call in &calls {
+            info!(tool = %call.name, "LLM requesting tool call");
+            let status = format!("Using {}...", call.name);
+            let _ = tx.send(LoopEvent::CapabilityStatus(status)).await;
+        }
+
+        // Dispatch all tool calls in parallel. The dispatcher checks policy
+        // and invokes the tool (for Allow) or returns NeedsConfirmation/Queued
+        // immediately (for Ask) — so parallel dispatch is safe.
+        let dispatch_start = Instant::now();
+        let dispatch_futures: Vec<_> = calls.iter().map(|call| {
+            tool_dispatcher(call.name.clone(), call.arguments.clone(), false)
+        }).collect();
+        let dispatch_results = join_all(dispatch_futures).await;
+
         debug!(
-            iteration,
-            elapsed_ms = llm_start.elapsed().as_millis(),
-            "LLM non-streaming call completed"
+            count = calls.len(),
+            elapsed_ms = dispatch_start.elapsed().as_millis(),
+            "Parallel tool dispatch complete"
         );
 
-        match response {
-            LlmResponse::Text(text) => {
-                // Non-streaming returned text (stream was empty, or LLM
-                // changed its mind about tool calling). Send and finish.
-                let _ = tx.send(LoopEvent::Token(text.clone())).await;
-                let _ = tx.send(LoopEvent::Done).await;
-                debug!(
-                    total_ms = loop_start.elapsed().as_millis(),
-                    iterations = iteration + 1,
-                    "Tool loop complete (non-streaming fallback)"
-                );
-                return Ok(text);
-            }
-            LlmResponse::ToolCalls(calls) => {
-                // Add the assistant's tool call message with the actual
-                // ToolCall data so providers can emit proper toolUse blocks.
-                let summary = calls.iter().map(|c| format!("[calling {}]", c.name)).collect::<Vec<_>>().join(", ");
-                messages.push(ChatMessage::assistant_with_tool_calls(summary, calls.clone()));
+        // Process results: Done/Blocked are pushed immediately, while
+        // NeedsConfirmation/Queued are collected for sequential handling
+        // (they require user interaction which is inherently serial).
+        struct DeferredConfirmation<'a> {
+            call: &'a ToolCall,
+        }
+        struct DeferredQueued<'a> {
+            call: &'a ToolCall,
+            approval_id: String,
+            receiver: oneshot::Receiver<bool>,
+            timeout: Duration,
+        }
+        let mut deferred_confirmations: Vec<DeferredConfirmation<'_>> = Vec::new();
+        let mut deferred_queued: Vec<DeferredQueued<'_>> = Vec::new();
 
-                for call in &calls {
-                    let status = format!("Using {}...", call.name);
-                    info!(tool = %call.name, "LLM requesting tool call");
-                    let _ = tx.send(LoopEvent::CapabilityStatus(status)).await;
+        for (call, result) in calls.iter().zip(dispatch_results) {
+            let dispatch_result = result
+                .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
 
-                    // ── Dispatch with policy enforcement ──────────────────────
-                    let dispatch_start = Instant::now();
-                    let dispatch_result = tool_dispatcher(call.name.clone(), call.arguments.clone(), false)
-                        .await
-                        .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
-
-                    match dispatch_result {
-                        ToolDispatchResult::Done(result) => {
-                            debug!(
-                                tool = %call.name,
-                                elapsed_ms = dispatch_start.elapsed().as_millis(),
-                                "Tool call completed"
-                            );
-                            messages.push(ChatMessage::tool_result(&call.id, result));
-                        }
-
-                        ToolDispatchResult::Blocked(msg) => {
-                            warn!(tool = %call.name, "Tool call blocked by policy");
-                            messages.push(ChatMessage::tool_result(&call.id, msg));
-                        }
-
-                        ToolDispatchResult::NeedsConfirmation => {
-                            // Interactive channel — prompt via SSE
-                            let (confirm_tx, confirm_rx) = oneshot::channel::<bool>();
-                            let req = ConfirmationRequest {
-                                tool_name: call.name.clone(),
-                                arguments: call.arguments.clone(),
-                                reply: confirm_tx,
-                            };
-                            let _ = tx.send(LoopEvent::ConfirmationRequired(req)).await;
-
-                            let approved = confirm_rx.await.unwrap_or(false);
-                            if !approved {
-                                warn!(tool = %call.name, "Tool call denied by user (interactive)");
-                                messages.push(ChatMessage::tool_result(
-                                    &call.id,
-                                    "The user denied this action. Do NOT retry it. \
-                                     Acknowledge the denial and ask how they'd like to proceed."
-                                        .to_string(),
-                                ));
-                                continue;
-                            }
-                            info!(tool = %call.name, "Tool call approved by user (interactive)");
-
-                            // Re-dispatch — the user already approved, so the
-                            // dispatcher should skip the policy check and invoke directly.
-                            let result = tool_dispatcher(call.name.clone(), call.arguments.clone(), true)
-                                .await
-                                .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
-
-                            match result {
-                                ToolDispatchResult::Done(r) => {
-                                    debug!(tool = %call.name, "Tool call completed after confirmation");
-                                    messages.push(ChatMessage::tool_result(&call.id, r));
-                                }
-                                _ => {
-                                    // Shouldn't happen after approval — treat as error
-                                    messages.push(ChatMessage::tool_result(
-                                        &call.id,
-                                        "Internal error: tool dispatch failed after approval.".to_string(),
-                                    ));
-                                }
-                            }
-                        }
-
-                        ToolDispatchResult::Queued { approval_id, receiver, timeout } => {
-                            // Non-interactive threaded channel — wait for async approval
-                            let _ = tx.send(LoopEvent::ApprovalQueued {
-                                tool_name: call.name.clone(),
-                                approval_id: approval_id.clone(),
-                            }).await;
-
-                            info!(
-                                tool = %call.name,
-                                approval_id = %approval_id,
-                                timeout_secs = timeout.as_secs(),
-                                "Waiting for async tool approval"
-                            );
-
-                            let approved = match tokio::time::timeout(timeout, receiver).await {
-                                Ok(Ok(v)) => v,
-                                Ok(Err(_)) => false, // sender dropped
-                                Err(_) => {
-                                    warn!(tool = %call.name, "Async approval timed out");
-                                    false
-                                }
-                            };
-
-                            if !approved {
-                                warn!(tool = %call.name, "Tool call denied (async approval)");
-                                messages.push(ChatMessage::tool_result(
-                                    &call.id,
-                                    "The user did not approve this action in time. Do NOT retry it. \
-                                     Acknowledge that the action was not approved and ask how they'd like to proceed."
-                                        .to_string(),
-                                ));
-                                continue;
-                            }
-
-                            info!(tool = %call.name, "Tool call approved (async)");
-
-                            // Re-dispatch after approval
-                            let result = tool_dispatcher(call.name.clone(), call.arguments.clone(), true)
-                                .await
-                                .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
-
-                            match result {
-                                ToolDispatchResult::Done(r) => {
-                                    debug!(tool = %call.name, "Tool call completed after async approval");
-                                    messages.push(ChatMessage::tool_result(&call.id, r));
-                                }
-                                _ => {
-                                    messages.push(ChatMessage::tool_result(
-                                        &call.id,
-                                        "Internal error: tool dispatch failed after approval.".to_string(),
-                                    ));
-                                }
-                            }
-                        }
-                    }
+            match dispatch_result {
+                ToolDispatchResult::Done(result) => {
+                    debug!(
+                        tool = %call.name,
+                        "Tool call completed"
+                    );
+                    messages.push(ChatMessage::tool_result(&call.id, result));
                 }
-                // Continue loop — next iteration will stream the post-tool response
+
+                ToolDispatchResult::Blocked(msg) => {
+                    warn!(tool = %call.name, "Tool call blocked by policy");
+                    messages.push(ChatMessage::tool_result(&call.id, msg));
+                }
+
+                ToolDispatchResult::NeedsConfirmation => {
+                    deferred_confirmations.push(DeferredConfirmation { call });
+                }
+
+                ToolDispatchResult::Queued { approval_id, receiver, timeout } => {
+                    deferred_queued.push(DeferredQueued { call, approval_id, receiver, timeout });
+                }
             }
         }
+
+        // Handle interactive confirmations sequentially (user approves one at a time)
+        for deferred in deferred_confirmations {
+            let call = deferred.call;
+            let (confirm_tx, confirm_rx) = oneshot::channel::<bool>();
+            let req = ConfirmationRequest {
+                tool_name: call.name.clone(),
+                arguments: call.arguments.clone(),
+                reply: confirm_tx,
+            };
+            let _ = tx.send(LoopEvent::ConfirmationRequired(req)).await;
+
+            let approved = confirm_rx.await.unwrap_or(false);
+            if !approved {
+                warn!(tool = %call.name, "Tool call denied by user (interactive)");
+                messages.push(ChatMessage::tool_result(
+                    &call.id,
+                    "The user denied this action. Do NOT retry it. \
+                     Acknowledge the denial and ask how they'd like to proceed."
+                        .to_string(),
+                ));
+                continue;
+            }
+            info!(tool = %call.name, "Tool call approved by user (interactive)");
+
+            // Re-dispatch — the user already approved, so the
+            // dispatcher should skip the policy check and invoke directly.
+            let result = tool_dispatcher(call.name.clone(), call.arguments.clone(), true)
+                .await
+                .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
+
+            match result {
+                ToolDispatchResult::Done(r) => {
+                    debug!(tool = %call.name, "Tool call completed after confirmation");
+                    messages.push(ChatMessage::tool_result(&call.id, r));
+                }
+                _ => {
+                    messages.push(ChatMessage::tool_result(
+                        &call.id,
+                        "Internal error: tool dispatch failed after approval.".to_string(),
+                    ));
+                }
+            }
+        }
+
+        // Handle async approvals sequentially (non-interactive channels)
+        for deferred in deferred_queued {
+            let call = deferred.call;
+            let _ = tx.send(LoopEvent::ApprovalQueued {
+                tool_name: call.name.clone(),
+                approval_id: deferred.approval_id.clone(),
+            }).await;
+
+            info!(
+                tool = %call.name,
+                approval_id = %deferred.approval_id,
+                timeout_secs = deferred.timeout.as_secs(),
+                "Waiting for async tool approval"
+            );
+
+            let approved = match tokio::time::timeout(deferred.timeout, deferred.receiver).await {
+                Ok(Ok(v)) => v,
+                Ok(Err(_)) => false, // sender dropped
+                Err(_) => {
+                    warn!(tool = %call.name, "Async approval timed out");
+                    false
+                }
+            };
+
+            if !approved {
+                warn!(tool = %call.name, "Tool call denied (async approval)");
+                messages.push(ChatMessage::tool_result(
+                    &call.id,
+                    "The user did not approve this action in time. Do NOT retry it. \
+                     Acknowledge that the action was not approved and ask how they'd like to proceed."
+                        .to_string(),
+                ));
+                continue;
+            }
+
+            info!(tool = %call.name, "Tool call approved (async)");
+
+            // Re-dispatch after approval
+            let result = tool_dispatcher(call.name.clone(), call.arguments.clone(), true)
+                .await
+                .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
+
+            match result {
+                ToolDispatchResult::Done(r) => {
+                    debug!(tool = %call.name, "Tool call completed after async approval");
+                    messages.push(ChatMessage::tool_result(&call.id, r));
+                }
+                _ => {
+                    messages.push(ChatMessage::tool_result(
+                        &call.id,
+                        "Internal error: tool dispatch failed after approval.".to_string(),
+                    ));
+                }
+            }
+        }
+        // Continue loop — next iteration will stream the post-tool response
     }
 
     let _ = tx.send(LoopEvent::Error("Max tool iterations reached".into())).await;

@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
         loop {
             interval.tick().await;
             // Get the minimum idle timeout across all agents (or use 30 as default)
-            let agents = cleanup_state.agents.read().await;
+            let agents = cleanup_state.agents.load();
             let min_idle = agents.values()
                 .map(|a| a.session.idle_timeout_minutes)
                 .min()

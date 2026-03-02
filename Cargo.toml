@@ -82,6 +82,9 @@ time = "0.3"
 flate2 = "1"
 tar = "0.4"
 
+# Lock-free atomic pointer swap (agent snapshot reads)
+arc-swap = "1"
+
 # AWS Event Stream parsing (for Bedrock converse-stream)
 aws-smithy-eventstream = "0.60"
 aws-smithy-types = "1.4"

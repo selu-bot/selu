@@ -230,7 +230,7 @@ pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(st
         return Redirect::to("/chat").into_response();
     }
     // Installed agents from in-memory map + DB metadata
-    let agents_map = state.agents.read().await;
+    let agents_map = state.agents.load();
     let mut agents: Vec<InstalledAgentView> = Vec::new();
 
     for def in agents_map.values() {
@@ -737,7 +737,7 @@ pub async fn agent_detail(
     State(state): State<AppState>,
 ) -> Response {
     // Load agent definition
-    let agents_map = state.agents.read().await;
+    let agents_map = state.agents.load();
     let agent = match agents_map.get(&agent_id) {
         Some(a) => a.clone(),
         None => return StatusCode::NOT_FOUND.into_response(),

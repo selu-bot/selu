@@ -7,6 +7,8 @@ use anyhow::Result;
 use futures::future::BoxFuture;
 use futures::FutureExt;
 use sqlx::Row;
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
@@ -15,7 +17,9 @@ use uuid::Uuid;
 use selu_core::types::Role;
 
 use crate::agents::{context, delegation, router as agent_router, session as session_mgr, thread as thread_mgr};
+use crate::agents::loader::{AgentDefinition, RoutingMode};
 use crate::capabilities::build_tool_specs;
+use crate::capabilities::manifest::CapabilityManifest;
 use crate::llm::registry::load_provider;
 use crate::llm::tool_loop::{run_loop, LoopEvent, LoopSender, ToolDispatchResult};
 use crate::llm::provider::{ChatMessage, LlmResponse};
@@ -85,7 +89,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
 
     // ── Route to agent ────────────────────────────────────────────────────────
     let route_start = Instant::now();
-    let agents_snapshot = state.agents.read().await.clone();
+    let agents_snapshot = state.agents.load();
     let (resolved_agent_id, effective_text) = {
         if let Some(id) = agent_id {
             (id, message.clone())
@@ -140,12 +144,24 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         error!("Failed to persist user message: {e}");
     }
 
-    // ── Context + provider + tool specs (parallelized) ─────────────────────────
-    // These three operations are independent and can run concurrently:
+    // ── Partition agents into inlined vs delegated ──────────────────────────────
+    // Inlined agents' tools are exposed directly on this agent's tool list,
+    // eliminating the delegation round-trip. Delegated agents keep the full
+    // delegate_to_agent flow with their own LLM context.
+    let (inlined_manifests, delegated_agents) =
+        partition_agents(&agent, &agents_snapshot);
+
+    // ── Context + provider (parallelized) ─────────────────────────────────────
+    // These operations are independent and can run concurrently:
     //   1. Build context window (needs session_id, hits DB for personality + history)
     //   2. Resolve model + load provider (hits DB for agent model + provider key)
-    //   3. Build tool specs (CPU-only, from in-memory manifests)
     let prep_start = Instant::now();
+
+    let delegated_ref = if delegated_agents.is_empty() {
+        None
+    } else {
+        Some(&delegated_agents)
+    };
 
     let context_fut = context::build(
         &state.db,
@@ -155,7 +171,8 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         thread_id.as_deref(),
         &user_id,
         &effective_text,
-        Some(&agents_snapshot),
+        &inlined_manifests,
+        delegated_ref,
     );
 
     let provider_fut = async {
@@ -178,21 +195,24 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         "Context + provider ready"
     );
 
-    // ── Tool specs: capability tools + built-in emit_event + delegation ───────
+    // ── Tool specs: own capabilities + inlined + built-ins + delegation ───────
     let mut tool_specs = build_tool_specs(&agent.capability_manifests);
+    tool_specs.extend(build_tool_specs(&inlined_manifests));
     tool_specs.push(crate::events::emit_event_tool_spec());
 
-    // Only add delegation tool if there are other agents to delegate to
-    let has_delegates = agents_snapshot.keys().any(|id| id != &agent.id);
-    if has_delegates {
-        tool_specs.push(delegation::tool_spec(&agent.id, &agents_snapshot));
+    // Only add delegation tool if there are agents that still need delegation
+    if !delegated_agents.is_empty() {
+        tool_specs.push(delegation::tool_spec(&agent.id, &delegated_agents));
     }
 
     // ── Dispatcher ────────────────────────────────────────────────────────────
     let cap_engine = state.capabilities.clone();
     let cred_store = state.credentials.clone();
     let event_bus = state.events.clone();
-    let cap_manifests = agent.capability_manifests.clone();
+    // Merge the agent's own capability manifests with inlined manifests so the
+    // dispatcher can resolve and invoke tools from both sources.
+    let mut cap_manifests = agent.capability_manifests.clone();
+    cap_manifests.extend(inlined_manifests);
     let sid = session_id.clone();
     let uid = user_id.clone();
     let src_agent_id = agent.id.clone();
@@ -663,6 +683,46 @@ async fn generate_thread_title(
     }
 
     Ok(())
+}
+
+// ── Agent routing partition ───────────────────────────────────────────────────
+
+/// Partition installed agents into **inlined** and **delegated** sets relative
+/// to the current agent.
+///
+/// - **Inlined**: The agent's capability manifests are merged into the current
+///   agent's tool list. The LLM can call the tools directly — no delegation
+///   round-trip.
+/// - **Delegated**: The agent appears in the `delegate_to_agent` registry and
+///   gets its own LLM context when invoked.
+///
+/// The current agent itself is excluded from both sets (it can't delegate to
+/// or inline itself).
+fn partition_agents(
+    current_agent: &AgentDefinition,
+    all_agents: &HashMap<String, Arc<AgentDefinition>>,
+) -> (
+    HashMap<String, CapabilityManifest>,
+    HashMap<String, Arc<AgentDefinition>>,
+) {
+    let mut inlined_manifests = HashMap::new();
+    let mut delegated_agents = HashMap::new();
+
+    for (id, agent) in all_agents {
+        if id == &current_agent.id {
+            continue;
+        }
+        if agent.effective_routing() == RoutingMode::Inline {
+            // Merge this agent's capability manifests into the inlined set
+            for (cap_id, manifest) in &agent.capability_manifests {
+                inlined_manifests.insert(cap_id.clone(), manifest.clone());
+            }
+        } else {
+            delegated_agents.insert(id.clone(), agent.clone());
+        }
+    }
+
+    (inlined_manifests, delegated_agents)
 }
 
 /// Dispatch a `delegate_to_agent` tool call by running a nested agent turn.

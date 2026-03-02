@@ -43,6 +43,8 @@ impl BedrockProvider {
         Self {
             client: Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(10))
+                .pool_max_idle_per_host(4)
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
                 .build()
                 .expect("Failed to build HTTP client"),
             api_key: api_key.into(),
@@ -279,9 +281,20 @@ impl LlmProvider for BedrockProvider {
         // Bedrock converse-stream returns AWS Event Stream binary frames.
         // Each frame contains headers (:event-type, :message-type, :content-type)
         // and a JSON payload. We use aws-smithy-eventstream to parse the binary
-        // framing and extract text deltas, tool call starts, and message stops.
+        // framing and extract text deltas, tool call deltas, and message stops.
+        //
+        // Tool calls arrive as:
+        //   contentBlockStart  → { start: { toolUse: { toolUseId, name } } }
+        //   contentBlockDelta  → { delta: { toolUse: { input: "<json-fragment>" } } }
+        //   ...more deltas...
+        //   contentBlockStop   → (marks end of this content block)
+        //   messageStop        → (marks end of the entire message)
+        //
+        // We track a running tool-call index so the tool loop can reassemble
+        // the complete arguments from the incremental deltas.
         let mut decoder = MessageFrameDecoder::new();
         let mut buf = BytesMut::new();
+        let mut tool_call_index: usize = 0;
 
         let stream = resp.bytes_stream().filter_map(move |chunk| {
             let chunk = match chunk {
@@ -340,19 +353,37 @@ impl LlmProvider for BedrockProvider {
 
                         match event_type.as_deref() {
                             Some("contentBlockDelta") => {
+                                // Text delta
                                 if let Some(text) = payload["delta"]["text"].as_str() {
                                     return std::future::ready(Some(Ok(StreamChunk::Text(
                                         text.to_string(),
                                     ))));
                                 }
-                                // Could be a toolUse input delta — skip
+                                // Tool-use input delta (JSON fragment)
+                                if let Some(input_frag) = payload["delta"]["toolUse"]["input"].as_str() {
+                                    return std::future::ready(Some(Ok(StreamChunk::ToolCallDelta {
+                                        index: tool_call_index.saturating_sub(1),
+                                        id: None,
+                                        name: None,
+                                        arguments_delta: input_frag.to_string(),
+                                    })));
+                                }
                                 continue;
                             }
                             Some("contentBlockStart") => {
-                                if payload["start"]["toolUse"]["name"].as_str().is_some() {
-                                    return std::future::ready(Some(Ok(
-                                        StreamChunk::ToolCallStart,
-                                    )));
+                                if let Some(tool_use) = payload["start"].get("toolUse") {
+                                    let name = tool_use["name"].as_str().map(|s| s.to_string());
+                                    let id = tool_use["toolUseId"].as_str().map(|s| s.to_string());
+                                    if name.is_some() {
+                                        let idx = tool_call_index;
+                                        tool_call_index += 1;
+                                        return std::future::ready(Some(Ok(StreamChunk::ToolCallDelta {
+                                            index: idx,
+                                            id,
+                                            name,
+                                            arguments_delta: String::new(),
+                                        })));
+                                    }
                                 }
                                 continue;
                             }

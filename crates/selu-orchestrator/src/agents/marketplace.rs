@@ -4,16 +4,16 @@
 /// GitHub release archive (tar.gz) containing the agent's files. Capability
 /// Docker images are pulled from a container registry (e.g. GHCR).
 use anyhow::{Context, Result};
+use arc_swap::ArcSwap;
 use ring::digest;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use crate::agents::loader::{self, AgentDefinition};
+use crate::state::AgentMap;
 
 // ── Marketplace types ─────────────────────────────────────────────────────────
 
@@ -97,7 +97,7 @@ pub async fn install_agent(
     entry: &MarketplaceEntry,
     installed_dir: &str,
     db: &SqlitePool,
-    agents: &Arc<RwLock<HashMap<String, AgentDefinition>>>,
+    agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
 ) -> Result<AgentDefinition> {
     let agent_dir = Path::new(installed_dir).join(&entry.id);
@@ -136,8 +136,10 @@ pub async fn install_agent(
 
             // Remove from in-memory map (best-effort, may not have been added)
             {
-                let mut map = agents.write().await;
-                map.remove(&entry.id);
+                let current = agents.load();
+                let mut new = (**current).clone();
+                new.remove(&entry.id);
+                agents.store(Arc::new(new));
             }
 
             // Remove partially-inserted DB row (best-effort)
@@ -162,7 +164,7 @@ async fn install_agent_inner(
     entry: &MarketplaceEntry,
     agent_dir: &Path,
     db: &SqlitePool,
-    agents: &Arc<RwLock<HashMap<String, AgentDefinition>>>,
+    agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
 ) -> Result<AgentDefinition> {
     // 4. Pull Docker images
@@ -195,8 +197,10 @@ async fn install_agent_inner(
 
     // 6. Add to in-memory map (only if setup is complete / no steps needed)
     if !has_steps {
-        let mut map = agents.write().await;
-        map.insert(agent_def.id.clone(), agent_def.clone());
+        let current = agents.load();
+        let mut new = (**current).clone();
+        new.insert(agent_def.id.clone(), Arc::new(agent_def.clone()));
+        agents.store(Arc::new(new));
     }
 
     info!(agent = %entry.id, setup_complete, "Agent installed");
@@ -208,7 +212,7 @@ pub async fn complete_setup(
     agent_id: &str,
     installed_dir: &str,
     db: &SqlitePool,
-    agents: &Arc<RwLock<HashMap<String, AgentDefinition>>>,
+    agents: &Arc<ArcSwap<AgentMap>>,
 ) -> Result<()> {
     sqlx::query("UPDATE agents SET setup_complete = 1 WHERE id = ?")
         .bind(agent_id)
@@ -219,8 +223,12 @@ pub async fn complete_setup(
     let agent_dir = Path::new(installed_dir).join(agent_id);
     let agent_def = loader::load_one(&agent_dir).await?;
 
-    let mut map = agents.write().await;
-    map.insert(agent_def.id.clone(), agent_def);
+    {
+        let current = agents.load();
+        let mut new = (**current).clone();
+        new.insert(agent_def.id.clone(), Arc::new(agent_def));
+        agents.store(Arc::new(new));
+    }
 
     info!(agent = agent_id, "Agent setup completed");
     Ok(())
@@ -231,7 +239,7 @@ pub async fn uninstall_agent(
     agent_id: &str,
     installed_dir: &str,
     db: &SqlitePool,
-    agents: &Arc<RwLock<HashMap<String, AgentDefinition>>>,
+    agents: &Arc<ArcSwap<AgentMap>>,
 ) -> Result<()> {
     // Don't allow uninstalling the bundled default
     let row = sqlx::query_as::<_, (i32,)>(
@@ -250,11 +258,10 @@ pub async fn uninstall_agent(
     // Collect capability IDs before we tear anything down. Try the
     // in-memory map first; fall back to loading from disk.
     let cap_ids: Vec<String> = {
-        let map = agents.read().await;
+        let map = agents.load();
         if let Some(def) = map.get(agent_id) {
             def.capability_manifests.keys().cloned().collect()
         } else {
-            drop(map);
             let agent_dir = Path::new(installed_dir).join(agent_id);
             loader::load_one(&agent_dir)
                 .await
@@ -265,8 +272,10 @@ pub async fn uninstall_agent(
 
     // Remove from in-memory map
     {
-        let mut map = agents.write().await;
-        map.remove(agent_id);
+        let current = agents.load();
+        let mut new = (**current).clone();
+        new.remove(agent_id);
+        agents.store(Arc::new(new));
     }
 
     // Remove tool policies for this agent (all users — per-user overrides)

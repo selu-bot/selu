@@ -80,6 +80,9 @@ aws-smithy-eventstream = { workspace = true }
 aws-smithy-types = { workspace = true }
 bytes = { workspace = true }
 
+# Lock-free atomic pointer swap
+arc-swap = { workspace = true }
+
 [build-dependencies]
 tonic-build = { version = "0.13", features = ["prost"] }
 protox = "0.7"
