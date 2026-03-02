@@ -23,7 +23,10 @@ impl AnthropicProvider {
     pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
         let model_str = model.into();
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()
+                .expect("Failed to build HTTP client"),
             api_key: api_key.into(),
             base_url: "https://api.anthropic.com".into(),
             model: if model_str.is_empty() { "claude-sonnet-4-20250514".into() } else { model_str },
@@ -157,6 +160,7 @@ impl LlmProvider for AnthropicProvider {
             .post(format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
+            .timeout(std::time::Duration::from_secs(120))
             .json(&body)
             .send()
             .await?;

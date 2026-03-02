@@ -8,6 +8,7 @@ use crate::capabilities::CapabilityEngine;
 use crate::channels::ChannelRegistry;
 use crate::config::AppConfig;
 use crate::events::EventBus;
+use crate::llm::registry::ProviderCache;
 use crate::llm::tool_loop::LoopSender;
 use crate::permissions::CredentialStore;
 
@@ -38,6 +39,8 @@ pub struct AppState {
     pub credentials: CredentialStore,
     /// Event bus: persists + broadcasts agent events for fanout
     pub events: EventBus,
+    /// LLM provider cache: avoids repeated DB lookups and key decryption
+    pub provider_cache: ProviderCache,
 }
 
 impl AppState {
@@ -62,6 +65,7 @@ impl AppState {
             channel_registry,
             credentials,
             events,
+            provider_cache: ProviderCache::new(),
         }
     }
 }

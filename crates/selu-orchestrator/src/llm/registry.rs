@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use super::{
     anthropic::AnthropicProvider,
@@ -10,10 +12,90 @@ use super::{
 };
 use crate::permissions::store::CredentialStore;
 
+/// Cache key for provider instances: (provider_id, model_id)
+type ProviderCacheKey = (String, String);
+
+/// Thread-safe cache for LLM provider instances.
+///
+/// Providers are keyed by (provider_id, model_id). Since the API key is
+/// encrypted in the DB and decryption is not free, caching avoids repeated
+/// DB lookups and decryption on every turn.
+///
+/// The cache is invalidated when the user changes provider settings (see
+/// `invalidate` method).
+#[derive(Clone)]
+pub struct ProviderCache {
+    inner: Arc<Mutex<HashMap<ProviderCacheKey, Arc<dyn LlmProvider>>>>,
+}
+
+impl ProviderCache {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Get a cached provider or load and cache a new one.
+    pub async fn get_or_load(
+        &self,
+        db: &SqlitePool,
+        provider_id: &str,
+        model_id: &str,
+        cred_store: &CredentialStore,
+    ) -> Result<Arc<dyn LlmProvider>> {
+        let key = (provider_id.to_string(), model_id.to_string());
+
+        // Fast path: check cache
+        {
+            let cache = self.inner.lock().await;
+            if let Some(provider) = cache.get(&key) {
+                return Ok(provider.clone());
+            }
+        }
+
+        // Slow path: load from DB, then cache
+        let provider = load_provider_from_db(db, provider_id, model_id, cred_store).await?;
+
+        {
+            let mut cache = self.inner.lock().await;
+            cache.insert(key, provider.clone());
+        }
+
+        Ok(provider)
+    }
+
+    /// Invalidate all cached providers. Call this when provider settings
+    /// (API keys, base URLs) are changed.
+    pub async fn invalidate(&self) {
+        let mut cache = self.inner.lock().await;
+        cache.clear();
+        tracing::debug!("LLM provider cache invalidated");
+    }
+
+    /// Invalidate a specific provider+model combo.
+    #[allow(dead_code)]
+    pub async fn invalidate_provider(&self, provider_id: &str, model_id: &str) {
+        let mut cache = self.inner.lock().await;
+        cache.remove(&(provider_id.to_string(), model_id.to_string()));
+    }
+}
+
 /// Loads an LLM provider from the database by provider ID.
 /// API keys are stored encrypted in llm_providers table using AES-256-GCM.
 /// The `model_id` parameter overrides the default model for the provider.
+///
+/// Prefer using `ProviderCache::get_or_load` instead of calling this directly.
 pub async fn load_provider(
+    db: &SqlitePool,
+    provider_id: &str,
+    model_id: &str,
+    cred_store: &CredentialStore,
+) -> Result<Arc<dyn LlmProvider>> {
+    load_provider_from_db(db, provider_id, model_id, cred_store).await
+}
+
+/// Internal: loads a fresh provider from DB (no caching).
+async fn load_provider_from_db(
     db: &SqlitePool,
     provider_id: &str,
     model_id: &str,

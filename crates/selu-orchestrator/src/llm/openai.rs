@@ -23,7 +23,10 @@ impl OpenAiProvider {
     pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
         let model_str = model.into();
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()
+                .expect("Failed to build HTTP client"),
             api_key: api_key.into(),
             base_url: "https://api.openai.com".into(),
             default_model: if model_str.is_empty() { "gpt-4o".into() } else { model_str },
@@ -33,7 +36,10 @@ impl OpenAiProvider {
     /// Construct an Ollama-compatible provider (OpenAI-compatible API)
     pub fn ollama(base_url: impl Into<String>, model: impl Into<String>) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()
+                .expect("Failed to build HTTP client"),
             api_key: "ollama".into(), // Ollama doesn't need a real key
             base_url: base_url.into(),
             default_model: model.into(),
@@ -122,6 +128,7 @@ impl LlmProvider for OpenAiProvider {
             .client
             .post(format!("{}/v1/chat/completions", self.base_url))
             .bearer_auth(&self.api_key)
+            .timeout(std::time::Duration::from_secs(120))
             .json(&body)
             .send()
             .await?;

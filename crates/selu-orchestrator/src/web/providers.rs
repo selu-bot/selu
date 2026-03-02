@@ -127,6 +127,9 @@ pub async fn providers_set_key(
         return Redirect::to("/providers?error=Failed+to+save+API+key.+Please+try+again.").into_response();
     }
 
+    // Invalidate cached provider so the new key is picked up
+    state.provider_cache.invalidate().await;
+
     Redirect::to("/providers?success=API+key+updated+successfully.").into_response()
 }
 
@@ -149,6 +152,9 @@ pub async fn providers_delete_key(
     {
         error!("Failed to remove provider key: {e}");
     }
+
+    // Invalidate cached provider so the removed key is reflected
+    state.provider_cache.invalidate().await;
 
     // Return a refreshed card — simplest: redirect via HX-Redirect header
     Redirect::to("/providers").into_response()
@@ -174,6 +180,9 @@ pub async fn providers_set_region(
         error!("Failed to update provider region: {e}");
         return Redirect::to("/providers?error=Failed+to+save+settings.+Please+try+again.").into_response();
     }
+
+    // Invalidate cached provider since region/URL changed
+    state.provider_cache.invalidate().await;
 
     Redirect::to("/providers?success=Settings+saved.").into_response()
 }

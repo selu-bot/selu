@@ -38,7 +38,10 @@ impl BedrockProvider {
     ) -> Self {
         let model = model_id.into();
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()
+                .expect("Failed to build HTTP client"),
             api_key: api_key.into(),
             region: region.into(),
             model_id: if model.is_empty() {
@@ -193,6 +196,7 @@ impl LlmProvider for BedrockProvider {
             .post(self.converse_url())
             .bearer_auth(&self.api_key)
             .header("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(120))
             .json(&body)
             .send()
             .await?;

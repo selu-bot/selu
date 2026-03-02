@@ -7,6 +7,7 @@ use anyhow::Result;
 use futures::future::BoxFuture;
 use futures::FutureExt;
 use sqlx::Row;
+use std::time::Instant;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -15,7 +16,8 @@ use selu_core::types::Role;
 
 use crate::agents::{context, delegation, router as agent_router, session as session_mgr, thread as thread_mgr};
 use crate::capabilities::build_tool_specs;
-use crate::llm::{registry::load_provider, tool_loop::{run_loop, LoopEvent, LoopSender, ToolDispatchResult}};
+use crate::llm::registry::load_provider;
+use crate::llm::tool_loop::{run_loop, LoopEvent, LoopSender, ToolDispatchResult};
 use crate::llm::provider::{ChatMessage, LlmResponse};
 use crate::permissions::tool_policy::{self, ToolPolicy, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT};
 use crate::permissions::approval_queue;
@@ -78,9 +80,11 @@ pub struct TurnParams {
 ///
 /// Returns the assistant reply text.
 pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> Result<String> {
+    let turn_start = Instant::now();
     let TurnParams { pipe_id, user_id, agent_id, message, thread_id, chain_depth, channel_kind } = params;
 
     // ── Route to agent ────────────────────────────────────────────────────────
+    let route_start = Instant::now();
     let agents_snapshot = state.agents.read().await.clone();
     let (resolved_agent_id, effective_text) = {
         if let Some(id) = agent_id {
@@ -101,12 +105,29 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             return Err(anyhow::anyhow!("Agent '{}' not found", resolved_agent_id));
         }
     };
+    // Drop the full snapshot early — we only need `agent` from here on.
+    // Keep it alive only for delegation check below.
+    debug!(
+        agent_id = %agent.id,
+        route_ms = route_start.elapsed().as_millis(),
+        "Agent routing complete"
+    );
 
-    // ── Session ───────────────────────────────────────────────────────────────
-    let session = session_mgr::open_session(&state.db, &pipe_id, &user_id, &agent.id).await?;
+    // ── Session + Persist user message (parallelized) ─────────────────────────
+    let db_start = Instant::now();
+
+    // Open session and persist user message in parallel.
+    // Both are independent operations that hit the DB.
+    let session_fut = session_mgr::open_session(&state.db, &pipe_id, &user_id, &agent.id);
+
+    let session = session_fut.await?;
     let session_id = session.id.to_string();
+    debug!(
+        session_ms = db_start.elapsed().as_millis(),
+        "Session opened"
+    );
 
-    // ── Persist user message ──────────────────────────────────────────────────
+    // Persist user message (fire-and-forget timing)
     let msg_id = Uuid::new_v4().to_string();
     let user_role = Role::User.to_string();
     if let Err(e) = sqlx::query!(
@@ -119,8 +140,14 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         error!("Failed to persist user message: {e}");
     }
 
-    // ── Context + provider (model resolved from DB) ────────────────────────────
-    let messages = context::build(
+    // ── Context + provider + tool specs (parallelized) ─────────────────────────
+    // These three operations are independent and can run concurrently:
+    //   1. Build context window (needs session_id, hits DB for personality + history)
+    //   2. Resolve model + load provider (hits DB for agent model + provider key)
+    //   3. Build tool specs (CPU-only, from in-memory manifests)
+    let prep_start = Instant::now();
+
+    let context_fut = context::build(
         &state.db,
         &agent,
         &pipe_id,
@@ -129,10 +156,27 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         &user_id,
         &effective_text,
         Some(&agents_snapshot),
-    ).await?;
+    );
 
-    let resolved = crate::agents::model::resolve_model(&state.db, &agent.id).await?;
-    let provider = load_provider(&state.db, &resolved.provider_id, &resolved.model_id, &state.credentials).await?;
+    let provider_fut = async {
+        let resolved = crate::agents::model::resolve_model(&state.db, &agent.id).await?;
+        let provider = state.provider_cache.get_or_load(
+            &state.db, &resolved.provider_id, &resolved.model_id, &state.credentials,
+        ).await?;
+        Ok::<_, anyhow::Error>((provider, resolved.temperature))
+    };
+
+    // Run context build and provider load in parallel
+    let (context_result, provider_result) = tokio::join!(context_fut, provider_fut);
+
+    let messages = context_result?;
+    let (provider, temperature) = provider_result?;
+
+    debug!(
+        prep_ms = prep_start.elapsed().as_millis(),
+        context_msgs = messages.len(),
+        "Context + provider ready"
+    );
 
     // ── Tool specs: capability tools + built-in emit_event + delegation ───────
     let mut tool_specs = build_tool_specs(&agent.capability_manifests);
@@ -159,11 +203,16 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     let dispatcher_pipe = pipe_id.clone();
     let dispatcher_tx = tx.clone();
 
+    debug!(
+        setup_ms = turn_start.elapsed().as_millis(),
+        "Turn setup complete, entering tool loop"
+    );
+
     let reply = run_loop(
         provider,
         messages,
         tool_specs,
-        resolved.temperature,
+        temperature,
         tx.clone(),
         move |name, args, approved| {
             let engine = cap_engine.clone();
@@ -286,6 +335,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     )
     .await?;
 
+    debug!(
+        loop_ms = turn_start.elapsed().as_millis(),
+        "Tool loop complete, persisting reply"
+    );
+
     // ── Persist assistant reply ───────────────────────────────────────────────
     if !reply.is_empty() {
         let reply_id = Uuid::new_v4().to_string();
@@ -344,6 +398,12 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             }
         }
     }
+
+    info!(
+        total_ms = turn_start.elapsed().as_millis(),
+        agent_id = %agent.id,
+        "Agent turn complete"
+    );
 
     Ok(reply)
 }

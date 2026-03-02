@@ -1,7 +1,7 @@
 use anyhow::Result;
 use futures::StreamExt;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, info, warn};
 
@@ -102,58 +102,145 @@ pub async fn run_loop(
     tool_dispatcher: impl Fn(String, serde_json::Value, bool) -> futures::future::BoxFuture<'static, Result<ToolDispatchResult>> + Send + Sync + 'static,
 ) -> Result<String> {
     let max_iterations = 10;
+    let loop_start = Instant::now();
 
     for iteration in 0..max_iterations {
         debug!(iteration, "Tool loop iteration");
+        let iter_start = Instant::now();
 
-        // ── Non-streaming call to get a complete response ─────────────────────
-        // This reliably returns either Text or ToolCalls with full arguments.
+        if iteration == 0 {
+            // ── First iteration: stream directly for real-time token delivery ──
+            // This eliminates the previous double-call pattern where we first
+            // made a non-streaming call, then re-requested with streaming.
+            let stream_start = Instant::now();
+            let mut stream = provider.chat_stream(&messages, &tools, temperature).await?;
+            debug!(
+                elapsed_ms = stream_start.elapsed().as_millis(),
+                "LLM stream connection established (iteration 0)"
+            );
+
+            let mut streamed_text = String::new();
+            let mut tool_call_detected = false;
+
+            while let Some(chunk) = stream.next().await {
+                match chunk? {
+                    StreamChunk::Text(t) => {
+                        streamed_text.push_str(&t);
+                        let _ = tx.send(LoopEvent::Token(t)).await;
+                    }
+                    StreamChunk::ToolCallStart => {
+                        // LLM wants to call tools — we need to fall back to a
+                        // non-streaming call to get complete tool call arguments.
+                        tool_call_detected = true;
+                        debug!("Tool call detected during streaming, falling back to non-streaming");
+                        break;
+                    }
+                    StreamChunk::Done => break,
+                }
+            }
+
+            if !tool_call_detected {
+                // Pure text response — we already streamed it, we're done!
+                let final_text = if streamed_text.is_empty() {
+                    // Edge case: stream returned nothing, fall back to non-streaming
+                    debug!("Stream returned no text, falling back to non-streaming call");
+                    let response = provider.chat(&messages, &tools, temperature).await?;
+                    match response {
+                        LlmResponse::Text(text) => {
+                            let _ = tx.send(LoopEvent::Token(text.clone())).await;
+                            text
+                        }
+                        LlmResponse::ToolCalls(_) => {
+                            // Unexpected — should have been caught by streaming.
+                            // Fall through to tool handling below by continuing.
+                            String::new()
+                        }
+                    }
+                } else {
+                    streamed_text
+                };
+
+                if !final_text.is_empty() {
+                    debug!(
+                        elapsed_ms = iter_start.elapsed().as_millis(),
+                        total_ms = loop_start.elapsed().as_millis(),
+                        text_len = final_text.len(),
+                        "Streaming text response complete (no tool calls)"
+                    );
+                    let _ = tx.send(LoopEvent::Done).await;
+                    return Ok(final_text);
+                }
+            }
+
+            // Tool call detected — fall through to non-streaming call to get
+            // complete tool arguments (streaming doesn't give us full args).
+            debug!("Falling back to non-streaming call for tool arguments");
+        }
+
+        // ── Non-streaming call for tool iterations or tool fallback ────────
+        let llm_start = Instant::now();
         let response = provider.chat(&messages, &tools, temperature).await?;
+        debug!(
+            iteration,
+            elapsed_ms = llm_start.elapsed().as_millis(),
+            "LLM non-streaming call completed"
+        );
 
         match response {
             LlmResponse::Text(text) => {
-                // Final text response — stream it to the user.
-                // If this is iteration 0 (no tool calls happened), try streaming
-                // for real-time token delivery. Otherwise, send the already-
-                // obtained text as a single token.
                 if iteration == 0 {
-                    // No tool calls yet — re-request with streaming for live tokens.
-                    // The response should be the same text (same messages, no tools triggered).
-                    let mut stream = provider.chat_stream(&messages, &tools, temperature).await?;
-                    let mut streamed_text = String::new();
-
-                    while let Some(chunk) = stream.next().await {
-                        match chunk? {
-                            StreamChunk::Text(t) => {
-                                streamed_text.push_str(&t);
-                                let _ = tx.send(LoopEvent::Token(t)).await;
+                    // We already streamed partial text — send whatever the
+                    // non-streaming call returned as the complete response.
+                    let _ = tx.send(LoopEvent::Token(text.clone())).await;
+                } else {
+                    // After tool calls — stream the final response
+                    let stream_start = Instant::now();
+                    let stream_result = provider.chat_stream(&messages, &tools, temperature).await;
+                    match stream_result {
+                        Ok(mut stream) => {
+                            debug!(
+                                elapsed_ms = stream_start.elapsed().as_millis(),
+                                "LLM stream connection established (post-tool)"
+                            );
+                            let mut streamed_text = String::new();
+                            while let Some(chunk) = stream.next().await {
+                                match chunk? {
+                                    StreamChunk::Text(t) => {
+                                        streamed_text.push_str(&t);
+                                        let _ = tx.send(LoopEvent::Token(t)).await;
+                                    }
+                                    StreamChunk::ToolCallStart | StreamChunk::Done => break,
+                                }
                             }
-                            StreamChunk::ToolCallStart => {
-                                // Unexpected tool call during streaming — fall back to
-                                // the text we already got from the non-streaming call.
-                                break;
-                            }
-                            StreamChunk::Done => break,
+                            // Use streamed text if available, otherwise the non-streaming text
+                            let final_text = if streamed_text.is_empty() {
+                                let _ = tx.send(LoopEvent::Token(text.clone())).await;
+                                text
+                            } else {
+                                streamed_text
+                            };
+                            debug!(
+                                total_ms = loop_start.elapsed().as_millis(),
+                                iterations = iteration + 1,
+                                "Tool loop complete (streamed post-tool response)"
+                            );
+                            let _ = tx.send(LoopEvent::Done).await;
+                            return Ok(final_text);
+                        }
+                        Err(e) => {
+                            // Streaming failed — send the non-streaming text we already have
+                            warn!("Post-tool streaming failed, using non-streaming text: {e}");
+                            let _ = tx.send(LoopEvent::Token(text.clone())).await;
                         }
                     }
-
-                    // Use streamed text if we got some, otherwise fall back to
-                    // the non-streaming response
-                    let final_text = if streamed_text.is_empty() {
-                        let _ = tx.send(LoopEvent::Token(text.clone())).await;
-                        text
-                    } else {
-                        streamed_text
-                    };
-
-                    let _ = tx.send(LoopEvent::Done).await;
-                    return Ok(final_text);
-                } else {
-                    // After tool calls — send the text we already have
-                    let _ = tx.send(LoopEvent::Token(text.clone())).await;
-                    let _ = tx.send(LoopEvent::Done).await;
-                    return Ok(text);
                 }
+                debug!(
+                    total_ms = loop_start.elapsed().as_millis(),
+                    iterations = iteration + 1,
+                    "Tool loop complete"
+                );
+                let _ = tx.send(LoopEvent::Done).await;
+                return Ok(text);
             }
             LlmResponse::ToolCalls(calls) => {
                 // Add the assistant's tool call message with the actual
@@ -167,13 +254,18 @@ pub async fn run_loop(
                     let _ = tx.send(LoopEvent::CapabilityStatus(status)).await;
 
                     // ── Dispatch with policy enforcement ──────────────────────
+                    let dispatch_start = Instant::now();
                     let dispatch_result = tool_dispatcher(call.name.clone(), call.arguments.clone(), false)
                         .await
                         .unwrap_or_else(|e| ToolDispatchResult::Done(format!("Tool error: {}", e)));
 
                     match dispatch_result {
                         ToolDispatchResult::Done(result) => {
-                            debug!(tool = %call.name, "Tool call completed");
+                            debug!(
+                                tool = %call.name,
+                                elapsed_ms = dispatch_start.elapsed().as_millis(),
+                                "Tool call completed"
+                            );
                             messages.push(ChatMessage::tool_result(&call.id, result));
                         }
 
