@@ -246,6 +246,7 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
     info!(
         config_id = %cfg.id,
         name = %cfg.name,
+        callback_url = %callback_url,
         "Registering webhook with BlueBubbles"
     );
     match register_webhook_with_bb(&cfg.server_url, &cfg.server_password, &callback_url).await {
@@ -474,9 +475,7 @@ pub async fn register_webhook_with_bb(
 
     let body = serde_json::json!({
         "url": callback_url,
-        "events": [
-            { "label": "New Message", "value": "new-message" }
-        ],
+        "events": ["new-message"],
     });
 
     let resp = http

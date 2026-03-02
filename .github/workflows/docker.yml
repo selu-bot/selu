@@ -122,6 +122,8 @@ jobs:
           # Push individual arch image as a digest (no tag yet)
           outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
           # Per-architecture GHA cache so amd64 and arm64 don't evict each other
+          cache-from: type=gha,scope=${{ steps.platform.outputs.scope }}
+          cache-to: type=gha,scope=${{ steps.platform.outputs.scope }},mode=max
 
       - name: Export digest
         run: |
