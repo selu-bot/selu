@@ -43,7 +43,6 @@ use crate::state::AppState;
 #[serde(rename_all = "camelCase")]
 struct BbMessage {
     text: Option<String>,
-    #[allow(dead_code)]
     is_from_me: bool,
     handle: Option<BbHandle>,
     guid: Option<String>,
@@ -59,15 +58,27 @@ struct BbMessage {
     /// *specific* message being replied to.
     reply_to_guid: Option<String>,
     /// Associated message GUID (for tapbacks/reactions, not regular replies).
+    #[allow(dead_code)]
     associated_message_guid: Option<String>,
     /// The type of association (e.g. tapback type).
+    #[allow(dead_code)]
     associated_message_type: Option<String>,
+    /// Chat(s) this message belongs to. Used to route webhook messages to
+    /// the correct adapter config (BB sends all events to all webhooks).
+    #[serde(default)]
+    chats: Vec<BbChat>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BbHandle {
     address: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BbChat {
+    guid: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -296,14 +307,13 @@ async fn webhook_handler(
     Query(query): Query<WebhookQuery>,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    // Log the raw payload for debugging
-    let body_str = String::from_utf8_lossy(&body);
+    // Log receipt for debugging
     debug!(
         config_id = %config_id,
         body_len = body.len(),
-        body_preview = %if body_str.len() > 500 { &body_str[..500] } else { &body_str },
         "BB webhook received"
     );
+    let body_str = String::from_utf8_lossy(&body);
 
     // 1. Authenticate via token
     let provided_token = match query.token {
@@ -363,7 +373,14 @@ async fn webhook_handler(
         }
     };
 
-    // 5. Look up adapter state from registry
+    // 5. Skip messages we sent ourselves (is_from_me).
+    // BB fires new-message webhooks for outbound messages too.
+    if msg.is_from_me {
+        debug!("Skipping is_from_me message");
+        return StatusCode::OK;
+    }
+
+    // 6. Look up adapter state from registry
     let reg = registry().read().await;
     let adapter = match reg.get(&config_id) {
         Some(a) => a,
@@ -373,7 +390,25 @@ async fn webhook_handler(
         }
     };
 
-    // 6. Skip messages we sent ourselves (loop prevention)
+    // 7. BB sends all events to all registered webhooks. Filter by chat_guid
+    //    so each adapter config only processes messages for its own chat.
+    let msg_belongs_to_chat = msg.chats.iter().any(|c| {
+        c.guid.as_deref() == Some(adapter.chat_guid.as_str())
+    });
+    if !msg_belongs_to_chat {
+        // If chats is empty (BB omitted it), fall through — better to process
+        // than to silently drop. If chats is present but doesn't match, skip.
+        if !msg.chats.is_empty() {
+            debug!(
+                config_id = %config_id,
+                expected_chat = %adapter.chat_guid,
+                "Skipping message for different chat"
+            );
+            return StatusCode::OK;
+        }
+    }
+
+    // 8. Skip messages we sent ourselves (GUID-based loop prevention)
     if let Some(ref guid) = msg.guid {
         let sent = adapter.sent_guids.read().await;
         if sent.contains(guid) {
@@ -382,7 +417,7 @@ async fn webhook_handler(
         }
     }
 
-    // 7. Skip empty messages
+    // 9. Skip empty messages
     let text = match &msg.text {
         Some(t) if !t.is_empty() => t.clone(),
         _ => return StatusCode::OK,
@@ -399,18 +434,15 @@ async fn webhook_handler(
     let reply_to_guid = msg.reply_to_guid.clone();
 
     // Log threading fields for tracing
-    info!(
+    debug!(
         message_guid = ?message_guid,
         thread_originator_guid = ?thread_originator_guid,
         reply_to_guid = ?reply_to_guid,
-        associated_message_guid = ?msg.associated_message_guid,
-        associated_message_type = ?msg.associated_message_type,
-        is_from_me = msg.is_from_me,
         text_preview = %if text.len() > 50 { &text[..50] } else { &text },
         "BB webhook inbound message"
     );
 
-    // 8. Resolve sender
+    // 10. Resolve sender
     let pipe_id = adapter.pipe_id.clone();
     let resolved_user_id = match resolve_sender(&state, &pipe_id, &sender_ref).await {
         Some(uid) => uid,
@@ -431,7 +463,7 @@ async fn webhook_handler(
         "Processing BlueBubbles webhook message"
     );
 
-    // 9. Dispatch in background (return 200 immediately)
+    // 11. Dispatch in background (return 200 immediately)
     let chat_guid = adapter.chat_guid.clone();
     let server_url = adapter.server_url.clone();
     let server_password = adapter.server_password.clone();

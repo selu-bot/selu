@@ -75,6 +75,11 @@ bollard = { workspace = true }
 flate2 = { workspace = true }
 tar = { workspace = true }
 
+# AWS Event Stream parsing (for Bedrock converse-stream)
+aws-smithy-eventstream = { workspace = true }
+aws-smithy-types = { workspace = true }
+bytes = { workspace = true }
+
 [build-dependencies]
 tonic-build = { version = "0.13", features = ["prost"] }
 protox = "0.7"

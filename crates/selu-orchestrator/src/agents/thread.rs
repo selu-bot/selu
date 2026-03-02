@@ -206,16 +206,25 @@ pub async fn find_or_create_thread(
         );
     }
 
-    // 2. No reply-to info (or reply-to didn't match) — try the most recent
-    //    active thread for this user + pipe. This keeps DM conversations
-    //    continuous without requiring iMessage inline replies.
-    if let Some(recent) = find_recent_active_thread(db, pipe_id, user_id).await? {
-        info!(
-            thread_id = %recent.id,
-            title = ?recent.title,
-            "Reusing most recent active thread for user+pipe"
-        );
-        return Ok(recent);
+    // 2. No reply-to info (or reply-to didn't match).
+    //    If the inbound message carries its own unique identifier
+    //    (origin_message_ref), treat it as a new conversation —
+    //    the user started a fresh message rather than replying to
+    //    an existing thread.
+    //
+    //    The recent-active-thread fallback is only used when there
+    //    is no per-message identity at all (e.g. a plain webhook
+    //    pipe without message GUIDs), so the conversation is
+    //    implicitly continuous.
+    if origin_message_ref.is_none() {
+        if let Some(recent) = find_recent_active_thread(db, pipe_id, user_id).await? {
+            info!(
+                thread_id = %recent.id,
+                title = ?recent.title,
+                "Reusing most recent active thread for user+pipe (no message ref)"
+            );
+            return Ok(recent);
+        }
     }
 
     // 3. No match — create a new thread

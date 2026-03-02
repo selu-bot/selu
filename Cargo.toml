@@ -81,3 +81,8 @@ time = "0.3"
 # Archive handling (agent marketplace)
 flate2 = "1"
 tar = "0.4"
+
+# AWS Event Stream parsing (for Bedrock converse-stream)
+aws-smithy-eventstream = "0.60"
+aws-smithy-types = "1.4"
+bytes = "1"

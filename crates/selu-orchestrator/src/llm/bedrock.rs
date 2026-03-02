@@ -9,14 +9,17 @@
 ///   - Tools are declared in a `toolConfig` object
 ///   - System prompts go in a separate `system` array
 ///
-/// Streaming uses /converse-stream and returns event-stream chunks.
+/// Streaming uses /converse-stream and returns AWS Event Stream binary frames.
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
+use aws_smithy_types::event_stream::HeaderValue;
+use bytes::BytesMut;
 use futures::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tracing::debug;
+use tracing::{debug, trace, warn};
 
 use super::provider::{
     ChunkStream, ChatMessage, LlmProvider, LlmResponse, MessageContent, StreamChunk, ToolCall,
@@ -273,45 +276,106 @@ impl LlmProvider for BedrockProvider {
             return Err(anyhow!("Bedrock stream API error {}: {}", status, text));
         }
 
-        // Bedrock converse-stream returns newline-delimited JSON events
-        // Each event has a type field indicating what kind of chunk it is
-        let stream = resp
-            .bytes_stream()
-            .filter_map(|chunk| async move {
-                let bytes = chunk.ok()?;
-                let text = String::from_utf8_lossy(&bytes);
+        // Bedrock converse-stream returns AWS Event Stream binary frames.
+        // Each frame contains headers (:event-type, :message-type, :content-type)
+        // and a JSON payload. We use aws-smithy-eventstream to parse the binary
+        // framing and extract text deltas, tool call starts, and message stops.
+        let mut decoder = MessageFrameDecoder::new();
+        let mut buf = BytesMut::new();
 
-                // Bedrock stream events are JSON objects separated by newlines
-                for line in text.lines() {
-                    let line = line.trim();
-                    if line.is_empty() {
-                        continue;
+        let stream = resp.bytes_stream().filter_map(move |chunk| {
+            let chunk = match chunk {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("Bedrock stream chunk error: {e}");
+                    return std::future::ready(None);
+                }
+            };
+
+            buf.extend_from_slice(&chunk);
+
+            // Try to decode one or more complete frames from the buffer.
+            // We return the first actionable event and leave remaining data
+            // in the buffer for the next chunk.
+            loop {
+                match decoder.decode_frame(&mut buf) {
+                    Ok(DecodedFrame::Complete(msg)) => {
+                        // Extract :event-type header
+                        let event_type = msg
+                            .headers()
+                            .iter()
+                            .find(|h| h.name().as_str() == ":event-type")
+                            .and_then(|h| match h.value() {
+                                HeaderValue::String(s) => Some(s.as_str().to_string()),
+                                _ => None,
+                            });
+
+                        // Check for exceptions
+                        let msg_type = msg
+                            .headers()
+                            .iter()
+                            .find(|h| h.name().as_str() == ":message-type")
+                            .and_then(|h| match h.value() {
+                                HeaderValue::String(s) => Some(s.as_str().to_string()),
+                                _ => None,
+                            });
+
+                        if msg_type.as_deref() == Some("exception") {
+                            let payload_str = String::from_utf8_lossy(msg.payload().as_ref());
+                            warn!(
+                                event_type = ?event_type,
+                                "Bedrock stream exception: {payload_str}"
+                            );
+                            return std::future::ready(None);
+                        }
+
+                        // Parse JSON payload
+                        let payload: Value = match serde_json::from_slice(msg.payload().as_ref()) {
+                            Ok(v) => v,
+                            Err(_) => {
+                                trace!(event_type = ?event_type, "Skipping non-JSON event frame");
+                                continue; // Try next frame
+                            }
+                        };
+
+                        match event_type.as_deref() {
+                            Some("contentBlockDelta") => {
+                                if let Some(text) = payload["delta"]["text"].as_str() {
+                                    return std::future::ready(Some(Ok(StreamChunk::Text(
+                                        text.to_string(),
+                                    ))));
+                                }
+                                // Could be a toolUse input delta — skip
+                                continue;
+                            }
+                            Some("contentBlockStart") => {
+                                if payload["start"]["toolUse"]["name"].as_str().is_some() {
+                                    return std::future::ready(Some(Ok(
+                                        StreamChunk::ToolCallStart,
+                                    )));
+                                }
+                                continue;
+                            }
+                            Some("messageStop") => {
+                                return std::future::ready(Some(Ok(StreamChunk::Done)));
+                            }
+                            _ => {
+                                // messageStart, contentBlockStop, metadata, etc. — skip
+                                continue;
+                            }
+                        }
                     }
-
-                    if let Ok(event) = serde_json::from_str::<Value>(line) {
-                        // Content block delta with text
-                        if let Some(delta) = event.get("contentBlockDelta") {
-                            if let Some(text) = delta["delta"]["text"].as_str() {
-                                return Some(Ok(StreamChunk::Text(text.to_string())));
-                            }
-                        }
-
-                        // Content block start with toolUse
-                        if let Some(start) = event.get("contentBlockStart") {
-                            if start["start"]["toolUse"]["name"].as_str().is_some() {
-                                return Some(Ok(StreamChunk::ToolCallStart));
-                            }
-                        }
-
-                        // Message stop
-                        if event.get("messageStop").is_some() {
-                            return Some(Ok(StreamChunk::Done));
-                        }
+                    Ok(DecodedFrame::Incomplete) => {
+                        // Need more data — wait for next chunk
+                        return std::future::ready(None);
+                    }
+                    Err(e) => {
+                        warn!("Bedrock event stream decode error: {e}");
+                        return std::future::ready(None);
                     }
                 }
-
-                None
-            });
+            }
+        });
 
         Ok(Box::pin(stream))
     }
