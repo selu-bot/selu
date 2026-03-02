@@ -187,6 +187,14 @@ async fn handle_connection(
     let mut request_str = String::from_utf8_lossy(&buf[..n]).to_string();
     let first_line = request_str.lines().next().unwrap_or("").to_string();
 
+    // Log the full initial request headers for debugging
+    let header_end = request_str.find("\r\n\r\n").unwrap_or(request_str.len());
+    info!(
+        "Egress proxy initial request ({} bytes):\n{}",
+        n,
+        &request_str[..header_end]
+    );
+
     // Parse method, target, version from "METHOD target HTTP/x.x"
     let parts: Vec<&str> = first_line.splitn(3, ' ').collect();
     if parts.len() < 3 {
@@ -200,6 +208,10 @@ async fn handle_connection(
     // Extract the auth token from the Proxy-Authorization header.
     // Format: "Proxy-Authorization: Basic <base64(selu:token)>"
     let mut token = extract_proxy_auth_token(&request_str);
+    info!(
+        "Egress proxy: method={}, target={}, has_token={}",
+        method, target, token.is_some()
+    );
 
     // If no credentials were provided, challenge the client with 407 so that
     // browsers (Chromium/Playwright) know to resend with Proxy-Authorization.
@@ -207,6 +219,7 @@ async fn handle_connection(
     // challenge-response flow: they send the first request without auth and
     // only attach Proxy-Authorization after receiving a 407.
     if token.is_none() {
+        info!("Egress proxy: no token, sending 407 challenge for {}", target);
         stream
             .write_all(
                 b"HTTP/1.1 407 Proxy Authentication Required\r\n\
@@ -218,18 +231,31 @@ async fn handle_connection(
         // Read the retried request (now with Proxy-Authorization)
         n = stream.read(&mut buf).await?;
         if n == 0 {
+            info!("Egress proxy: client closed connection after 407 (no retry)");
             return Ok(());
         }
 
         request_str = String::from_utf8_lossy(&buf[..n]).to_string();
+        let retry_header_end = request_str.find("\r\n\r\n").unwrap_or(request_str.len());
+        info!(
+            "Egress proxy retry request ({} bytes):\n{}",
+            n,
+            &request_str[..retry_header_end]
+        );
         token = extract_proxy_auth_token(&request_str);
+        info!("Egress proxy: after retry, has_token={}", token.is_some());
     }
 
     // Look up policy by token
     let policy = match &token {
         Some(t) => {
             let reg = registry.read().await;
-            reg.get(t).cloned()
+            let found = reg.get(t).cloned();
+            info!(
+                "Egress proxy: token lookup, found_policy={}",
+                found.is_some()
+            );
+            found
         }
         None => None,
     };
