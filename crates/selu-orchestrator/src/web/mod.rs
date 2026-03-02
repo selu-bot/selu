@@ -7,6 +7,7 @@ pub mod personality;
 pub mod pipes;
 pub mod providers;
 pub mod subscriptions;
+pub mod telegram;
 pub mod users;
 
 use crate::state::AppState;
@@ -76,6 +77,31 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route(
             "/pipes/imessage/{config_id}/people/{ref_id}",
             delete(integrations::imessage_remove_person),
+        )
+        // Pipes: Telegram setup & management
+        .route(
+            "/pipes/telegram/setup",
+            get(telegram::telegram_setup_page).post(telegram::telegram_setup_submit),
+        )
+        .route(
+            "/pipes/telegram/proxy/chats",
+            post(telegram::tg_proxy_chats),
+        )
+        .route(
+            "/pipes/telegram/{config_id}",
+            get(telegram::telegram_detail),
+        )
+        .route(
+            "/pipes/telegram/{config_id}/delete",
+            post(telegram::telegram_delete),
+        )
+        .route(
+            "/pipes/telegram/{config_id}/people",
+            post(telegram::telegram_add_person),
+        )
+        .route(
+            "/pipes/telegram/{config_id}/people/{ref_id}",
+            delete(telegram::telegram_remove_person),
         )
         // Agents (marketplace, install, setup, model assignment)
         .route("/agents", get(agents::agents_index))

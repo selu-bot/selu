@@ -220,10 +220,19 @@ async fn proxy_request(
     // Extract the auth token from Proxy-Authorization header
     let token = extract_proxy_auth_token_from_headers(req.headers());
 
-    // If no credentials, challenge with 407 (browser will retry with auth)
-    if token.is_none() {
+    // For CONNECT requests (HTTPS tunnels), require authentication.
+    // If no credentials are present, challenge with 407 so browsers resend
+    // with Proxy-Authorization.
+    //
+    // For plain HTTP requests (e.g. cert/OCSP validation that Chromium
+    // sends through the proxy), we do NOT require auth. Chromium's internal
+    // certificate fetcher does not send Proxy-Authorization on plain HTTP
+    // requests, and blocking these causes ERR_CERT_AUTHORITY_INVALID.
+    // The real security boundary is CONNECT — that's where the browsing
+    // tunnel is established and where the policy check matters.
+    if req.method() == Method::CONNECT && token.is_none() {
         let target = req.uri().to_string();
-        debug!(target = %target, "No proxy credentials, sending 407 challenge");
+        debug!(target = %target, "No proxy credentials on CONNECT, sending 407 challenge");
         let resp = Response::builder()
             .status(StatusCode::PROXY_AUTHENTICATION_REQUIRED)
             .header("Proxy-Authenticate", "Basic realm=\"selu-egress\"")
@@ -233,15 +242,16 @@ async fn proxy_request(
         return Ok(resp);
     }
 
-    let token = token.unwrap();
-
-    // Look up policy by token
-    let policy = {
-        let reg = registry.read().await;
-        reg.get(&token).cloned()
+    // Look up policy by token (if present)
+    let policy = match &token {
+        Some(t) => {
+            let reg = registry.read().await;
+            reg.get(t).cloned()
+        }
+        None => None,
     };
 
-    let ident = token.clone();
+    let ident = token.as_deref().unwrap_or("no-token").to_string();
 
     if req.method() == Method::CONNECT {
         handle_connect_hyper(req, &ident, policy, &log_tx).await
@@ -374,7 +384,24 @@ async fn handle_http_hyper(
 
     let method = req.method().to_string();
     let (hostname, port) = parse_host_port(&host_str, 80);
-    let allowed = is_allowed(&hostname, port, ident, &policy);
+
+    // For plain HTTP requests without auth (e.g. OCSP/CRL certificate
+    // validation that Chromium sends through the proxy), we allow them
+    // through without a policy check. The security boundary is CONNECT.
+    let allowed = match &policy {
+        Some(_) => is_allowed(&hostname, port, ident, &policy),
+        None => {
+            // No policy means no auth was provided — this is a plain HTTP
+            // request from the browser's cert validator. Allow it.
+            debug!(
+                host = %host_str,
+                method = %method,
+                "Allowing unauthenticated plain HTTP request (likely cert/OCSP fetch)"
+            );
+            true
+        }
+    };
+
     let cap_id = policy.as_ref()
         .map(|p| p.capability_id.clone())
         .unwrap_or_else(|| "unknown".to_string());
@@ -413,7 +440,20 @@ async fn handle_http_hyper(
         .map(|pq| pq.to_string())
         .unwrap_or_else(|| "/".to_string());
 
-    // Collect the request body
+    // Build the outbound request line + headers BEFORE consuming the body
+    let mut raw_req = format!("{} {} HTTP/1.1\r\n", method, path);
+    for (name, value) in req.headers() {
+        let name_lower = name.as_str().to_lowercase();
+        if name_lower.starts_with("proxy-") {
+            continue; // Don't forward Proxy-Authorization etc. to origin
+        }
+        if let Ok(v) = value.to_str() {
+            raw_req.push_str(&format!("{}: {}\r\n", name, v));
+        }
+    }
+    raw_req.push_str("\r\n");
+
+    // Now collect the request body (consumes `req`)
     let body_bytes = match req.collect().await {
         Ok(collected) => collected.to_bytes(),
         Err(e) => {
@@ -426,16 +466,9 @@ async fn handle_http_hyper(
         }
     };
 
-    // Connect to upstream and forward the request using raw TCP.
-    // We build the HTTP/1.1 request manually to preserve proxy semantics.
+    // Connect to upstream and forward
     match TcpStream::connect(format!("{}:{}", hostname, port)).await {
         Ok(mut upstream) => {
-            // Build HTTP request
-            let mut raw_req = format!("{} {} HTTP/1.1\r\nHost: {}\r\n", method, path, host_str);
-            // Note: we don't forward Proxy-Authorization to the origin
-            // We would forward other headers here in a more complete impl.
-            raw_req.push_str(&format!("Content-Length: {}\r\n", body_bytes.len()));
-            raw_req.push_str("\r\n");
 
             let _ = upstream.write_all(raw_req.as_bytes()).await;
             if !body_bytes.is_empty() {

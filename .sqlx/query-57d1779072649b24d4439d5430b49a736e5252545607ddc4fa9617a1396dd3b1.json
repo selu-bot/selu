@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE pipes SET active = 0 WHERE id IN (SELECT pipe_id FROM telegram_configs WHERE id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "57d1779072649b24d4439d5430b49a736e5252545607ddc4fa9617a1396dd3b1"
+}

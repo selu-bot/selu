@@ -162,6 +162,19 @@ pub struct BlueBubblesConfig {
     pub created_at: DateTime<Utc>,
 }
 
+// ── Telegram Configuration ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelegramConfig {
+    pub id: Uuid,
+    pub name: String,
+    pub bot_token: String,
+    pub chat_id: String,
+    pub pipe_id: Uuid,
+    pub active: bool,
+    pub created_at: DateTime<Utc>,
+}
+
 // ── Inbound / Outbound message envelope ──────────────────────────────────────
 
 /// Payload POSTed to /api/pipes/{id}/inbound by external adapters

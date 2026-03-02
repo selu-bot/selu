@@ -25,6 +25,14 @@ pub struct ImessagePipeView {
 }
 
 #[derive(Debug, Clone)]
+pub struct TelegramPipeView {
+    pub config_id: String,
+    pub name: String,
+    pub chat_id: String,
+    pub owner_name: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct OtherPipeView {
     pub id: String,
     pub name: String,
@@ -54,6 +62,7 @@ struct PipesTemplate {
     is_admin: bool,
     base_path: String,
     imessage_pipes: Vec<ImessagePipeView>,
+    telegram_pipes: Vec<TelegramPipeView>,
     other_pipes: Vec<OtherPipeView>,
     flash: Option<PipeCreatedFlash>,
     msg: Option<String>,
@@ -196,7 +205,28 @@ pub async fn pipes_index(
         })
         .collect();
 
-    // Load other pipes (webhook, web), active only, excluding iMessage pipes
+    // Load Telegram configs, filter to active only
+    let telegram_configs = super::telegram::load_telegram_configs(&state.db).await;
+    let tg_pipe_ids: std::collections::HashSet<String> = telegram_configs
+        .iter()
+        .map(|c| c.pipe_id.clone())
+        .collect();
+
+    let telegram_pipes: Vec<TelegramPipeView> = telegram_configs
+        .into_iter()
+        .filter(|c| c.active)
+        .map(|c| {
+            let oname = owner_name(&c.pipe_id);
+            TelegramPipeView {
+                config_id: c.config_id,
+                name: c.name,
+                chat_id: c.chat_id,
+                owner_name: oname,
+            }
+        })
+        .collect();
+
+    // Load other pipes (webhook, web), active only, excluding iMessage & Telegram pipes
     let other_pipes: Vec<OtherPipeView> = sqlx::query!(
         "SELECT id, user_id, name, transport, outbound_url, default_agent_id, active, created_at
          FROM pipes ORDER BY created_at DESC"
@@ -207,7 +237,7 @@ pub async fn pipes_index(
     .into_iter()
     .filter_map(|r| {
         let id = r.id.clone().unwrap_or_default();
-        if bb_pipe_ids.contains(&id) || r.active == 0 {
+        if bb_pipe_ids.contains(&id) || tg_pipe_ids.contains(&id) || r.active == 0 {
             return None;
         }
         let oname = users.get(&r.user_id).cloned().unwrap_or_default();
@@ -235,6 +265,7 @@ pub async fn pipes_index(
         is_admin: user.is_admin,
         base_path: state.base_path.clone(),
         imessage_pipes,
+        telegram_pipes,
         other_pipes,
         flash,
         msg: q.msg,

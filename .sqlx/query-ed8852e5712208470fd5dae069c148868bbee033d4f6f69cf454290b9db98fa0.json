@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT tc.id, tc.name, tc.bot_token, tc.chat_id,\n                tc.pipe_id, p.inbound_token\n         FROM telegram_configs tc\n         JOIN pipes p ON p.id = tc.pipe_id\n         WHERE tc.active = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "bot_token",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "chat_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "inbound_token",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ed8852e5712208470fd5dae069c148868bbee033d4f6f69cf454290b9db98fa0"
+}

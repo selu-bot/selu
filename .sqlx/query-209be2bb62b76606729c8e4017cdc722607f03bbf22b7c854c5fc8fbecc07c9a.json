@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT tc.id, tc.name, tc.chat_id, tc.active, tc.pipe_id,\n                  COALESCE(p.default_agent_id, 'default') as \"agent_name!: String\"\n           FROM telegram_configs tc\n           JOIN pipes p ON p.id = tc.pipe_id\n           ORDER BY tc.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "chat_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "active",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "agent_name!: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "209be2bb62b76606729c8e4017cdc722607f03bbf22b7c854c5fc8fbecc07c9a"
+}

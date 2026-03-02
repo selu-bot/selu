@@ -1,0 +1,389 @@
+{% extends "layout.html" %}
+
+{% block title %}Set Up Telegram{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <!-- Back link + Header -->
+    <div>
+      <a href="{{ base_path }}/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <span data-i18n="pipes.back">Back to Pipes</span>
+      </a>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="tg.title">Set Up Telegram</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="tg.subtitle">Connect a Telegram bot to Selu. You'll need a bot token from <a href="https://t.me/botfather" target="_blank" class="text-coral hover:text-amber transition-colors">@BotFather</a>.</p>
+    </div>
+
+    <!-- Wizard steps indicator -->
+    <div class="flex items-center gap-2">
+      <div id="ws-1" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-coral/15 text-coral border border-coral/40">
+        <span class="w-5 h-5 rounded-full gradient-coral text-white text-[10px] font-bold flex items-center justify-center">1</span>
+        <span data-i18n="tg.step1">Connect Bot</span>
+      </div>
+      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <div id="ws-2" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
+        <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">2</span>
+        <span data-i18n="tg.step2">Pick Chat</span>
+      </div>
+      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <div id="ws-3" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
+        <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">3</span>
+        <span data-i18n="tg.step3">Add People</span>
+      </div>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
+      {{ err }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ base_path }}/pipes/telegram/setup" id="setup-form" class="space-y-4">
+
+      <!-- Step 1: Bot Token -->
+      <div id="step-1" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="tg.step1.title">Step 1: Connect Your Telegram Bot</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-txt-muted leading-relaxed" data-i18n="tg.step1.desc">
+            Enter the bot token you got from <strong class="text-txt">@BotFather</strong>. Open Telegram, search for @BotFather, and use /newbot to create a bot.
+          </p>
+          <div>
+            <label for="tg-token" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.bottoken">Bot Token</label>
+            <input id="tg-token" name="bot_token" type="password" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" required
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
+            <p class="text-[11px] text-txt-faint mt-1" data-i18n="tg.bottoken.hint">You can find this in the BotFather chat in Telegram.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <button type="button" id="btn-connect" onclick="testConnection()"
+                    class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    data-i18n="tg.connect">
+              Connect to Telegram
+            </button>
+            <span id="connect-status" class="text-sm"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Chat Selection -->
+      <div id="step-2" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden hidden">
+        <div class="px-5 py-3.5 border-b border-edge">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="tg.step2.title">Step 2: Pick a Chat</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-txt-muted leading-relaxed" data-i18n="tg.step2.desc">Choose which Telegram chat Selu should respond in. Send a message to your bot first to make it appear here.</p>
+
+          <div id="chat-list" class="hidden">
+            <div id="chat-items" class="max-h-72 overflow-y-auto border border-edge rounded-xl bg-surface-input">
+            </div>
+          </div>
+
+          <div id="no-chats" class="hidden px-4 py-3 bg-amber/10 border border-amber/20 rounded-xl">
+            <p class="text-sm text-txt-heading font-medium" data-i18n="tg.nochats.title">No chats found yet</p>
+            <p class="text-xs text-txt-muted mt-1" data-i18n="tg.nochats.desc">Send a message to your bot (@<span id="bot-username-hint"></span>) in Telegram, then click "Refresh" below.</p>
+            <button type="button" onclick="refreshChats()" class="mt-2 text-xs font-medium text-coral hover:text-amber border border-coral/20 hover:border-amber/40 px-3 py-1.5 rounded-lg transition-colors cursor-pointer" data-i18n="tg.refresh">Refresh</button>
+          </div>
+
+          <div id="manual-chat-id" class="hidden">
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.chatid.manual">Or enter a Chat ID manually</label>
+            <div class="flex gap-2">
+              <input id="manual-chatid-input" type="text" placeholder="-1001234567890"
+                     class="flex-1 bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
+              <button type="button" onclick="useManualChatId()" class="text-sm font-medium text-txt border border-edge hover:border-muted px-3 py-2.5 rounded-xl transition-colors cursor-pointer" data-i18n="tg.use">Use</button>
+            </div>
+            <p class="text-[11px] text-txt-faint mt-1" data-i18n="tg.chatid.hint">You can get the chat ID by forwarding a message from the chat to @userinfobot.</p>
+          </div>
+
+          <input type="hidden" name="chat_id" id="chat-id-input" value="" required />
+
+          <div id="selected-chat" class="hidden px-4 py-3 bg-coral/10 border border-coral/20 rounded-xl">
+            <div class="flex items-center justify-between">
+              <div>
+                <div id="selected-chat-name" class="text-sm font-semibold text-txt-heading"></div>
+                <div id="selected-chat-detail" class="text-xs text-txt-muted mt-0.5 font-mono"></div>
+              </div>
+              <button type="button" onclick="clearChatSelection()"
+                      class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer" data-i18n="tg.change">Change</button>
+            </div>
+          </div>
+
+          <div>
+            <label for="tg-name" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.pipename">Pipe Name</label>
+            <input id="tg-name" name="name" type="text" placeholder="e.g. Family Bot" required
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: People -->
+      <div id="step-3" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="tg.whocan">Who Can Talk to Selu?</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-surface-alt text-txt-muted" data-i18n="common.optional">Optional</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-txt-muted leading-relaxed" data-i18n="tg.whocan.desc">
+            Restrict which Telegram users Selu responds to. If you skip this, Selu responds to <strong class="text-txt">everyone</strong> who messages the bot.
+          </p>
+
+          <div id="people-list" class="space-y-2"></div>
+
+          <div class="flex items-end gap-3">
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.tguser">Telegram User ID</label>
+              <input id="add-tgid" type="text" placeholder="123456789"
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
+              <p class="text-[11px] text-txt-faint mt-1" data-i18n="tg.tguser.hint">Send /start to @userinfobot to find your Telegram user ID.</p>
+            </div>
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.seluuser">Selu User</label>
+              <select id="add-user"
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                {% for u in users %}
+                <option value="{{ u.id }}">{{ u.display }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button type="button" onclick="addPerson()"
+                    class="text-sm font-medium text-txt border border-edge hover:border-muted px-3 py-2.5 rounded-xl transition-colors cursor-pointer whitespace-nowrap">
+              + Add
+            </button>
+          </div>
+
+          <input type="hidden" name="people" id="people-input" value="" />
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div id="submit-row" class="flex items-center justify-between pt-2 hidden">
+        <a href="{{ base_path }}/pipes" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="pipes.cancel">Cancel</a>
+        <button type="submit" id="btn-submit" disabled
+                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                data-i18n="tg.setup">
+          Set Up Telegram Bot
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block head %}
+<script>
+let allChats = [];
+let selectedChat = null;
+let people = [];
+let botUsername = '';
+
+async function testConnection() {
+  const btn = document.getElementById('btn-connect');
+  const status = document.getElementById('connect-status');
+  const tokenInput = document.getElementById('tg-token');
+  const token = tokenInput.value.trim();
+  if (!token) {
+    status.innerHTML = '<span class="text-rosie">' + t('tg.error.notoken') + '</span>';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = t('tg.connecting') || 'Connecting...';
+  btn.classList.add('opacity-60');
+  status.innerHTML = '<span class="text-txt-muted">' + (t('tg.verifying') || 'Verifying bot token...') + '</span>';
+  try {
+    const resp = await fetch(BASE_PATH + '/pipes/telegram/proxy/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bot_token: token }),
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      status.innerHTML = '<span class="text-rosie">' + escapeHtml(data.error || 'Connection failed') + '</span>';
+      btn.disabled = false; btn.classList.remove('opacity-60'); btn.textContent = t('tg.retry') || 'Retry';
+      return;
+    }
+    botUsername = data.bot_username || '';
+    allChats = data.chats || [];
+    status.innerHTML = '<span class="text-emerald-400">' + (t('tg.connected') || 'Connected!') + ' @' + escapeHtml(botUsername) + '</span>';
+    btn.textContent = t('tg.connected_btn') || 'Connected';
+    btn.style.background = 'linear-gradient(135deg, #059669, #10b981)';
+    setWizardStep(1, 'done');
+    setWizardStep(2, 'active');
+    unlockStep('step-2');
+    renderChatList();
+  } catch (e) {
+    status.innerHTML = '<span class="text-rosie">' + (t('tg.error.network') || 'Network error. Is Selu running?') + '</span>';
+    btn.disabled = false; btn.classList.remove('opacity-60'); btn.textContent = t('tg.retry') || 'Retry';
+  }
+}
+
+function renderChatList() {
+  if (allChats.length === 0) {
+    document.getElementById('no-chats').classList.remove('hidden');
+    document.getElementById('manual-chat-id').classList.remove('hidden');
+    var hint = document.getElementById('bot-username-hint');
+    if (hint) hint.textContent = botUsername;
+    return;
+  }
+  document.getElementById('no-chats').classList.add('hidden');
+  document.getElementById('chat-list').classList.remove('hidden');
+  document.getElementById('manual-chat-id').classList.remove('hidden');
+
+  var itemsEl = document.getElementById('chat-items');
+  itemsEl.innerHTML = allChats.map(function(c) {
+    var icon = c.chat_type === 'group' || c.chat_type === 'supergroup'
+      ? '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'
+      : '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
+    return '<div onclick="selectChat(\'' + escapeAttr(c.chat_id) + '\')" class="px-4 py-3 cursor-pointer border-b border-edge last:border-0 hover:bg-coral/8 transition-colors">'
+      + '<div class="flex items-center gap-3">'
+      + '<div class="w-8 h-8 rounded-full bg-surface-alt flex items-center justify-center flex-shrink-0">'
+      + '<svg class="w-4 h-4 text-txt-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + icon + '</svg>'
+      + '</div>'
+      + '<div class="min-w-0 flex-1">'
+      + '<div class="text-sm font-medium text-txt-heading truncate">' + escapeHtml(c.display_name) + '</div>'
+      + '<div class="text-xs text-txt-muted truncate">'
+      + '<span class="font-mono">' + escapeHtml(c.chat_id) + '</span>'
+      + (c.last_message ? ' \u2014 ' + escapeHtml(c.last_message) : '')
+      + '</div></div></div></div>';
+  }).join('');
+}
+
+async function refreshChats() {
+  var token = document.getElementById('tg-token').value.trim();
+  if (!token) return;
+  try {
+    var resp = await fetch(BASE_PATH + '/pipes/telegram/proxy/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bot_token: token }),
+    });
+    var data = await resp.json();
+    if (data.ok) {
+      allChats = data.chats || [];
+      renderChatList();
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function selectChat(chatId) {
+  selectedChat = allChats.find(function(c) { return c.chat_id === chatId; });
+  var name = selectedChat ? selectedChat.display_name : 'Chat ' + chatId;
+  document.getElementById('chat-id-input').value = chatId;
+  document.getElementById('chat-list').classList.add('hidden');
+  document.getElementById('no-chats').classList.add('hidden');
+  document.getElementById('manual-chat-id').classList.add('hidden');
+  document.getElementById('selected-chat').classList.remove('hidden');
+  document.getElementById('selected-chat-name').textContent = name;
+  document.getElementById('selected-chat-detail').textContent = 'Chat ID: ' + chatId;
+  var nameInput = document.getElementById('tg-name');
+  if (!nameInput.value.trim()) nameInput.value = name;
+  setWizardStep(2, 'done');
+  setWizardStep(3, 'active');
+  unlockStep('step-3');
+  enableSubmit();
+}
+
+function useManualChatId() {
+  var input = document.getElementById('manual-chatid-input');
+  var chatId = input.value.trim();
+  if (!chatId) { input.focus(); return; }
+  selectChat(chatId);
+}
+
+function clearChatSelection() {
+  selectedChat = null;
+  document.getElementById('chat-id-input').value = '';
+  document.getElementById('selected-chat').classList.add('hidden');
+  renderChatList();
+  setWizardStep(2, 'active');
+  setWizardStep(3, 'inactive');
+  lockStep('step-3');
+  disableSubmit();
+}
+
+function addPerson() {
+  var tgid = document.getElementById('add-tgid');
+  var userSelect = document.getElementById('add-user');
+  var tgidVal = tgid.value.trim();
+  var userId = userSelect.value;
+  var userLabel = userSelect.options[userSelect.selectedIndex]?.text || '';
+  if (!tgidVal) { tgid.focus(); return; }
+  if (!userId) { userSelect.focus(); return; }
+  if (people.some(function(p) { return p.tgid === tgidVal; })) { tgid.value = ''; return; }
+  people.push({ tgid: tgidVal, userId: userId, userLabel: userLabel });
+  tgid.value = '';
+  renderPeople();
+}
+
+function removePerson(idx) {
+  people.splice(idx, 1);
+  renderPeople();
+}
+
+function renderPeople() {
+  var list = document.getElementById('people-list');
+  var input = document.getElementById('people-input');
+  if (people.length === 0) { list.innerHTML = ''; input.value = ''; return; }
+  list.innerHTML = people.map(function(p, i) {
+    return '<div class="flex items-center gap-3 bg-surface-input border border-edge rounded-xl px-4 py-3">'
+      + '<div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white flex-shrink-0">'
+      + p.userLabel.substring(0, 2).toUpperCase()
+      + '</div>'
+      + '<div class="flex-1 min-w-0">'
+      + '<div class="text-sm font-medium text-txt-heading">' + escapeHtml(p.userLabel) + '</div>'
+      + '<div class="text-xs text-txt-muted font-mono">Telegram ID: ' + escapeHtml(p.tgid) + '</div>'
+      + '</div>'
+      + '<button type="button" onclick="removePerson(' + i + ')" class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2 py-1 rounded transition-colors cursor-pointer">' + (t('pipes.remove') || 'Remove') + '</button>'
+      + '</div>';
+  }).join('');
+  input.value = people.map(function(p) { return p.tgid + ':' + p.userId; }).join(',');
+}
+
+function setWizardStep(num, state) {
+  var el = document.getElementById('ws-' + num);
+  var dot = el.querySelector('span');
+  el.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all';
+  if (state === 'active') {
+    el.classList.add('bg-coral/15', 'text-coral', 'border', 'border-coral/40');
+    dot.className = 'w-5 h-5 rounded-full gradient-coral text-white text-[10px] font-bold flex items-center justify-center';
+  } else if (state === 'done') {
+    el.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border', 'border-emerald-500/20');
+    dot.className = 'w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center justify-center';
+  } else {
+    el.classList.add('bg-surface-raised', 'text-txt-muted', 'border', 'border-edge');
+    dot.className = 'w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center';
+  }
+}
+
+function unlockStep(id) {
+  var el = document.getElementById(id);
+  el.classList.remove('hidden');
+  el.style.opacity = '0'; el.style.transform = 'translateY(8px)';
+  el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+  requestAnimationFrame(function() { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
+  setTimeout(function() { el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 50);
+}
+
+function lockStep(id) { document.getElementById(id).classList.add('hidden'); }
+
+function enableSubmit() {
+  var row = document.getElementById('submit-row');
+  var btn = document.getElementById('btn-submit');
+  btn.disabled = false;
+  if (row.classList.contains('hidden')) {
+    row.classList.remove('hidden');
+    row.style.opacity = '0'; row.style.transition = 'opacity 0.3s ease';
+    requestAnimationFrame(function() { row.style.opacity = '1'; });
+  }
+}
+
+function disableSubmit() {
+  document.getElementById('submit-row').classList.add('hidden');
+  document.getElementById('btn-submit').disabled = true;
+}
+
+function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function escapeAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+</script>
+{% endblock %}

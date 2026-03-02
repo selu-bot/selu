@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO telegram_configs (id, name, bot_token, chat_id, pipe_id)\n         VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "16cc7c53e07620d6364162a200c16a5c597a2aec8d80fd7bf2075ed9983594e4"
+}

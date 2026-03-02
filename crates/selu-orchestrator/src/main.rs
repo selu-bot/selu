@@ -14,6 +14,7 @@ mod events;
 mod i18n;
 mod llm;
 mod permissions;
+mod telegram;
 mod web;
 mod api;
 
@@ -97,6 +98,10 @@ async fn main() -> Result<()> {
     // ── BlueBubbles adapters ──────────────────────────────────────────────────
     // Register channel senders + auto-upgrade legacy polling configs to webhooks
     bluebubbles::adapter::init_all(state.clone()).await;
+
+    // ── Telegram adapters ─────────────────────────────────────────────────────
+    // Register channel senders + set webhooks with Telegram
+    telegram::adapter::init_all(state.clone()).await;
 
     // ── Background tasks ──────────────────────────────────────────────────────
 
@@ -211,6 +216,7 @@ async fn main() -> Result<()> {
         .merge(api::router(state.clone()))
         .merge(pipes::inbound::router())
         .merge(bluebubbles::adapter::router())
+        .merge(telegram::adapter::router())
         .with_state(state);
 
     let addr: std::net::SocketAddr = format!("{}:{}", cfg.server.host, cfg.server.port).parse()?;
