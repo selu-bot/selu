@@ -148,7 +148,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     // Inlined agents' tools are exposed directly on this agent's tool list,
     // eliminating the delegation round-trip. Delegated agents keep the full
     // delegate_to_agent flow with their own LLM context.
-    let (inlined_manifests, delegated_agents) =
+    let (inlined_manifests, delegated_agents, cap_owner) =
         partition_agents(&agent, &agents_snapshot);
 
     // ── Context + provider (parallelized) ─────────────────────────────────────
@@ -216,6 +216,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     let sid = session_id.clone();
     let uid = user_id.clone();
     let src_agent_id = agent.id.clone();
+    let cap_owner_map = cap_owner;
     let delegation_state = state.clone();
     let delegation_pipe = pipe_id.clone();
     let dispatcher_state = state.clone();
@@ -242,6 +243,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             let session = sid.clone();
             let user = uid.clone();
             let agent_id_copy = src_agent_id.clone();
+            let owners = cap_owner_map.clone();
             let del_state = delegation_state.clone();
             let del_pipe = delegation_pipe.clone();
             let state = dispatcher_state.clone();
@@ -323,6 +325,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     (name.clone(), name.clone())
                 };
 
+                // For inlined tools, resolve the policy against the agent
+                // that owns the capability, not the host agent.
+                let policy_agent = owners.get(&cap_id)
+                    .unwrap_or(&agent_id_copy);
+
                 let result = check_policy_and_dispatch(
                     &state,
                     &user,
@@ -333,7 +340,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     &channel,
                     &session,
                     &pipe,
-                    &agent_id_copy,
+                    policy_agent,
                     approved,
                     || {
                         let engine = engine.clone();
@@ -704,9 +711,13 @@ fn partition_agents(
 ) -> (
     HashMap<String, CapabilityManifest>,
     HashMap<String, Arc<AgentDefinition>>,
+    HashMap<String, String>,
 ) {
     let mut inlined_manifests = HashMap::new();
     let mut delegated_agents = HashMap::new();
+    // Map from capability_id -> source agent_id so that inlined tools
+    // resolve policies against the agent that owns them, not the host.
+    let mut cap_owner: HashMap<String, String> = HashMap::new();
 
     for (id, agent) in all_agents {
         if id == &current_agent.id {
@@ -716,13 +727,14 @@ fn partition_agents(
             // Merge this agent's capability manifests into the inlined set
             for (cap_id, manifest) in &agent.capability_manifests {
                 inlined_manifests.insert(cap_id.clone(), manifest.clone());
+                cap_owner.insert(cap_id.clone(), id.clone());
             }
         } else {
             delegated_agents.insert(id.clone(), agent.clone());
         }
     }
 
-    (inlined_manifests, delegated_agents)
+    (inlined_manifests, delegated_agents, cap_owner)
 }
 
 /// Dispatch a `delegate_to_agent` tool call by running a nested agent turn.
