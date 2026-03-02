@@ -1,22 +1,30 @@
 /// Integrated BlueBubbles adapter.
 ///
-/// Instead of running as a separate sidecar binary, this module runs
-/// inside the orchestrator process. It:
-///   1. Loads BlueBubbles configs from the DB (one per BB server/chat)
-///   2. Spawns a polling task per active config
+/// Instead of polling, this module receives inbound messages via webhooks
+/// that BlueBubbles POSTs to a Selu endpoint. It:
+///   1. Exposes a webhook endpoint (`POST /api/bb/webhook/{config_id}`)
+///   2. Registers the webhook URL with BlueBubbles on setup
 ///   3. Dispatches inbound messages through the standard pipe inbound flow
 ///      (with sender_ref resolution and thread creation)
 ///   4. Handles outbound replies with reply-to-message support
 ///
-/// The adapter is started from main.rs after the DB is ready and the
-/// AppState is built.
+/// On startup, existing configs that lack a `bb_webhook_id` are automatically
+/// upgraded by registering the webhook with BlueBubbles (seamless migration
+/// from the old polling approach).
 use anyhow::{Context as _, Result};
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::post,
+    Router,
+};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tokio::time::{Duration, interval};
 use tracing::{debug, error, info, warn};
 
 use crate::agents::{
@@ -32,13 +40,6 @@ use crate::state::AppState;
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
-struct BbQueryResponse {
-    #[allow(dead_code)]
-    status: u16,
-    data: Vec<BbMessage>,
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BbMessage {
     text: Option<String>,
@@ -46,6 +47,7 @@ struct BbMessage {
     is_from_me: bool,
     handle: Option<BbHandle>,
     guid: Option<String>,
+    #[allow(dead_code)]
     date_created: Option<i64>,
     /// The GUID of the first message in this thread (the "thread originator").
     /// Set when the message is part of an iMessage reply chain.
@@ -92,61 +94,92 @@ struct BbSendResponseData {
     guid: Option<String>,
 }
 
+/// BlueBubbles webhook registration response.
+#[derive(Debug, Deserialize)]
+struct BbWebhookResponse {
+    #[allow(dead_code)]
+    status: u16,
+    data: Option<BbWebhookData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BbWebhookData {
+    id: Option<i64>,
+}
+
+/// Payload that BlueBubbles POSTs to our webhook endpoint.
+/// The outer envelope wraps the event type and the message data.
+#[derive(Debug, Deserialize)]
+struct BbWebhookPayload {
+    #[serde(rename = "type")]
+    event_type: String,
+    data: serde_json::Value,
+}
+
 // ---------------------------------------------------------------------------
-// Per-adapter state
+// Per-adapter state (shared across webhook calls)
 // ---------------------------------------------------------------------------
 
 /// Tracks sent message GUIDs for loop prevention (per adapter instance).
 type SentGuids = Arc<RwLock<HashSet<String>>>;
 
-struct AdapterInstance {
-    config_id: String,
+/// Shared registry of per-config state, keyed by config_id.
+/// Lives in AppState-adjacent module-level storage so the webhook handler
+/// can look up sent_guids and config details without hitting the DB every time.
+type AdapterRegistry = Arc<RwLock<HashMap<String, AdapterState>>>;
+
+struct AdapterState {
     server_url: String,
     server_password: String,
     chat_guid: String,
     pipe_id: String,
-    poll_interval_ms: u64,
-    http: Client,
     sent_guids: SentGuids,
 }
 
-// ---------------------------------------------------------------------------
-// Public: start adapters
-// ---------------------------------------------------------------------------
+/// Module-level registry. Initialized once at startup.
+static ADAPTER_REGISTRY: std::sync::OnceLock<AdapterRegistry> = std::sync::OnceLock::new();
 
-/// Start a single BlueBubbles adapter by config ID.
-///
-/// Call this after inserting a new `bluebubbles_configs` row so the adapter
-/// begins polling immediately — no restart required.
-pub async fn start_one(state: AppState, config_id: &str) -> Result<()> {
-    let row = sqlx::query!(
-        "SELECT id, name, server_url, server_password, chat_guid, pipe_id, poll_interval_ms
-         FROM bluebubbles_configs WHERE id = ? AND active = 1",
-        config_id
-    )
-    .fetch_optional(&state.db)
-    .await
-    .context("Failed to load BlueBubbles config")?;
-
-    let row = row.ok_or_else(|| anyhow::anyhow!("BlueBubbles config not found or inactive: {config_id}"))?;
-
-    let cfg = BbConfig {
-        id: row.id.unwrap_or_default(),
-        name: row.name,
-        server_url: row.server_url,
-        server_password: row.server_password,
-        chat_guid: row.chat_guid,
-        pipe_id: row.pipe_id,
-        poll_interval_ms: row.poll_interval_ms,
-    };
-
-    spawn_adapter(&state, cfg);
-    Ok(())
+fn registry() -> &'static AdapterRegistry {
+    ADAPTER_REGISTRY.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
 }
 
-/// Loads all active BlueBubbles configs from the DB and spawns a polling
-/// task for each one. Call this from main.rs after building AppState.
-pub async fn start_all(state: AppState) {
+// ---------------------------------------------------------------------------
+// Internal config struct (loaded from DB)
+// ---------------------------------------------------------------------------
+
+struct BbConfig {
+    id: String,
+    name: String,
+    server_url: String,
+    server_password: String,
+    chat_guid: String,
+    pipe_id: String,
+    bb_webhook_id: Option<String>,
+    inbound_token: String,
+}
+
+// ---------------------------------------------------------------------------
+// Public: Axum router for the webhook endpoint
+// ---------------------------------------------------------------------------
+
+/// Returns the Axum router that serves the BB webhook inbound endpoint.
+/// Merged into the main app in main.rs.
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route("/api/bb/webhook/{config_id}", post(webhook_handler))
+}
+
+// ---------------------------------------------------------------------------
+// Public: startup — register senders + auto-upgrade existing configs
+// ---------------------------------------------------------------------------
+
+/// Called from main.rs after AppState is built.
+///
+/// For each active BlueBubbles config:
+///   1. Registers its `BlueBubblesSender` on the `ChannelRegistry`
+///   2. If `bb_webhook_id` is NULL (legacy polling config or failed registration),
+///      automatically registers the webhook with BlueBubbles
+pub async fn init_all(state: AppState) {
     let configs = match load_active_configs(&state).await {
         Ok(c) => c,
         Err(e) => {
@@ -160,233 +193,322 @@ pub async fn start_all(state: AppState) {
         return;
     }
 
-    info!("Starting {} BlueBubbles adapter(s)", configs.len());
+    info!("Initialising {} BlueBubbles adapter(s)", configs.len());
+    let base_url = state.config.external_base_url();
 
     for cfg in configs {
-        spawn_adapter(&state, cfg);
+        register_adapter(&state, &cfg, &base_url).await;
     }
 }
 
-/// Create an adapter instance for a single config, register its channel
-/// sender, and spawn the polling loop.
-fn spawn_adapter(state: &AppState, cfg: BbConfig) {
-    let instance = AdapterInstance {
-        config_id: cfg.id.clone(),
-        server_url: cfg.server_url.clone(),
-        server_password: cfg.server_password.clone(),
-        chat_guid: cfg.chat_guid.clone(),
-        pipe_id: cfg.pipe_id.clone(),
-        poll_interval_ms: cfg.poll_interval_ms as u64,
-        http: Client::new(),
-        sent_guids: Arc::new(RwLock::new(HashSet::new())),
-    };
+/// Register a single adapter: set up channel sender + ensure webhook is
+/// registered with BlueBubbles.
+async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
+    let sent_guids: SentGuids = Arc::new(RwLock::new(HashSet::new()));
 
-    // Register a ChannelSender for this pipe so the approval queue
-    // can send approval prompts via iMessage.
+    // Store in module-level registry for the webhook handler
+    {
+        let mut reg = registry().write().await;
+        reg.insert(cfg.id.clone(), AdapterState {
+            server_url: cfg.server_url.clone(),
+            server_password: cfg.server_password.clone(),
+            chat_guid: cfg.chat_guid.clone(),
+            pipe_id: cfg.pipe_id.clone(),
+            sent_guids: sent_guids.clone(),
+        });
+    }
+
+    // Register ChannelSender for approval queue / outbound
     let sender = Arc::new(BlueBubblesSender {
         http: Client::new(),
         server_url: cfg.server_url.clone(),
         server_password: cfg.server_password.clone(),
         chat_guid: cfg.chat_guid.clone(),
-        sent_guids: instance.sent_guids.clone(),
+        sent_guids: sent_guids.clone(),
     });
 
     let pipe_id = cfg.pipe_id.clone();
-    let state_clone = state.clone();
-    let state_for_spawn = state.clone();
+    state.channel_registry.register(&pipe_id, sender).await;
 
-    // Register channel sender and spawn poller
-    tokio::spawn(async move {
-        state_clone.channel_registry.register(&pipe_id, sender).await;
-    });
-
-    info!(
-        config_id = %cfg.id,
-        name = %cfg.name,
-        chat = %cfg.chat_guid,
-        pipe_id = %cfg.pipe_id,
-        poll_ms = cfg.poll_interval_ms,
-        "Starting BlueBubbles adapter"
-    );
-
-    tokio::spawn(async move {
-        poll_loop(instance, state_for_spawn).await;
-    });
-}
-
-struct BbConfig {
-    id: String,
-    name: String,
-    server_url: String,
-    server_password: String,
-    chat_guid: String,
-    pipe_id: String,
-    poll_interval_ms: i64,
-}
-
-async fn load_active_configs(state: &AppState) -> Result<Vec<BbConfig>> {
-    let rows = sqlx::query!(
-        "SELECT id, name, server_url, server_password, chat_guid, pipe_id, poll_interval_ms
-         FROM bluebubbles_configs WHERE active = 1"
-    )
-    .fetch_all(&state.db)
-    .await
-    .context("Failed to load bluebubbles_configs")?;
-
-    Ok(rows.into_iter().map(|r| BbConfig {
-        id: r.id.unwrap_or_default(),
-        name: r.name,
-        server_url: r.server_url,
-        server_password: r.server_password,
-        chat_guid: r.chat_guid,
-        pipe_id: r.pipe_id,
-        poll_interval_ms: r.poll_interval_ms,
-    }).collect())
-}
-
-// ---------------------------------------------------------------------------
-// Polling loop
-// ---------------------------------------------------------------------------
-
-async fn poll_loop(instance: AdapterInstance, state: AppState) {
-    let mut ticker = interval(Duration::from_millis(instance.poll_interval_ms));
-    let mut last_ts: i64 = current_epoch_ms();
-
-    info!(
-        config_id = %instance.config_id,
-        chat = %instance.chat_guid,
-        "Poller started"
-    );
-
-    loop {
-        ticker.tick().await;
-
-        match poll_once(&instance, &state, last_ts).await {
-            Ok(new_ts) => {
-                if new_ts > last_ts {
-                    last_ts = new_ts;
+    // Auto-upgrade: register webhook with BB if not yet done
+    if cfg.bb_webhook_id.is_none() {
+        info!(
+            config_id = %cfg.id,
+            name = %cfg.name,
+            "No webhook registered yet — registering with BlueBubbles"
+        );
+        let callback_url = format!(
+            "{}/api/bb/webhook/{}?token={}",
+            base_url, cfg.id, cfg.inbound_token
+        );
+        match register_webhook_with_bb(&cfg.server_url, &cfg.server_password, &callback_url).await {
+            Ok(webhook_id) => {
+                let wh_id_str = webhook_id.to_string();
+                if let Err(e) = sqlx::query!(
+                    "UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?",
+                    wh_id_str, cfg.id,
+                )
+                .execute(&state.db)
+                .await
+                {
+                    error!(config_id = %cfg.id, "Failed to store bb_webhook_id: {e}");
                 }
+                info!(config_id = %cfg.id, webhook_id = webhook_id, "Webhook registered with BlueBubbles");
             }
             Err(e) => {
-                warn!(config_id = %instance.config_id, "Poll error: {e}");
+                warn!(config_id = %cfg.id, "Failed to register webhook with BlueBubbles: {e}. Will retry on next startup.");
             }
         }
+    } else {
+        info!(
+            config_id = %cfg.id,
+            name = %cfg.name,
+            chat = %cfg.chat_guid,
+            "BlueBubbles adapter ready (webhook)"
+        );
     }
 }
 
-async fn poll_once(instance: &AdapterInstance, state: &AppState, after_ts: i64) -> Result<i64> {
-    let url = format!("{}/api/v1/message/query", instance.server_url);
+/// Register a single adapter by config ID.
+///
+/// Called after inserting a new `bluebubbles_configs` row so the adapter
+/// is ready immediately — no restart required.
+pub async fn start_one(state: AppState, config_id: &str) -> Result<()> {
+    let cfg = load_config_by_id(&state, config_id).await?;
+    let base_url = state.config.external_base_url();
+    register_adapter(&state, &cfg, &base_url).await;
+    Ok(())
+}
 
-    let body = serde_json::json!({
-        "chatGuid": instance.chat_guid,
-        "limit": 20,
-        "sort": "ASC",
-        "after": after_ts,
-        "with": ["handle"],
+// ---------------------------------------------------------------------------
+// Webhook handler
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct WebhookQuery {
+    token: Option<String>,
+}
+
+/// Axum handler: receives webhook POSTs from BlueBubbles.
+async fn webhook_handler(
+    State(state): State<AppState>,
+    Path(config_id): Path<String>,
+    Query(query): Query<WebhookQuery>,
+    axum::Json(payload): axum::Json<BbWebhookPayload>,
+) -> impl IntoResponse {
+    // 1. Authenticate via token
+    let provided_token = match query.token {
+        Some(t) => t,
+        None => return StatusCode::UNAUTHORIZED,
+    };
+
+    // Look up the pipe's inbound_token for this config
+    let pipe_token = sqlx::query!(
+        "SELECT p.inbound_token
+         FROM bluebubbles_configs bc
+         JOIN pipes p ON p.id = bc.pipe_id
+         WHERE bc.id = ? AND bc.active = 1",
+        config_id
+    )
+    .fetch_optional(&state.db)
+    .await;
+
+    let expected_token = match pipe_token {
+        Ok(Some(row)) => row.inbound_token,
+        _ => return StatusCode::NOT_FOUND,
+    };
+
+    if provided_token != expected_token {
+        return StatusCode::UNAUTHORIZED;
+    }
+
+    // 2. Only process new-message events
+    if payload.event_type != "new-message" {
+        debug!(event_type = %payload.event_type, "Ignoring non-message webhook event");
+        return StatusCode::OK;
+    }
+
+    // 3. Parse the message from the payload data
+    let msg: BbMessage = match serde_json::from_value(payload.data) {
+        Ok(m) => m,
+        Err(e) => {
+            warn!("Failed to parse BB webhook message payload: {e}");
+            return StatusCode::OK; // Don't make BB retry on parse errors
+        }
+    };
+
+    // 4. Look up adapter state from registry
+    let reg = registry().read().await;
+    let adapter = match reg.get(&config_id) {
+        Some(a) => a,
+        None => {
+            warn!(config_id = %config_id, "Webhook received for unknown config");
+            return StatusCode::NOT_FOUND;
+        }
+    };
+
+    // 5. Skip messages we sent ourselves (loop prevention)
+    if let Some(ref guid) = msg.guid {
+        let sent = adapter.sent_guids.read().await;
+        if sent.contains(guid) {
+            debug!(guid = %guid, "Skipping adapter-sent message (webhook)");
+            return StatusCode::OK;
+        }
+    }
+
+    // 6. Skip empty messages
+    let text = match &msg.text {
+        Some(t) if !t.is_empty() => t.clone(),
+        _ => return StatusCode::OK,
+    };
+
+    let sender_ref = msg
+        .handle
+        .as_ref()
+        .map(|h| h.address.clone())
+        .unwrap_or_else(|| "self".into());
+
+    let message_guid = msg.guid.clone();
+    let thread_originator_guid = msg.thread_originator_guid.clone();
+    let reply_to_guid = msg.reply_to_guid.clone();
+
+    // Log threading fields for tracing
+    info!(
+        message_guid = ?message_guid,
+        thread_originator_guid = ?thread_originator_guid,
+        reply_to_guid = ?reply_to_guid,
+        associated_message_guid = ?msg.associated_message_guid,
+        associated_message_type = ?msg.associated_message_type,
+        is_from_me = msg.is_from_me,
+        text_preview = %if text.len() > 50 { &text[..50] } else { &text },
+        "BB webhook inbound message"
+    );
+
+    // 7. Resolve sender
+    let pipe_id = adapter.pipe_id.clone();
+    let resolved_user_id = match resolve_sender(&state, &pipe_id, &sender_ref).await {
+        Some(uid) => uid,
+        None => {
+            debug!(
+                sender = %sender_ref,
+                pipe_id = %pipe_id,
+                "Ignoring webhook message from unknown sender"
+            );
+            return StatusCode::OK;
+        }
+    };
+
+    info!(
+        sender = %sender_ref,
+        user_id = %resolved_user_id,
+        pipe_id = %pipe_id,
+        "Processing BlueBubbles webhook message"
+    );
+
+    // 8. Dispatch in background (return 200 immediately)
+    let chat_guid = adapter.chat_guid.clone();
+    let server_url = adapter.server_url.clone();
+    let server_password = adapter.server_password.clone();
+    let sent_guids = adapter.sent_guids.clone();
+    let state_clone = state.clone();
+
+    tokio::spawn(async move {
+        dispatch_message(
+            state_clone,
+            pipe_id,
+            resolved_user_id,
+            sender_ref,
+            text,
+            message_guid,
+            reply_to_guid,
+            thread_originator_guid,
+            chat_guid,
+            server_url,
+            server_password,
+            sent_guids,
+            Client::new(),
+        ).await;
     });
 
-    let resp = instance.http.post(&url)
-        .query(&[("password", instance.server_password.as_str())])
+    StatusCode::OK
+}
+
+// ---------------------------------------------------------------------------
+// Webhook registration / deregistration with BlueBubbles
+// ---------------------------------------------------------------------------
+
+/// Register a webhook URL with the BlueBubbles server.
+/// Returns the BB-assigned webhook ID on success.
+pub async fn register_webhook_with_bb(
+    bb_server_url: &str,
+    bb_password: &str,
+    callback_url: &str,
+) -> Result<i64> {
+    let http = Client::new();
+    let url = format!("{}/api/v1/webhook", bb_server_url);
+
+    let body = serde_json::json!({
+        "url": callback_url,
+        "events": ["new-message"],
+    });
+
+    let resp = http
+        .post(&url)
+        .query(&[("password", bb_password)])
         .json(&body)
         .send()
-        .await?;
-    let bb_resp: BbQueryResponse = resp.json().await?;
+        .await
+        .context("Failed to reach BlueBubbles for webhook registration")?;
 
-    let mut max_ts = after_ts;
-
-    for msg in &bb_resp.data {
-        let ts = msg.date_created.unwrap_or(0);
-        if ts >= max_ts {
-            max_ts = ts + 1;
-        }
-
-        // Skip messages we sent ourselves (loop prevention)
-        if let Some(guid) = &msg.guid {
-            let sent = instance.sent_guids.read().await;
-            if sent.contains(guid) {
-                debug!(guid = %guid, "Skipping adapter-sent message");
-                continue;
-            }
-        }
-
-        let text = match &msg.text {
-            Some(t) if !t.is_empty() => t.clone(),
-            _ => continue,
-        };
-
-        let sender_ref = msg
-            .handle
-            .as_ref()
-            .map(|h| h.address.clone())
-            .unwrap_or_else(|| "self".into());
-
-        let message_guid = msg.guid.clone();
-        let thread_originator_guid = msg.thread_originator_guid.clone();
-        let reply_to_guid = msg.reply_to_guid.clone();
-
-        // Log ALL threading-related fields from BlueBubbles so we can
-        // trace exactly what iMessage provides for reply-chain routing.
-        info!(
-            message_guid = ?message_guid,
-            thread_originator_guid = ?thread_originator_guid,
-            reply_to_guid = ?reply_to_guid,
-            associated_message_guid = ?msg.associated_message_guid,
-            associated_message_type = ?msg.associated_message_type,
-            is_from_me = msg.is_from_me,
-            text_preview = %if text.len() > 50 { &text[..50] } else { &text },
-            "BB inbound message fields"
-        );
-
-        // ── Sender resolution ─────────────────────────────────────────────
-        let resolved_user_id = match resolve_sender(state, &instance.pipe_id, &sender_ref).await {
-            Some(uid) => uid,
-            None => {
-                debug!(
-                    sender = %sender_ref,
-                    pipe_id = %instance.pipe_id,
-                    "Ignoring message from unknown sender"
-                );
-                continue;
-            }
-        };
-
-        info!(
-            sender = %sender_ref,
-            user_id = %resolved_user_id,
-            pipe_id = %instance.pipe_id,
-            "Processing BlueBubbles message"
-        );
-
-        // ── Route + dispatch ──────────────────────────────────────────────
-        let state_clone = state.clone();
-        let pipe_id = instance.pipe_id.clone();
-        let chat_guid = instance.chat_guid.clone();
-        let server_url = instance.server_url.clone();
-        let server_password = instance.server_password.clone();
-        let sent_guids = instance.sent_guids.clone();
-        let http = instance.http.clone();
-
-        tokio::spawn(async move {
-            dispatch_message(
-                state_clone,
-                pipe_id,
-                resolved_user_id,
-                sender_ref,
-                text,
-                message_guid,
-                reply_to_guid,
-                thread_originator_guid,
-                chat_guid,
-                server_url,
-                server_password,
-                sent_guids,
-                http,
-            ).await;
-        });
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("BlueBubbles rejected webhook registration: {status} — {body}");
     }
 
-    Ok(max_ts)
+    let bb_resp: BbWebhookResponse = resp
+        .json()
+        .await
+        .context("Failed to parse BlueBubbles webhook response")?;
+
+    let webhook_id = bb_resp
+        .data
+        .and_then(|d| d.id)
+        .context("BlueBubbles returned no webhook ID")?;
+
+    Ok(webhook_id)
 }
+
+/// Deregister a webhook from BlueBubbles by its ID.
+pub async fn deregister_webhook_from_bb(
+    bb_server_url: &str,
+    bb_password: &str,
+    webhook_id: &str,
+) -> Result<()> {
+    let http = Client::new();
+    let url = format!("{}/api/v1/webhook/{}", bb_server_url, webhook_id);
+
+    let resp = http
+        .delete(&url)
+        .query(&[("password", bb_password)])
+        .send()
+        .await
+        .context("Failed to reach BlueBubbles for webhook deregistration")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        warn!("BlueBubbles webhook deregistration returned {status}: {body}");
+    } else {
+        info!(webhook_id = %webhook_id, "Webhook deregistered from BlueBubbles");
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Sender resolution
+// ---------------------------------------------------------------------------
 
 /// Resolve sender_ref to user_id. Returns None if sender is unknown.
 async fn resolve_sender(state: &AppState, pipe_id: &str, sender_ref: &str) -> Option<String> {
@@ -428,6 +550,10 @@ async fn resolve_sender(state: &AppState, pipe_id: &str, sender_ref: &str) -> Op
             .map(|r| r.user_id)
     }
 }
+
+// ---------------------------------------------------------------------------
+// Message dispatch (shared by webhook handler)
+// ---------------------------------------------------------------------------
 
 /// Process a single inbound message: find/create thread, run agent, send reply.
 #[allow(clippy::too_many_arguments)]
@@ -529,7 +655,10 @@ async fn dispatch_message(
 
     // Show typing indicator while the agent is working.
     // Stops automatically when we send the reply message.
+    // Also mark the conversation as read so it doesn't stay "unread" in
+    // the Messages app while we're already processing the message.
     start_typing(&http, &server_url, &server_password, &chat_guid).await;
+    mark_as_read(&http, &server_url, &server_password, &chat_guid).await;
 
     let params = TurnParams {
         pipe_id: pipe_id.clone(),
@@ -689,6 +818,35 @@ async fn start_typing(http: &Client, server_url: &str, server_password: &str, ch
 }
 
 // ---------------------------------------------------------------------------
+// Mark chat as read
+// ---------------------------------------------------------------------------
+
+/// Mark a chat as read in BlueBubbles.
+///
+/// Like the typing indicator this requires the Private API. If it's not
+/// available the request fails silently.
+async fn mark_as_read(http: &Client, server_url: &str, server_password: &str, chat_guid: &str) {
+    let url = format!("{}/api/v1/chat/{}/read", server_url, chat_guid);
+    let resp = http
+        .post(&url)
+        .query(&[("password", server_password)])
+        .send()
+        .await;
+
+    match resp {
+        Ok(r) if r.status().is_success() => {
+            debug!("Chat marked as read");
+        }
+        Ok(r) => {
+            debug!(status = %r.status(), "Mark-as-read not available (Private API may be disabled)");
+        }
+        Err(e) => {
+            debug!("Mark-as-read request failed: {e}");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ChannelSender implementation for BlueBubbles
 // ---------------------------------------------------------------------------
 
@@ -775,6 +933,61 @@ pub async fn send_outbound(
     ).await;
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// DB helpers
+// ---------------------------------------------------------------------------
+
+async fn load_active_configs(state: &AppState) -> Result<Vec<BbConfig>> {
+    let rows = sqlx::query!(
+        "SELECT bc.id, bc.name, bc.server_url, bc.server_password, bc.chat_guid,
+                bc.pipe_id, bc.bb_webhook_id, p.inbound_token
+         FROM bluebubbles_configs bc
+         JOIN pipes p ON p.id = bc.pipe_id
+         WHERE bc.active = 1"
+    )
+    .fetch_all(&state.db)
+    .await
+    .context("Failed to load bluebubbles_configs")?;
+
+    Ok(rows.into_iter().map(|r| BbConfig {
+        id: r.id.unwrap_or_default(),
+        name: r.name,
+        server_url: r.server_url,
+        server_password: r.server_password,
+        chat_guid: r.chat_guid,
+        pipe_id: r.pipe_id,
+        bb_webhook_id: r.bb_webhook_id,
+        inbound_token: r.inbound_token,
+    }).collect())
+}
+
+async fn load_config_by_id(state: &AppState, config_id: &str) -> Result<BbConfig> {
+    let row = sqlx::query!(
+        "SELECT bc.id, bc.name, bc.server_url, bc.server_password, bc.chat_guid,
+                bc.pipe_id, bc.bb_webhook_id, p.inbound_token
+         FROM bluebubbles_configs bc
+         JOIN pipes p ON p.id = bc.pipe_id
+         WHERE bc.id = ? AND bc.active = 1",
+        config_id
+    )
+    .fetch_optional(&state.db)
+    .await
+    .context("Failed to load BlueBubbles config")?;
+
+    let row = row.ok_or_else(|| anyhow::anyhow!("BlueBubbles config not found or inactive: {config_id}"))?;
+
+    Ok(BbConfig {
+        id: row.id.unwrap_or_default(),
+        name: row.name,
+        server_url: row.server_url,
+        server_password: row.server_password,
+        chat_guid: row.chat_guid,
+        pipe_id: row.pipe_id,
+        bb_webhook_id: row.bb_webhook_id,
+        inbound_token: row.inbound_token,
+    })
 }
 
 // ---------------------------------------------------------------------------

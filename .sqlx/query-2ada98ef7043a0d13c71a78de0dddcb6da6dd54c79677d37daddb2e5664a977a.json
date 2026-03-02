@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, name, server_url, server_password, chat_guid, pipe_id, poll_interval_ms\n         FROM bluebubbles_configs WHERE id = ? AND active = 1",
+  "query": "SELECT bc.id, bc.name, bc.server_url, bc.server_password, bc.chat_guid,\n                bc.pipe_id, bc.bb_webhook_id, p.inbound_token\n         FROM bluebubbles_configs bc\n         JOIN pipes p ON p.id = bc.pipe_id\n         WHERE bc.id = ? AND bc.active = 1",
   "describe": {
     "columns": [
       {
@@ -34,9 +34,14 @@
         "type_info": "Text"
       },
       {
-        "name": "poll_interval_ms",
+        "name": "bb_webhook_id",
         "ordinal": 6,
-        "type_info": "Integer"
+        "type_info": "Text"
+      },
+      {
+        "name": "inbound_token",
+        "ordinal": 7,
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -49,8 +54,9 @@
       false,
       false,
       false,
+      true,
       false
     ]
   },
-  "hash": "ae945d15cb6bf454c51a4200b09cc50471c17209844cb692e78929e055d79b3b"
+  "hash": "2ada98ef7043a0d13c71a78de0dddcb6da6dd54c79677d37daddb2e5664a977a"
 }

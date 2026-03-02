@@ -363,12 +363,11 @@ pub async fn imessage_setup_submit(
 
     // 3. Create the BlueBubbles config
     let bb_config_id = Uuid::new_v4().to_string();
-    let poll_ms: i64 = 2000;
 
     if let Err(e) = sqlx::query!(
-        "INSERT INTO bluebubbles_configs (id, name, server_url, server_password, chat_guid, pipe_id, poll_interval_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
-        bb_config_id, form.name, form.server_url, form.server_password, form.chat_guid, pipe_id, poll_ms,
+        "INSERT INTO bluebubbles_configs (id, name, server_url, server_password, chat_guid, pipe_id)
+         VALUES (?, ?, ?, ?, ?, ?)",
+        bb_config_id, form.name, form.server_url, form.server_password, form.chat_guid, pipe_id,
     )
     .execute(&state.db)
     .await
@@ -519,6 +518,28 @@ pub async fn imessage_delete(
     if !user.is_admin {
         return StatusCode::FORBIDDEN.into_response();
     }
+
+    // Deregister webhook from BlueBubbles before deactivating
+    if let Ok(Some(row)) = sqlx::query!(
+        "SELECT server_url, server_password, bb_webhook_id
+         FROM bluebubbles_configs WHERE id = ?",
+        config_id
+    )
+    .fetch_optional(&state.db)
+    .await
+    {
+        if let Some(webhook_id) = row.bb_webhook_id {
+            if let Err(e) = crate::bluebubbles::adapter::deregister_webhook_from_bb(
+                &row.server_url,
+                &row.server_password,
+                &webhook_id,
+            ).await {
+                warn!("Failed to deregister BB webhook: {e}");
+                // Non-fatal: continue with deactivation
+            }
+        }
+    }
+
     // Deactivate the BB config and its pipe
     let _ = sqlx::query!("UPDATE bluebubbles_configs SET active = 0 WHERE id = ?", config_id)
         .execute(&state.db)

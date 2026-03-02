@@ -156,6 +156,8 @@ pub struct BlueBubblesConfig {
     pub chat_guid: String,
     pub pipe_id: Uuid,
     pub poll_interval_ms: i64,
+    /// BlueBubbles-assigned webhook ID, used for deregistration.
+    pub bb_webhook_id: Option<String>,
     pub active: bool,
     pub created_at: DateTime<Utc>,
 }

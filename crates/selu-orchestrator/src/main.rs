@@ -95,8 +95,8 @@ async fn main() -> Result<()> {
     fanout::start(state.clone(), fanout_rx, cfg.max_chain_depth);
 
     // ── BlueBubbles adapters ──────────────────────────────────────────────────
-    // Start all configured BlueBubbles polling adapters
-    bluebubbles::adapter::start_all(state.clone()).await;
+    // Register channel senders + auto-upgrade legacy polling configs to webhooks
+    bluebubbles::adapter::init_all(state.clone()).await;
 
     // ── Background tasks ──────────────────────────────────────────────────────
 
@@ -186,6 +186,7 @@ async fn main() -> Result<()> {
         .merge(web::router(state.clone()))
         .merge(api::router(state.clone()))
         .merge(pipes::inbound::router())
+        .merge(bluebubbles::adapter::router())
         .with_state(state);
 
     let addr: std::net::SocketAddr = format!("{}:{}", cfg.server.host, cfg.server.port).parse()?;

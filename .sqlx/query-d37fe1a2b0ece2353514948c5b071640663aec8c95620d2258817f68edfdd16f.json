@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d37fe1a2b0ece2353514948c5b071640663aec8c95620d2258817f68edfdd16f"
+}

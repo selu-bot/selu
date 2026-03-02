@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.inbound_token\n         FROM bluebubbles_configs bc\n         JOIN pipes p ON p.id = bc.pipe_id\n         WHERE bc.id = ? AND bc.active = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "inbound_token",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b84d76ee10c820f01eee713874049838f747bdb071858eea1d422b2c0708ab62"
+}
