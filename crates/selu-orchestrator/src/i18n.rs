@@ -24,6 +24,7 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
     en.insert("approval.with_args", " with:");
     en.insert("approval.reply_to_approve", "Reply to this message to approve.");
     en.insert("approval.approved_processing", "Approved. Processing...");
+    en.insert("error.agent_turn_failed", "Something went wrong — please try again.");
     m.insert("en", en);
 
     // ── German ───────────────────────────────────────────────────────
@@ -32,6 +33,7 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
     de.insert("approval.with_args", " mit:");
     de.insert("approval.reply_to_approve", "Antworte auf diese Nachricht, um zu bestaetigen.");
     de.insert("approval.approved_processing", "Bestaetigt. Wird verarbeitet...");
+    de.insert("error.agent_turn_failed", "Da ist leider etwas schiefgelaufen — versuch es bitte nochmal.");
     m.insert("de", de);
 
     m

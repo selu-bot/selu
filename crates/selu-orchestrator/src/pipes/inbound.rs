@@ -209,7 +209,7 @@ async fn handle_inbound(
 
         let params = TurnParams {
             pipe_id: pipe_id_str,
-            user_id: resolved_user_id,
+            user_id: resolved_user_id.clone(),
             agent_id: Some(agent_id),
             message: effective_text,
             thread_id: Some(thread_id.clone()),
@@ -231,6 +231,22 @@ async fn handle_inbound(
             Err(e) => {
                 error!("Agent turn failed: {e}");
                 let _ = thread_mgr::fail_thread(&state.db, &thread_id).await;
+                // Send a user-friendly error message if outbound is configured
+                if is_threaded {
+                    let lang = crate::i18n::user_language(&state.db, &resolved_user_id).await;
+                    let error_text = crate::i18n::t(&lang, "error.agent_turn_failed");
+                    let sender = crate::pipes::outbound::OutboundSender::new();
+                    let outbound = selu_core::types::OutboundEnvelope {
+                        recipient_ref: recipient_ref.clone(),
+                        text: error_text.to_string(),
+                        thread_id: Some(thread_id.clone()),
+                        reply_to_message_ref: thread.origin_message_ref.clone(),
+                        metadata: None,
+                    };
+                    if let Err(send_err) = sender.send(&outbound_url, outbound_auth.as_deref(), &outbound).await {
+                        error!("Failed to send error message to user: {send_err}");
+                    }
+                }
                 return;
             }
         };

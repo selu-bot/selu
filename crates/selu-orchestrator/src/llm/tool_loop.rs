@@ -206,8 +206,10 @@ pub async fn run_loop(
                 .map(|(id, name, args_json)| {
                     let arguments: serde_json::Value = serde_json::from_str(&args_json)
                         .unwrap_or_else(|_| {
-                            warn!(tool = %name, "Failed to parse streamed tool args, using raw string");
-                            serde_json::Value::String(args_json)
+                            warn!(tool = %name, "Failed to parse streamed tool args, wrapping as object");
+                            // Wrap in an object so providers that require JSON objects
+                            // (e.g. Bedrock's toolUse.input) don't reject the message.
+                            serde_json::json!({ "raw_input": args_json })
                         });
                     ToolCall {
                         id: if id.is_empty() {

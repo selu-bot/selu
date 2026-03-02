@@ -809,7 +809,7 @@ async fn dispatch_message(
 
     let params = TurnParams {
         pipe_id: pipe_id.clone(),
-        user_id,
+        user_id: user_id.clone(),
         agent_id: Some(agent_id),
         message: effective_text,
         thread_id: Some(thread_id.clone()),
@@ -831,6 +831,19 @@ async fn dispatch_message(
         Err(e) => {
             error!("Agent turn failed: {e}");
             let _ = thread_mgr::fail_thread(&state.db, &thread_id).await;
+            // Send a user-friendly error message so the user isn't left
+            // staring at silence.
+            let lang = crate::i18n::user_language(&state.db, &user_id).await;
+            let error_text = crate::i18n::t(&lang, "error.agent_turn_failed");
+            let _ = send_bb_reply(
+                &http,
+                &server_url,
+                &server_password,
+                &chat_guid,
+                error_text,
+                message_guid.as_deref(),
+                &sent_guids,
+            ).await;
             return;
         }
     };
