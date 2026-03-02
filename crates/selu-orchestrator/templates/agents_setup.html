@@ -8,7 +8,7 @@
 
     <!-- Back link + Header -->
     <div>
-      <a href="/agents" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+      <a href="{{ base_path }}/agents" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         <span data-i18n="agents.back">Back to Agents</span>
       </a>
@@ -16,7 +16,7 @@
       <p class="text-sm text-txt-muted mt-1" data-i18n="agents.setup.desc">Complete the following steps to finish installing this agent.</p>
     </div>
 
-    <form method="POST" action="/agents/{{ agent_id }}/setup" id="setup-form" class="space-y-4">
+    <form method="POST" action="{{ base_path }}/agents/{{ agent_id }}/setup" id="setup-form" class="space-y-4">
       {% for step in steps %}
       <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
         <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
@@ -44,7 +44,7 @@
           <div class="flex items-center gap-3">
             <button type="button"
                     class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
-                    hx-post="/agents/{{ agent_id }}/setup/test/{{ step.id }}"
+                     hx-post="{{ base_path }}/agents/{{ agent_id }}/setup/test/{{ step.id }}"
                     hx-target="#test-result-{{ step.id }}"
                     hx-swap="innerHTML"
                      hx-include="#setup-form"
@@ -150,7 +150,7 @@
 
       <!-- Actions -->
       <div class="flex items-center justify-end gap-3 pt-2">
-        <a href="/agents" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
+        <a href="{{ base_path }}/agents" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
         <button type="submit"
                 class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                 data-i18n="agents.complete">

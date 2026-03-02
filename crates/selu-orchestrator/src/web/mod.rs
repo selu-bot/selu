@@ -11,18 +11,32 @@ pub mod users;
 
 use crate::state::AppState;
 use axum::{
+    response::Redirect,
     routing::{delete, get, post},
     Router,
 };
 
+/// Build a redirect target that respects the configured base path.
+/// Example: `prefixed_redirect(&state, "/chat")` → `Redirect::to("/selu/chat")`
+pub fn prefixed_redirect(state: &AppState, path: &str) -> Redirect {
+    Redirect::to(&format!("{}{}", state.base_path, path))
+}
+
+/// Build a URL string that respects the configured base path.
+/// Useful for `format!`-based redirect targets and `HX-Redirect` headers.
+pub fn prefixed(base_path: &str, path: &str) -> String {
+    format!("{}{}", base_path, path)
+}
+
 pub fn router(state: AppState) -> Router<AppState> {
+    let bp = state.base_path.clone();
     Router::new()
         // Public routes (no auth required)
         .route("/login", get(auth::login_page).post(auth::login_submit))
         .route("/logout", post(auth::logout))
         .route("/setup", get(auth::setup_page).post(auth::setup_submit))
         // Root redirect
-        .route("/", get(|| async { axum::response::Redirect::to("/chat") }))
+        .route("/", get(move || async move { axum::response::Redirect::to(&format!("{}/chat", bp)) }))
         // All routes below require AuthUser extractor (session cookie)
         // Chat
         .route("/chat", get(chat::chat_index))

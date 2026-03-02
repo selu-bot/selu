@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
+use crate::web::prefixed_redirect;
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ pub struct UserRow {
 struct UsersTemplate {
     active_nav: &'static str,
     is_admin: bool,
+    base_path: String,
     current_user_id: String,
     users: Vec<UserRow>,
     error: Option<String>,
@@ -64,7 +66,7 @@ pub async fn users_index(
     State(state): State<AppState>,
 ) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
 
     let users = sqlx::query!(
@@ -91,7 +93,7 @@ pub async fn users_index(
         _ => "An unexpected error occurred.".to_string(),
     });
 
-    match (UsersTemplate { active_nav: "users", is_admin: user.is_admin, current_user_id: user.user_id, users, error }).render() {
+    match (UsersTemplate { active_nav: "users", is_admin: user.is_admin, base_path: state.base_path.clone(), current_user_id: user.user_id, users, error }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -106,11 +108,11 @@ pub async fn users_create(
     Form(form): Form<CreateUserForm>,
 ) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
 
     if form.username.trim().is_empty() || form.password.is_empty() {
-        return Redirect::to("/users?error=username_required").into_response();
+        return Redirect::to(&format!("{}/users?error=username_required", state.base_path)).into_response();
     }
 
     let display_name = if form.display_name.trim().is_empty() {
@@ -126,13 +128,13 @@ pub async fn users_create(
     let mut salt_bytes = [0u8; 16];
     if sys_rng.fill(&mut salt_bytes).is_err() {
         error!("Failed to generate random salt");
-        return Redirect::to("/users?error=hash_failed").into_response();
+        return Redirect::to(&format!("{}/users?error=hash_failed", state.base_path)).into_response();
     }
     let salt = match SaltString::encode_b64(&salt_bytes) {
         Ok(s) => s,
         Err(e) => {
             error!("Failed to encode SaltString: {e}");
-            return Redirect::to("/users?error=hash_failed").into_response();
+            return Redirect::to(&format!("{}/users?error=hash_failed", state.base_path)).into_response();
         }
     };
     let argon2 = Argon2::default();
@@ -140,7 +142,7 @@ pub async fn users_create(
         Ok(h) => h.to_string(),
         Err(e) => {
             error!("Argon2 hashing failed: {e}");
-            return Redirect::to("/users?error=hash_failed").into_response();
+            return Redirect::to(&format!("{}/users?error=hash_failed", state.base_path)).into_response();
         }
     };
 
@@ -159,13 +161,13 @@ pub async fn users_create(
     .await;
 
     match result {
-        Ok(_) => Redirect::to("/users").into_response(),
+        Ok(_) => Redirect::to(&format!("{}/users", state.base_path)).into_response(),
         Err(e) if e.to_string().to_lowercase().contains("unique") => {
-            Redirect::to("/users?error=duplicate").into_response()
+            Redirect::to(&format!("{}/users?error=duplicate", state.base_path)).into_response()
         }
         Err(e) => {
             error!("Failed to create user: {e}");
-            Redirect::to("/users?error=create_failed").into_response()
+            Redirect::to(&format!("{}/users?error=create_failed", state.base_path)).into_response()
         }
     }
 }
@@ -231,23 +233,27 @@ pub async fn users_toggle_admin(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    let bp = &state.base_path;
+
     // Return the updated badge HTML
     if new_val == 1 {
         Html(format!(
             r#"<button class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-coral/10 text-coral border border-coral/20 cursor-pointer hover:bg-coral/20 transition-colors"
-                    hx-post="/users/{id}/toggle-admin"
+                    hx-post="{bp}/users/{id}/toggle-admin"
                     hx-target="closest td"
                     hx-swap="innerHTML"
                     data-i18n="users.admin">Admin</button>"#,
+            bp = bp,
             id = target_id,
         )).into_response()
     } else {
         Html(format!(
             r#"<button class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-txt-muted border border-edge cursor-pointer hover:bg-sidebar-hover transition-colors"
-                    hx-post="/users/{id}/toggle-admin"
+                    hx-post="{bp}/users/{id}/toggle-admin"
                     hx-target="closest td"
                     hx-swap="innerHTML"
                     data-i18n="users.user">User</button>"#,
+            bp = bp,
             id = target_id,
         )).into_response()
     }

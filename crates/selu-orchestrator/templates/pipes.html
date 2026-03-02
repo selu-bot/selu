@@ -40,7 +40,7 @@
       <div class="space-y-3">
 
         {% for cfg in imessage_pipes %}
-        <a href="/pipes/imessage/{{ cfg.config_id }}"
+        <a href="{{ base_path }}/pipes/imessage/{{ cfg.config_id }}"
            class="block bg-surface-raised border border-edge rounded-2xl p-5 hover:border-coral/40 transition-all group">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-4">
@@ -92,7 +92,7 @@
                 <span data-i18n="pipes.active_status">Active</span>
               </span>
               <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                      hx-delete="/pipes/{{ pipe.id }}"
+                      hx-delete="{{ base_path }}/pipes/{{ pipe.id }}"
                       hx-target="closest div.rounded-2xl"
                       hx-swap="outerHTML"
                       hx-confirm="Remove pipe &quot;{{ pipe.name }}&quot;?"
@@ -111,7 +111,7 @@
       <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-txt-muted mb-3" data-i18n="pipes.addnew">Add New Pipe</h2>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <!-- Web UI -->
-        <a href="/pipes/web/new"
+        <a href="{{ base_path }}/pipes/web/new"
            class="bg-surface-raised border border-edge rounded-2xl p-5 hover:border-coral/40 transition-all group flex flex-col gap-3">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl gradient-coral flex items-center justify-center flex-shrink-0 shadow-lg shadow-coral/20">
@@ -127,7 +127,7 @@
         </a>
 
         <!-- iMessage -->
-        <a href="/pipes/imessage/setup"
+        <a href="{{ base_path }}/pipes/imessage/setup"
            class="bg-surface-raised border border-edge rounded-2xl p-5 hover:border-coral/40 transition-all group flex flex-col gap-3">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
@@ -155,7 +155,7 @@
         </div>
 
         <!-- Webhook -->
-        <a href="/pipes/webhook/new"
+        <a href="{{ base_path }}/pipes/webhook/new"
            class="bg-surface-raised border border-edge rounded-2xl p-5 hover:border-coral/40 transition-all group flex flex-col gap-3">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-amber/10 border border-amber/20 flex items-center justify-center flex-shrink-0">

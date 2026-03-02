@@ -27,7 +27,7 @@
         <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.globalmodel.hint">Used when no per-agent model is set</span>
       </div>
       <div class="p-5">
-        <form method="POST" action="/agents/default-model" class="flex items-end gap-3 flex-wrap">
+        <form method="POST" action="{{ base_path }}/agents/default-model" class="flex items-end gap-3 flex-wrap">
           <div class="flex-1 min-w-[150px]">
             <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
             <select name="provider_id" id="global-provider-select"
@@ -60,7 +60,7 @@
                   data-i18n="agents.save">Save</button>
         </form>
         {% if providers.is_empty() %}
-        <p class="text-xs text-txt-muted mt-3" data-i18n="agents.noproviders">No providers configured. Go to <a href="/providers" class="text-coral hover:text-amber transition-colors">Providers</a> to set up an API key first.</p>
+        <p class="text-xs text-txt-muted mt-3" data-i18n="agents.noproviders">No providers configured. Go to <a href="{{ base_path }}/providers" class="text-coral hover:text-amber transition-colors">Providers</a> to set up an API key first.</p>
         {% endif %}
       </div>
     </div>
@@ -93,7 +93,7 @@
               {% for agent in agents %}
               <tr class="hover:bg-sidebar-hover transition-colors">
                 <td class="px-5 py-3.5">
-                  <a href="/agents/{{ agent.id }}" class="font-medium text-txt-heading hover:text-coral transition-colors">{{ agent.name }}</a>
+                  <a href="{{ base_path }}/agents/{{ agent.id }}" class="font-medium text-txt-heading hover:text-coral transition-colors">{{ agent.name }}</a>
                   {% if agent.is_bundled %}
                    <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral" data-i18n="agents.bundled">Bundled</span>
                   {% endif %}
@@ -138,7 +138,7 @@
                     </form>
                     {% endif %}
                     {% if !agent.setup_complete %}
-                    <a href="/agents/{{ agent.id }}/setup"
+                    <a href="{{ base_path }}/agents/{{ agent.id }}/setup"
                        class="text-xs font-medium text-coral hover:text-amber bg-coral/10 border border-coral/20 hover:border-coral/40 px-2.5 py-1 rounded-lg transition-colors"
                        data-i18n="agents.setup">Setup</a>
                     {% endif %}
@@ -146,7 +146,7 @@
                             class="text-xs text-txt hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                             data-i18n="agents.model">Model</button>
                     <div class="hidden absolute z-20 right-0 mt-1 bg-surface-alt border border-edge rounded-2xl p-4 min-w-[320px] shadow-xl shadow-black/40">
-                      <form method="POST" action="/agents/{{ agent.id }}/model" class="space-y-3">
+                      <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/model" class="space-y-3">
                         <div>
                           <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
                           <select name="provider_id"
@@ -181,7 +181,7 @@
                     </div>
                     {% if !agent.is_bundled %}
                     <!-- Auto-update toggle -->
-                    <form method="POST" action="/agents/{{ agent.id }}/auto-update" class="inline">
+                    <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/auto-update" class="inline">
                       <input type="hidden" name="auto_update" value="{% if agent.auto_update %}0{% else %}1{% endif %}" />
                       <button type="submit" title="{% if agent.auto_update %}Disable auto-update{% else %}Enable auto-update{% endif %}"
                               class="text-xs border px-2.5 py-1 rounded-lg transition-colors cursor-pointer {% if agent.auto_update %}text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:border-emerald-500/40{% else %}text-txt-muted border-edge hover:border-muted hover:text-txt{% endif %}">
@@ -191,7 +191,7 @@
                         </span>
                       </button>
                     </form>
-                    <form method="POST" action="/agents/{{ agent.id }}/uninstall" class="inline"
+                    <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/uninstall" class="inline"
                           onsubmit="return confirm(t('agents.uninstall.confirm').replace('{name}', '{{ agent.name }}'))">
                       <button type="submit"
                               class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
@@ -282,7 +282,7 @@
                 <span data-i18n="agents.installed.badge">Installed</span>
               </span>
               {% else %}
-              <form method="POST" action="/agents/install">
+              <form method="POST" action="{{ base_path }}/agents/install">
                 <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
                 <button type="submit"
                         class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
@@ -373,7 +373,7 @@ function fetchModels(providerId, target) {
   if (!sel) return;
   if (!providerId) { sel.innerHTML = '<option value="">' + t('agents.selectproviderfirst') + '</option>'; return; }
   sel.innerHTML = '<option value="">' + t('agents.loadingmodels') + '</option>';
-  fetch('/agents/models/' + providerId, { credentials: 'same-origin' })
+  fetch(BASE_PATH + '/agents/models/' + providerId, { credentials: 'same-origin' })
     .then(function(r) { return r.text(); })
     .then(function(html) {
       sel.innerHTML = html;

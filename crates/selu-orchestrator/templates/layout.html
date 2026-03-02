@@ -271,11 +271,25 @@
 </head>
 <body class="bg-surface text-txt font-sans h-dvh flex overflow-hidden antialiased">
 
+  <!-- Mobile top bar (visible below md) -->
+  <div class="md:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-sidebar border-b border-edge flex items-center px-4 gap-3">
+    <button onclick="document.getElementById('sidebar').classList.remove('-translate-x-full');document.getElementById('sidebar-backdrop').classList.remove('hidden')"
+            class="p-1.5 rounded-lg hover:bg-sidebar-hover transition-colors" aria-label="Open menu">
+      <svg class="w-6 h-6 text-txt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <span class="font-heading text-lg font-black text-txt-heading tracking-tight">selu<span class="text-coral">.</span></span>
+  </div>
+  <!-- Mobile backdrop -->
+  <div id="sidebar-backdrop" class="hidden md:hidden fixed inset-0 z-40 bg-black/50"
+       onclick="document.getElementById('sidebar').classList.add('-translate-x-full');this.classList.add('hidden')"></div>
+
   <!-- Sidebar Navigation -->
-  <aside class="w-[230px] bg-sidebar backdrop-blur-sm border-r border-edge flex flex-col flex-shrink-0">
+  <aside id="sidebar" class="w-[230px] bg-sidebar backdrop-blur-sm border-r border-edge flex flex-col flex-shrink-0
+         fixed md:relative z-50 h-full transition-transform duration-200
+         -translate-x-full md:translate-x-0">
     <!-- Logo -->
     <div class="px-5 h-16 flex items-center border-b border-edge">
-      <a href="/chat" class="flex items-center gap-3 group">
+      <a href="{{ base_path }}/chat" class="flex items-center gap-3 group">
         <svg class="w-9 h-9 flex-shrink-0 animate-float" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
           <defs><linearGradient id="selu-g" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0%" stop-color="#FF7EB3"/><stop offset="100%" stop-color="#FF6B5A"/></linearGradient></defs>
           <circle cx="165" cy="90" r="50" fill="url(#selu-g)"/>
@@ -299,45 +313,45 @@
     <nav class="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
       <div class="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-faint" data-i18n="nav.main">Main</div>
 
-      <a href="/chat" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "chat" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+      <a href="{{ base_path }}/chat" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "chat" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span data-i18n="nav.chat">Chat</span>
       </a>
 
-      <a href="/personality" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "personality" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+      <a href="{{ base_path }}/personality" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "personality" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         <span data-i18n="nav.personality">Personality</span>
       </a>
 
       {% if is_admin %}
-      <a href="/pipes" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "pipes" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+      <a href="{{ base_path }}/pipes" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "pipes" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         <span data-i18n="nav.pipes">Pipes</span>
       </a>
 
-      <a href="/agents" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "agents" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+      <a href="{{ base_path }}/agents" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "agents" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
         <span data-i18n="nav.agents">Agents</span>
       </a>
 
-      <a href="/providers" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "providers" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+      <a href="{{ base_path }}/providers" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "providers" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
         <span data-i18n="nav.providers">Providers</span>
       </a>
 
-      <a href="/users" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "users" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+      <a href="{{ base_path }}/users" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "users" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span data-i18n="nav.users">Users</span>
       </a>
 
       <div class="px-3 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-faint" data-i18n="nav.advanced">Advanced</div>
 
-      <a href="/credentials" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "credentials" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+      <a href="{{ base_path }}/credentials" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "credentials" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         <span data-i18n="nav.credentials">Credentials</span>
       </a>
 
-      <a href="/subscriptions" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "subscriptions" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+      <a href="{{ base_path }}/subscriptions" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "subscriptions" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <span data-i18n="nav.events">Events</span>
       </a>
@@ -362,7 +376,7 @@
         <span id="lang-label">EN</span>
       </button>
       <!-- Logout -->
-      <form method="POST" action="/logout">
+      <form method="POST" action="{{ base_path }}/logout">
         <button type="submit" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-rosie hover:bg-rosie/5 transition-all cursor-pointer">
           <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           <span data-i18n="nav.signout">Sign out</span>
@@ -372,11 +386,22 @@
   </aside>
 
   <!-- Main Content -->
-  <main class="flex-1 flex flex-col overflow-hidden">
+  <main class="flex-1 flex flex-col overflow-hidden pt-14 md:pt-0">
     {% block body %}{% endblock %}
   </main>
 
   <script>
+    // ── Base path for reverse-proxy sub-path deployments ────────────
+    var BASE_PATH = '{{ base_path }}';
+
+    // ── Mobile sidebar toggle ──────────────────────────────────────
+    function closeSidebar() {
+      var sb = document.getElementById('sidebar');
+      var bd = document.getElementById('sidebar-backdrop');
+      if (sb) sb.classList.add('-translate-x-full');
+      if (bd) bd.classList.add('hidden');
+    }
+
     // ── Theme System ───────────────────────────────────────────────
     function getTheme() {
       return localStorage.getItem('selu-theme') || 'dark';

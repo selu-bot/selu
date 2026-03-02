@@ -10,6 +10,7 @@ use tracing::error;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
+use crate::web::prefixed_redirect;
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ pub struct ProviderView {
 struct ProvidersTemplate {
     active_nav: &'static str,
     is_admin: bool,
+    base_path: String,
     providers: Vec<ProviderView>,
     error: Option<String>,
     success: Option<String>,
@@ -56,7 +58,7 @@ pub struct SetRegionForm {
 
 pub async fn providers_index(user: AuthUser, Query(q): Query<ProvidersQuery>, State(state): State<AppState>) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
 
     let providers = sqlx::query!(
@@ -79,6 +81,7 @@ pub async fn providers_index(user: AuthUser, Query(q): Query<ProvidersQuery>, St
     match (ProvidersTemplate {
         active_nav: "providers",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         providers,
         error: q.error,
         success: q.success,
@@ -103,7 +106,7 @@ pub async fn providers_set_key(
         return StatusCode::FORBIDDEN.into_response();
     }
     if form.api_key.trim().is_empty() {
-        return Redirect::to("/providers").into_response();
+        return prefixed_redirect(&state, "/providers").into_response();
     }
 
     // Encrypt the API key using the credential store
@@ -111,7 +114,7 @@ pub async fn providers_set_key(
         Ok(e) => e,
         Err(e) => {
             error!("Failed to encrypt API key: {e}");
-            return Redirect::to("/providers?error=Failed+to+encrypt+API+key.+Please+try+again.").into_response();
+            return Redirect::to(&format!("{}/providers?error=Failed+to+encrypt+API+key.+Please+try+again.", state.base_path)).into_response();
         }
     };
 
@@ -124,13 +127,13 @@ pub async fn providers_set_key(
     .await
     {
         error!("Failed to update provider key: {e}");
-        return Redirect::to("/providers?error=Failed+to+save+API+key.+Please+try+again.").into_response();
+        return Redirect::to(&format!("{}/providers?error=Failed+to+save+API+key.+Please+try+again.", state.base_path)).into_response();
     }
 
     // Invalidate cached provider so the new key is picked up
     state.provider_cache.invalidate().await;
 
-    Redirect::to("/providers?success=API+key+updated+successfully.").into_response()
+    Redirect::to(&format!("{}/providers?success=API+key+updated+successfully.", state.base_path)).into_response()
 }
 
 pub async fn providers_delete_key(
@@ -157,7 +160,7 @@ pub async fn providers_delete_key(
     state.provider_cache.invalidate().await;
 
     // Return a refreshed card — simplest: redirect via HX-Redirect header
-    Redirect::to("/providers").into_response()
+    prefixed_redirect(&state, "/providers").into_response()
 }
 
 pub async fn providers_set_region(
@@ -178,11 +181,11 @@ pub async fn providers_set_region(
     .await
     {
         error!("Failed to update provider region: {e}");
-        return Redirect::to("/providers?error=Failed+to+save+settings.+Please+try+again.").into_response();
+        return Redirect::to(&format!("{}/providers?error=Failed+to+save+settings.+Please+try+again.", state.base_path)).into_response();
     }
 
     // Invalidate cached provider since region/URL changed
     state.provider_cache.invalidate().await;
 
-    Redirect::to("/providers?success=Settings+saved.").into_response()
+    Redirect::to(&format!("{}/providers?success=Settings+saved.", state.base_path)).into_response()
 }

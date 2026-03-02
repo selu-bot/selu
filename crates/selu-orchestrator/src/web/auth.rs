@@ -17,6 +17,7 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::state::AppState;
+use crate::web::{prefixed, prefixed_redirect};
 
 /// Session lifetime: 7 days
 const SESSION_TTL_DAYS: i64 = 7;
@@ -30,6 +31,7 @@ struct LoginTemplate {
     #[allow(dead_code)]
     active_nav: &'static str,
     error: Option<String>,
+    base_path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,7 +65,7 @@ impl FromRequestParts<AppState> for AuthUser {
 
         let session_id = match jar.get(SESSION_COOKIE) {
             Some(c) => c.value().to_string(),
-            None => return Err(Redirect::to("/login").into_response()),
+            None => return Err(Redirect::to(&prefixed(state.base_path.as_str(), "/login")).into_response()),
         };
 
         // Look up session + user
@@ -88,7 +90,7 @@ impl FromRequestParts<AppState> for AuthUser {
                 display_name: r.display_name,
                 is_admin: r.is_admin != 0,
             }),
-            None => Err(Redirect::to("/login").into_response()),
+            None => Err(Redirect::to(&prefixed(state.base_path.as_str(), "/login")).into_response()),
         }
     }
 }
@@ -103,12 +105,13 @@ pub async fn login_page(State(state): State<AppState>) -> Response {
         .unwrap_or(0);
 
     if count == 0 {
-        return Redirect::to("/setup").into_response();
+        return prefixed_redirect(&state, "/setup").into_response();
     }
 
     let tmpl = LoginTemplate {
         active_nav: "",
         error: None,
+        base_path: state.base_path.clone(),
     };
     match tmpl.render() {
         Ok(html) => Html(html).into_response(),
@@ -125,6 +128,7 @@ pub async fn login_submit(
     Form(form): Form<LoginForm>,
 ) -> Response {
     let username = form.username.trim().to_string();
+    let bp = &state.base_path;
 
     // Look up user by username
     let user = sqlx::query!(
@@ -138,20 +142,20 @@ pub async fn login_submit(
 
     let user = match user {
         Some(u) => u,
-        None => return render_login_error("Invalid username or password."),
+        None => return render_login_error("Invalid username or password.", bp),
     };
 
     // Verify password
     let hash = match PasswordHash::new(&user.password_hash) {
         Ok(h) => h,
-        Err(_) => return render_login_error("Invalid username or password."),
+        Err(_) => return render_login_error("Invalid username or password.", bp),
     };
 
     if Argon2::default()
         .verify_password(form.password.as_bytes(), &hash)
         .is_err()
     {
-        return render_login_error("Invalid username or password.");
+        return render_login_error("Invalid username or password.", bp);
     }
 
     // Create web session
@@ -175,14 +179,15 @@ pub async fn login_submit(
     }
 
     // Set session cookie
+    let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
     let cookie = Cookie::build((SESSION_COOKIE, session_id))
-        .path("/")
+        .path(cookie_path)
         .http_only(true)
         .same_site(axum_extra::extract::cookie::SameSite::Lax)
         .max_age(time::Duration::days(SESSION_TTL_DAYS))
         .build();
 
-    (jar.add(cookie), Redirect::to("/chat")).into_response()
+    (jar.add(cookie), prefixed_redirect(&state, "/chat")).into_response()
 }
 
 pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Response {
@@ -195,18 +200,21 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Response {
     }
 
     // Remove cookie
+    let bp = &state.base_path;
+    let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
     let cookie = Cookie::build((SESSION_COOKIE, ""))
-        .path("/")
+        .path(cookie_path)
         .max_age(time::Duration::ZERO)
         .build();
 
-    (jar.remove(cookie), Redirect::to("/login")).into_response()
+    (jar.remove(cookie), prefixed_redirect(&state, "/login")).into_response()
 }
 
-fn render_login_error(msg: &str) -> Response {
+fn render_login_error(msg: &str, base_path: &str) -> Response {
     let tmpl = LoginTemplate {
         active_nav: "",
         error: Some(msg.to_string()),
+        base_path: base_path.to_string(),
     };
     match tmpl.render() {
         Ok(html) => Html(html).into_response(),
@@ -224,6 +232,7 @@ fn render_login_error(msg: &str) -> Response {
 #[template(path = "setup.html")]
 struct SetupTemplate {
     error: Option<String>,
+    base_path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -242,10 +251,10 @@ pub async fn setup_page(State(state): State<AppState>) -> Response {
         .unwrap_or(1);
 
     if count > 0 {
-        return Redirect::to("/login").into_response();
+        return prefixed_redirect(&state, "/login").into_response();
     }
 
-    let tmpl = SetupTemplate { error: None };
+    let tmpl = SetupTemplate { error: None, base_path: state.base_path.clone() };
     match tmpl.render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
@@ -268,12 +277,13 @@ pub async fn setup_submit(
         .unwrap_or(1);
 
     if count > 0 {
-        return Redirect::to("/login").into_response();
+        return prefixed_redirect(&state, "/login").into_response();
     }
 
     if form.username.trim().is_empty() || form.password.is_empty() {
         let tmpl = SetupTemplate {
             error: Some("Username and password are required.".to_string()),
+            base_path: state.base_path.clone(),
         };
         return match tmpl.render() {
             Ok(html) => Html(html).into_response(),
@@ -365,12 +375,14 @@ pub async fn setup_submit(
     .execute(&state.db)
     .await;
 
+    let bp = &state.base_path;
+    let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
     let cookie = Cookie::build((SESSION_COOKIE, session_id))
-        .path("/")
+        .path(cookie_path)
         .http_only(true)
         .same_site(axum_extra::extract::cookie::SameSite::Lax)
         .max_age(time::Duration::days(SESSION_TTL_DAYS))
         .build();
 
-    (jar.add(cookie), Redirect::to("/chat")).into_response()
+    (jar.add(cookie), prefixed_redirect(&state, "/chat")).into_response()
 }

@@ -39,6 +39,7 @@ pub struct FactGroup {
 struct PersonalityTemplate {
     active_nav: &'static str,
     is_admin: bool,
+    base_path: String,
     groups: Vec<FactGroup>,
     error: Option<String>,
     success: Option<String>,
@@ -48,12 +49,14 @@ struct PersonalityTemplate {
 #[template(path = "personality_fact_row.html")]
 struct FactRowFragment {
     fact: FactRow,
+    base_path: String,
 }
 
 #[derive(Template)]
 #[template(path = "personality_edit_row.html")]
 struct EditRowFragment {
     fact: FactRow,
+    base_path: String,
 }
 
 // ── Query / Form structs ──────────────────────────────────────────────────────
@@ -132,6 +135,7 @@ pub async fn personality_index(
     match (PersonalityTemplate {
         active_nav: "personality",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         groups,
         error: q.error,
         success: q.success,
@@ -153,7 +157,7 @@ pub async fn personality_add(
     Form(form): Form<AddFactForm>,
 ) -> Response {
     if form.fact.trim().is_empty() {
-        return Redirect::to("/personality?error=empty").into_response();
+        return Redirect::to(&format!("{}/personality?error=empty", state.base_path)).into_response();
     }
 
     let valid_categories = ["personal", "preferences", "location", "work", "other"];
@@ -166,10 +170,10 @@ pub async fn personality_add(
     match personality::add_fact(&state.db, &user.user_id, &category, form.fact.trim(), "manual")
         .await
     {
-        Ok(_) => Redirect::to("/personality?success=added").into_response(),
+        Ok(_) => Redirect::to(&format!("{}/personality?success=added", state.base_path)).into_response(),
         Err(e) => {
             error!("Failed to add personality fact: {e}");
-            Redirect::to("/personality?error=add_failed").into_response()
+            Redirect::to(&format!("{}/personality?error=add_failed", state.base_path)).into_response()
         }
     }
 }
@@ -208,7 +212,7 @@ pub async fn personality_edit_form(
                 source,
                 created_at,
             };
-            match (EditRowFragment { fact: row }).render() {
+            match (EditRowFragment { fact: row, base_path: state.base_path.clone() }).render() {
                 Ok(html) => Html(html).into_response(),
                 Err(e) => {
                     error!("Template render error: {e}");
@@ -259,7 +263,7 @@ pub async fn personality_update(
         source,
         created_at: String::new(),
     };
-    match (FactRowFragment { fact: row }).render() {
+    match (FactRowFragment { fact: row, base_path: state.base_path.clone() }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -290,7 +294,7 @@ pub async fn personality_row(
                 source,
                 created_at,
             };
-            match (FactRowFragment { fact: row }).render() {
+            match (FactRowFragment { fact: row, base_path: state.base_path.clone() }).render() {
                 Ok(html) => Html(html).into_response(),
                 Err(e) => {
                     error!("Template render error: {e}");

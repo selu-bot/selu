@@ -7,7 +7,7 @@
   <div class="max-w-3xl mx-auto px-6 py-8 space-y-6 animate-fadein">
 
     <!-- Back link -->
-    <a href="/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors">
+    <a href="{{ base_path }}/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       <span data-i18n="pipes.back">Back to Pipes</span>
     </a>
@@ -47,7 +47,7 @@
         <span class="text-sm font-semibold text-txt-heading">Connection Details</span>
       </div>
       <div class="p-5">
-        <div class="grid grid-cols-2 gap-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1">Server</p>
             <p class="text-sm text-txt font-mono">{{ config.server_url }}</p>
@@ -91,7 +91,7 @@
             <div class="text-xs text-txt-muted font-mono">{{ person.sender_ref }}</div>
           </div>
           <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                  hx-delete="/pipes/imessage/{{ config.config_id }}/people/{{ person.ref_id }}"
+                  hx-delete="{{ base_path }}/pipes/imessage/{{ config.config_id }}/people/{{ person.ref_id }}"
                   hx-target="closest div"
                   hx-swap="outerHTML"
                   hx-confirm="Remove {{ person.display_name }}?">Remove</button>
@@ -102,7 +102,7 @@
 
       <!-- Add person form -->
       <div class="border-t border-edge p-5">
-        <form method="post" action="/pipes/imessage/{{ config.config_id }}/people"
+        <form method="post" action="{{ base_path }}/pipes/imessage/{{ config.config_id }}/people"
               class="flex items-end gap-3">
           <div class="flex-1">
             <label class="block text-xs font-medium text-txt-muted mb-1.5">Phone / Apple ID</label>
@@ -136,7 +136,7 @@
           Removing this pipe will stop Selu from monitoring this chat. Messages already received are kept.
         </p>
         <button class="text-sm font-medium text-rosie border border-rosie/30 hover:border-rosie/50 hover:bg-rosie/5 px-4 py-2 rounded-xl transition-colors cursor-pointer"
-                hx-delete="/pipes/imessage/{{ config.config_id }}"
+                hx-delete="{{ base_path }}/pipes/imessage/{{ config.config_id }}"
                 hx-confirm="Remove this iMessage pipe? Selu will stop monitoring this chat.">
           Remove Pipe
         </button>

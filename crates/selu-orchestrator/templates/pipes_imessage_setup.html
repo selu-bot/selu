@@ -8,7 +8,7 @@
 
     <!-- Back link + Header -->
     <div>
-      <a href="/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+      <a href="{{ base_path }}/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         <span data-i18n="pipes.back">Back to Pipes</span>
       </a>
@@ -40,7 +40,7 @@
     </div>
     {% endif %}
 
-    <form method="post" action="/pipes/imessage/setup" id="setup-form" class="space-y-4">
+    <form method="post" action="{{ base_path }}/pipes/imessage/setup" id="setup-form" class="space-y-4">
 
       <!-- Step 1: BlueBubbles Server -->
       <div id="step-1" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
@@ -156,7 +156,7 @@
 
       <!-- Submit -->
       <div id="submit-row" class="flex items-center justify-between pt-2 hidden">
-        <a href="/pipes" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="pipes.cancel">Cancel</a>
+        <a href="{{ base_path }}/pipes" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="pipes.cancel">Cancel</a>
         <button type="submit" id="btn-submit" disabled
                 class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                 data-i18n="imsg.setup">
@@ -190,7 +190,7 @@ async function testConnection() {
   btn.classList.add('opacity-60');
    status.innerHTML = '<span class="text-txt-muted">Reaching BlueBubbles server...</span>';
   try {
-    const resp = await fetch('/pipes/imessage/proxy/chats', {
+    const resp = await fetch(BASE_PATH + '/pipes/imessage/proxy/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ server_url: serverUrl, server_password: password }),

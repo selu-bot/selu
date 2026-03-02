@@ -23,6 +23,13 @@ pub struct AppConfig {
     /// Set via `SELU__EXTERNAL_URL` for non-local setups.
     #[serde(default)]
     pub external_url: Option<String>,
+    /// Optional URL path prefix for running behind a reverse proxy with a
+    /// sub-path (e.g. `/selu`).  When set, all generated links, redirects,
+    /// and cookie paths include this prefix.  The value must start with `/`
+    /// and must **not** end with `/`.
+    /// Set via `SELU__BASE_PATH`.
+    #[serde(default)]
+    pub base_path: Option<String>,
 }
 
 fn default_max_chain_depth() -> i32 {
@@ -36,6 +43,16 @@ impl AppConfig {
         self.external_url
             .clone()
             .unwrap_or_else(|| format!("http://localhost:{}", self.server.port))
+    }
+
+    /// The URL path prefix for reverse-proxy sub-path deployments.
+    /// Returns an empty string when no prefix is configured.
+    /// Always starts with `/` (when set) and never ends with `/`.
+    pub fn base_path(&self) -> &str {
+        match &self.base_path {
+            Some(p) => p.trim_end_matches('/'),
+            None => "",
+        }
     }
 }
 

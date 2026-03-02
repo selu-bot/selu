@@ -51,6 +51,7 @@ pub struct MessageView {
 struct ChatTemplate {
     active_nav: &'static str,
     is_admin: bool,
+    base_path: String,
     pipes: Vec<PipeView>,
     selected_pipe_id: String,
     selected_pipe: Option<PipeView>,
@@ -145,12 +146,13 @@ pub async fn chat_index(user: AuthUser, State(state): State<AppState>) -> Respon
 
     // If the user has exactly one web pipe, redirect directly to it
     if pipes.len() == 1 {
-        return axum::response::Redirect::to(&format!("/chat/{}", pipes[0].id)).into_response();
+        return axum::response::Redirect::to(&format!("{}/chat/{}", state.base_path, pipes[0].id)).into_response();
     }
 
     render_template(ChatTemplate {
         active_nav: "chat",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         selected_pipe_id: String::new(),
         selected_pipe: None,
         threads: vec![],
@@ -174,6 +176,7 @@ pub async fn chat_pipe(
     render_template(ChatTemplate {
         active_nav: "chat",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         selected_pipe_id: pipe_id_str,
         selected_pipe: selected,
         threads,
@@ -199,6 +202,7 @@ pub async fn chat_thread(
     render_template(ChatTemplate {
         active_nav: "chat",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         selected_pipe_id: pipe_id_str,
         selected_pipe: selected,
         threads,
@@ -235,7 +239,7 @@ pub async fn chat_new_thread(
         None,
     ).await {
         Ok(thread) => {
-            let url = format!("/chat/{}/t/{}", pipe_id_str, thread.id);
+            let url = format!("{}/chat/{}/t/{}", state.base_path, pipe_id_str, thread.id);
             Redirect::to(&url).into_response()
         }
         Err(e) => {
@@ -287,6 +291,7 @@ pub async fn chat_send(
         notify,
     ));
 
+    let bp = &state.base_path;
     let html = format!(
         r#"<div class="flex justify-end">
   <div class="max-w-[72%] bg-gradient-to-br from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">
@@ -297,13 +302,14 @@ pub async fn chat_send(
   <div class="max-w-[72%] bg-surface-raised border border-edge rounded-2xl rounded-bl-md px-4 py-2.5">
     <div class="text-sm leading-relaxed break-words markdown-body streaming" id="stream-{stream_id}"
          hx-ext="sse"
-         sse-connect="/chat/{pipe_id}/stream/{stream_id}"
+         sse-connect="{base_path}/chat/{pipe_id}/stream/{stream_id}"
          sse-swap="token"
          hx-swap="beforeend">
     </div>
   </div>
 </div>"#,
         escaped_text = html_escape(&text),
+        base_path = bp,
         pipe_id = pipe_id_str,
         stream_id = stream_id,
     );
@@ -330,6 +336,7 @@ pub async fn chat_stream(
         }
     }
 
+    let bp = state.base_path.clone();
     let sid = stream_id.clone();
     let confirmations = state.pending_confirmations.clone();
     let sse_stream = ReceiverStream::new(bridge_rx).map(move |event| {
@@ -381,7 +388,7 @@ pub async fn chat_stream(
                     warn!("Failed to lock pending_confirmations; confirmation will be auto-denied");
                 }
 
-                build_confirmation_html(&sid, &confirmation_id, &tool_display, &args_pretty)
+                build_confirmation_html(&sid, &confirmation_id, &tool_display, &args_pretty, &bp)
             }
             LoopEvent::Done => {
                 format!(r#"<script>finalizeStream('{sid}');</script>"#, sid = sid)
@@ -548,7 +555,8 @@ async fn process_message(
     state.active_streams.lock().await.remove(&stream_id);
 }
 
-fn build_confirmation_html(sid: &str, cid: &str, tool: &str, args: &str) -> String {
+fn build_confirmation_html(sid: &str, cid: &str, tool: &str, args: &str, base_path: &str) -> String {
+    let bp = base_path;
     let tool_esc = html_escape(tool);
     let args_esc = html_escape(args).replace('\n', "\\n").replace('\r', "");
     let mut s = String::new();
@@ -576,12 +584,12 @@ fn build_confirmation_html(sid: &str, cid: &str, tool: &str, args: &str) -> Stri
     s.push_str(&args_esc);
     s.push_str("</pre>';\n");
     s.push_str("  h += '<div class=\"confirm-actions\">';\n");
-    s.push_str("  h += '<button hx-post=\"/chat/confirm/");
+    s.push_str(&format!("  h += '<button hx-post=\"{}/chat/confirm/", bp));
     s.push_str(cid);
     s.push_str("?approved=true\" hx-target=\"#confirm-");
     s.push_str(cid);
     s.push_str("\" hx-swap=\"outerHTML\" class=\"btn-approve\">' + t('chat.confirm.approve') + '</button>';\n");
-    s.push_str("  h += '<button hx-post=\"/chat/confirm/");
+    s.push_str(&format!("  h += '<button hx-post=\"{}/chat/confirm/", bp));
     s.push_str(cid);
     s.push_str("?approved=false\" hx-target=\"#confirm-");
     s.push_str(cid);

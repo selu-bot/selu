@@ -43,23 +43,17 @@
                 </span>
                 {% else if user.is_admin %}
                 <button class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-coral/10 text-coral border border-coral/20 cursor-pointer hover:bg-coral/20 transition-colors"
-                        hx-post="/users/{{ user.id }}/toggle-admin"
-                        hx-target="closest td"
-                        hx-swap="innerHTML"
-                        data-i18n="users.admin">Admin</button>
+                        hx-post="{{ base_path }}/users/{{ user.id }}/toggle-admin"
                 {% else %}
                 <button class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-txt-muted border border-edge cursor-pointer hover:bg-sidebar-hover transition-colors"
-                        hx-post="/users/{{ user.id }}/toggle-admin"
-                        hx-target="closest td"
-                        hx-swap="innerHTML"
-                        data-i18n="users.user">User</button>
+                        hx-post="{{ base_path }}/users/{{ user.id }}/toggle-admin"
                 {% endif %}
               </td>
               <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ user.created_at }}</td>
               <td class="px-5 py-3.5 text-right">
                 {% if user.id != current_user_id %}
                 <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                        hx-delete="/users/{{ user.id }}"
+                        hx-delete="{{ base_path }}/users/{{ user.id }}"
                         hx-target="closest tr"
                         hx-swap="outerHTML"
                         hx-confirm="Delete user {{ user.username }}? This cannot be undone."
@@ -83,7 +77,7 @@
       <div class="px-5 py-3.5 border-b border-edge">
         <span class="text-sm font-semibold text-txt-heading" data-i18n="users.create">Create User</span>
       </div>
-      <form method="post" action="/users">
+      <form method="post" action="{{ base_path }}/users">
         <div class="p-5 space-y-4">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>

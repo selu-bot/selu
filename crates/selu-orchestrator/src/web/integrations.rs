@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
+use crate::web::prefixed_redirect;
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ pub struct UserOption {
 struct ImessageSetupTemplate {
     active_nav: &'static str,
     is_admin: bool,
+    base_path: String,
     users: Vec<UserOption>,
     error: Option<String>,
 }
@@ -57,6 +59,7 @@ struct ImessageSetupTemplate {
 struct ImessageDetailTemplate {
     active_nav: &'static str,
     is_admin: bool,
+    base_path: String,
     config: ImessageDetail,
     people: Vec<AllowedPerson>,
     users: Vec<UserOption>,
@@ -297,13 +300,14 @@ pub async fn imessage_setup_page(
     State(state): State<AppState>,
 ) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
     let users = load_users(&state.db).await;
 
     match (ImessageSetupTemplate {
         active_nav: "pipes",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         users,
         error: q.error,
     }).render() {
@@ -330,14 +334,14 @@ pub async fn imessage_setup_submit(
         || form.server_password.is_empty()
         || form.chat_guid.trim().is_empty()
     {
-        return Redirect::to("/pipes/imessage/setup?error=Please+fill+in+all+required+fields").into_response();
+        return Redirect::to(&format!("{}/pipes/imessage/setup?error=Please+fill+in+all+required+fields", state.base_path)).into_response();
     }
 
     // 1. Find a user to own the pipe (first user, or from people list)
     let owner_user_id = match find_pipe_owner(&state.db, &form.people).await {
         Some(id) => id,
         None => {
-            return Redirect::to("/pipes/imessage/setup?error=You+need+at+least+one+user.+Create+one+in+Users+first.").into_response();
+            return Redirect::to(&format!("{}/pipes/imessage/setup?error=You+need+at+least+one+user.+Create+one+in+Users+first.", state.base_path)).into_response();
         }
     };
 
@@ -358,7 +362,7 @@ pub async fn imessage_setup_submit(
     .await
     {
         error!("Failed to create pipe: {e}");
-        return Redirect::to("/pipes/imessage/setup?error=Failed+to+create+pipe").into_response();
+        return Redirect::to(&format!("{}/pipes/imessage/setup?error=Failed+to+create+pipe", state.base_path)).into_response();
     }
 
     // 3. Create the BlueBubbles config
@@ -373,7 +377,7 @@ pub async fn imessage_setup_submit(
     .await
     {
         error!("Failed to create BB config: {e}");
-        return Redirect::to("/pipes/imessage/setup?error=Failed+to+create+adapter+config").into_response();
+        return Redirect::to(&format!("{}/pipes/imessage/setup?error=Failed+to+create+adapter+config", state.base_path)).into_response();
     }
 
     // 4. Create sender ref mappings from the people list
@@ -400,14 +404,15 @@ pub async fn imessage_setup_submit(
     }
 
     // 5. Start the adapter immediately (no restart needed)
+    let bp = state.base_path.clone();
     if let Err(e) = crate::bluebubbles::adapter::start_one(state, &bb_config_id).await {
         error!("Failed to start BlueBubbles adapter: {e}");
         // Non-fatal: the config is saved, adapter will start on next restart
     }
 
     Redirect::to(&format!(
-        "/pipes/imessage/{}?msg=iMessage+pipe+set+up+successfully!",
-        bb_config_id
+        "{}/pipes/imessage/{}?msg=iMessage+pipe+set+up+successfully!",
+        bp, bb_config_id
     )).into_response()
 }
 
@@ -420,11 +425,11 @@ pub async fn imessage_detail(
     State(state): State<AppState>,
 ) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
     let config = match load_imessage_config(&state.db, &config_id).await {
         Some(c) => c,
-        None => return Redirect::to("/pipes").into_response(),
+        None => return prefixed_redirect(&state, "/pipes").into_response(),
     };
 
     let people = load_allowed_people(&state.db, &config.pipe_id).await;
@@ -433,6 +438,7 @@ pub async fn imessage_detail(
     match (ImessageDetailTemplate {
         active_nav: "pipes",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         config,
         people,
         users,
@@ -458,7 +464,7 @@ pub async fn imessage_add_person(
     }
     if form.user_id.is_empty() || form.sender_ref.trim().is_empty() {
         return Redirect::to(&format!(
-            "/pipes/imessage/{}?error=Please+fill+in+both+fields", config_id
+            "{}/pipes/imessage/{}?error=Please+fill+in+both+fields", state.base_path, config_id
         )).into_response();
     }
 
@@ -470,7 +476,7 @@ pub async fn imessage_add_person(
         .flatten()
     {
         Some(r) => r.pipe_id,
-        None => return Redirect::to("/pipes").into_response(),
+        None => return prefixed_redirect(&state, "/pipes").into_response(),
     };
 
     let ref_id = Uuid::new_v4().to_string();
@@ -482,15 +488,15 @@ pub async fn imessage_add_person(
     .await
     {
         Ok(_) => Redirect::to(&format!(
-            "/pipes/imessage/{}?msg=Person+added", config_id
+            "{}/pipes/imessage/{}?msg=Person+added", state.base_path, config_id
         )).into_response(),
         Err(e) if e.to_string().contains("UNIQUE") => Redirect::to(&format!(
-            "/pipes/imessage/{}?error=This+phone+number+is+already+added", config_id
+            "{}/pipes/imessage/{}?error=This+phone+number+is+already+added", state.base_path, config_id
         )).into_response(),
         Err(e) => {
             error!("Failed to add person: {e}");
             Redirect::to(&format!(
-                "/pipes/imessage/{}?error=Failed+to+add+person.+Please+try+again.", config_id
+                "{}/pipes/imessage/{}?error=Failed+to+add+person.+Please+try+again.", state.base_path, config_id
             )).into_response()
         }
     }
@@ -552,7 +558,7 @@ pub async fn imessage_delete(
     .execute(&state.db)
     .await;
 
-    Redirect::to("/pipes?msg=Pipe+removed").into_response()
+    Redirect::to(&format!("{}/pipes?msg=Pipe+removed", state.base_path)).into_response()
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────

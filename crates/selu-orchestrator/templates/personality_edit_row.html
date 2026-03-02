@@ -1,5 +1,5 @@
-<form class="flex items-center gap-3 px-5 py-3 bg-sidebar-hover" id="fact-{{ fact.id }}"
-      hx-put="/personality/{{ fact.id }}"
+<form class="flex items-center gap-3 px-5 py-3 bg-sidebar-hover flex-wrap" id="fact-{{ fact.id }}"
+      hx-put="{{ base_path }}/personality/{{ fact.id }}"
       hx-target="#fact-{{ fact.id }}"
       hx-swap="outerHTML">
   <div class="flex-1 min-w-0 flex gap-3">
@@ -20,7 +20,7 @@
             data-i18n="common.save">Save</button>
     <button type="button"
             class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-txt-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-            hx-get="/personality/{{ fact.id }}/row"
+            hx-get="{{ base_path }}/personality/{{ fact.id }}/row"
             hx-target="#fact-{{ fact.id }}"
             hx-swap="outerHTML"
             data-i18n="common.cancel">Cancel</button>

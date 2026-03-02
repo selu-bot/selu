@@ -60,7 +60,7 @@
               <td class="px-5 py-3.5 text-right">
                 {% if sub.active %}
                 <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                        hx-delete="/subscriptions/{{ sub.id }}"
+                        hx-delete="{{ base_path }}/subscriptions/{{ sub.id }}"
                         hx-target="closest tr"
                         hx-swap="outerHTML"
                         hx-confirm="Deactivate this subscription?"
@@ -84,12 +84,12 @@
       <div class="px-5 py-3.5 border-b border-edge">
         <span class="text-sm font-semibold text-txt-heading" data-i18n="subs.create">Create Subscription</span>
       </div>
-      <form method="post" action="/subscriptions">
+      <form method="post" action="{{ base_path }}/subscriptions">
         <div class="p-5 space-y-4">
           {% if users.is_empty() %}
           <div class="px-4 py-3 rounded-xl bg-coral/10 border border-coral/20 text-coral text-sm">
             <p class="font-semibold">No users found.</p>
-            <p><a href="/users" class="underline hover:no-underline">Create a user</a> before adding subscriptions.</p>
+            <p><a href="{{ base_path }}/users" class="underline hover:no-underline">Create a user</a> before adding subscriptions.</p>
           </div>
           {% endif %}
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

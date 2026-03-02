@@ -7,7 +7,7 @@
   <div class="max-w-3xl mx-auto px-6 py-8 space-y-6 animate-fadein">
 
     <!-- Back link -->
-    <a href="/agents" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors">
+    <a href="{{ base_path }}/agents" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       <span data-i18n="agents.back">Back to Agents</span>
     </a>
@@ -53,7 +53,7 @@
         <!-- Resources -->
         <div>
           <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.resources">Resources</p>
-          <div class="flex gap-3 text-xs text-txt-muted">
+          <div class="flex flex-wrap gap-3 text-xs text-txt-muted">
             <span><span data-i18n="agents.detail.memory">Memory</span>: {{ cap.max_memory_mb }}MB</span>
             <span><span data-i18n="agents.detail.cpu">CPU</span>: {{ cap.max_cpu_fraction }}</span>
             <span><span data-i18n="agents.detail.pids">PIDs</span>: {{ cap.pids_limit }}</span>
@@ -84,7 +84,7 @@
           <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">{{ cap.id }}</p>
           <div class="space-y-1.5">
             {% for tool in cap.tools %}
-            <div class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl gap-4">
+            <div class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl flex-wrap gap-2">
               <div class="flex-1 min-w-0">
                 <div class="text-sm text-txt-heading font-medium truncate">{{ tool.name }}</div>
                 <div class="text-xs text-txt-muted mt-0.5 line-clamp-2">{{ tool.description }}</div>
@@ -93,7 +93,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="global_{{ tool.capability_id }}_{{ tool.name }}" value="allow"
                          {% if tool.global_default == "allow" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "allow", "scope": "global"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -104,7 +104,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="global_{{ tool.capability_id }}_{{ tool.name }}" value="ask"
                          {% if tool.global_default == "ask" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "ask", "scope": "global"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -115,7 +115,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="global_{{ tool.capability_id }}_{{ tool.name }}" value="block"
                          {% if tool.global_default == "block" || tool.global_default == "not set" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "block", "scope": "global"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -137,7 +137,7 @@
           <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.builtintools">Built-in Tools</p>
           <div class="space-y-1.5">
             {% for bp in builtin_policies %}
-            <div class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl gap-4">
+            <div class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl flex-wrap gap-2">
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium text-txt-heading truncate">{{ bp.display_name }}</div>
                 <div class="text-xs text-txt-muted mt-0.5 line-clamp-2">{{ bp.description }}</div>
@@ -146,7 +146,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="global_{{ bp.tool_name }}" value="allow"
                          {% if bp.global_default == "allow" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "allow", "scope": "global"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -157,7 +157,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="global_{{ bp.tool_name }}" value="ask"
                          {% if bp.global_default == "ask" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "ask", "scope": "global"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -168,7 +168,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="global_{{ bp.tool_name }}" value="block"
                          {% if bp.global_default == "block" || bp.global_default == "not set" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "block", "scope": "global"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -211,7 +211,7 @@
                   {% if tool.has_override %}
                   <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20" data-i18n="agents.policy.user_override">Custom</span>
                   <button
-                    hx-post="/agents/{{ agent_id }}/policy/reset"
+                    hx-post="{{ base_path }}/agents/{{ agent_id }}/policy/reset"
                     hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}"}'
                     hx-swap="none"
                     class="text-[10px] text-coral hover:text-coral/80 transition-colors underline underline-offset-2"
@@ -228,7 +228,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="user_{{ tool.capability_id }}_{{ tool.name }}" value="allow"
                          {% if tool.policy == "allow" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "allow"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -239,7 +239,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="user_{{ tool.capability_id }}_{{ tool.name }}" value="ask"
                          {% if tool.policy == "ask" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "ask"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -250,7 +250,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="user_{{ tool.capability_id }}_{{ tool.name }}" value="block"
                          {% if tool.policy == "block" || tool.policy == "not set" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "block"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -279,7 +279,7 @@
                   {% if bp.has_override %}
                   <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20" data-i18n="agents.policy.user_override">Custom</span>
                   <button
-                    hx-post="/agents/{{ agent_id }}/policy/reset"
+                    hx-post="{{ base_path }}/agents/{{ agent_id }}/policy/reset"
                     hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}"}'
                     hx-swap="none"
                     class="text-[10px] text-coral hover:text-coral/80 transition-colors underline underline-offset-2"
@@ -296,7 +296,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="user_{{ bp.tool_name }}" value="allow"
                          {% if bp.policy == "allow" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "allow"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -307,7 +307,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="user_{{ bp.tool_name }}" value="ask"
                          {% if bp.policy == "ask" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "ask"}'
                          hx-swap="none"
                          class="sr-only peer" />
@@ -318,7 +318,7 @@
                 <label class="inline-flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="user_{{ bp.tool_name }}" value="block"
                          {% if bp.policy == "block" || bp.policy == "not set" %}checked{% endif %}
-                         hx-post="/agents/{{ agent_id }}/policy"
+                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
                          hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "block"}'
                          hx-swap="none"
                          class="sr-only peer" />

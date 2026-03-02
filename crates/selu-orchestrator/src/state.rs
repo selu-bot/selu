@@ -22,6 +22,9 @@ pub type AgentMap = HashMap<String, Arc<AgentDefinition>>;
 pub struct AppState {
     pub db: SqlitePool,
     pub config: Arc<AppConfig>,
+    /// URL path prefix for reverse-proxy sub-path deployments (e.g. "/selu").
+    /// Empty string when not configured.  Computed once at startup from config.
+    pub base_path: String,
     /// Agent definitions loaded from disk at startup (refreshable).
     ///
     /// Uses `ArcSwap` for lock-free reads: readers call `agents.load()`
@@ -63,11 +66,13 @@ impl AppState {
         credentials: CredentialStore,
         events: EventBus,
     ) -> Self {
+        let base_path = config.base_path().to_string();
         // Wrap each AgentDefinition in Arc for cheap cloning
         let arc_agents: AgentMap = agents.into_iter().map(|(k, v)| (k, Arc::new(v))).collect();
         Self {
             db,
             config: Arc::new(config),
+            base_path,
             agents: Arc::new(ArcSwap::from_pointee(arc_agents)),
             active_streams: Arc::new(Mutex::new(HashMap::new())),
             stream_notifies: Arc::new(Mutex::new(HashMap::new())),

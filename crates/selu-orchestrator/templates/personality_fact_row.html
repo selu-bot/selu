@@ -6,14 +6,14 @@
       {% else %}<span data-i18n="personality.source.manual">Added manually</span>{% endif %}
     </p>
   </div>
-  <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+  <div class="flex items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
     <button class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-txt-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-            hx-get="/personality/{{ fact.id }}/edit"
+            hx-get="{{ base_path }}/personality/{{ fact.id }}/edit"
             hx-target="#fact-{{ fact.id }}"
             hx-swap="outerHTML"
             data-i18n="personality.edit">Edit</button>
     <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-            hx-delete="/personality/{{ fact.id }}"
+            hx-delete="{{ base_path }}/personality/{{ fact.id }}"
             hx-target="#fact-{{ fact.id }}"
             hx-swap="outerHTML"
             data-i18n="personality.delete">Remove</button>

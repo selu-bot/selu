@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
+use crate::web::prefixed_redirect;
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ pub struct PipeCreatedFlash {
 struct PipesTemplate {
     active_nav: &'static str,
     is_admin: bool,
+    base_path: String,
     imessage_pipes: Vec<ImessagePipeView>,
     other_pipes: Vec<OtherPipeView>,
     flash: Option<PipeCreatedFlash>,
@@ -63,6 +65,7 @@ struct PipesTemplate {
 struct PipesWebhookNewTemplate {
     active_nav: &'static str,
     is_admin: bool,
+    base_path: String,
     users: Vec<UserOption>,
     error: Option<String>,
 }
@@ -72,6 +75,7 @@ struct PipesWebhookNewTemplate {
 struct PipesWebNewTemplate {
     active_nav: &'static str,
     is_admin: bool,
+    base_path: String,
     users: Vec<UserOption>,
     error: Option<String>,
 }
@@ -156,7 +160,7 @@ pub async fn pipes_index(
     State(state): State<AppState>,
 ) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
     // Build lookup maps: user_id -> display_name, pipe_id -> user_id
     let users = user_display_map(&state.db).await;
@@ -218,7 +222,7 @@ pub async fn pipes_index(
 
     let flash = if q.created.as_deref() == Some("1") {
         q.pipe_id.zip(q.token).map(|(id, tok)| PipeCreatedFlash {
-            inbound_url: format!("/api/pipes/{}/inbound", id),
+            inbound_url: format!("{}/api/pipes/{}/inbound", state.base_path, id),
             pipe_id: id,
             inbound_token: tok,
         })
@@ -229,6 +233,7 @@ pub async fn pipes_index(
     match (PipesTemplate {
         active_nav: "pipes",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         imessage_pipes,
         other_pipes,
         flash,
@@ -250,7 +255,7 @@ pub async fn pipes_webhook_new(
     State(state): State<AppState>,
 ) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
 
     let users = db_users(&state.db).await;
@@ -258,6 +263,7 @@ pub async fn pipes_webhook_new(
     match (PipesWebhookNewTemplate {
         active_nav: "pipes",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         users,
         error: q.error,
     }).render() {
@@ -276,13 +282,13 @@ pub async fn pipes_webhook_create(
     Form(form): Form<WebhookCreateForm>,
 ) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
     if form.name.trim().is_empty()
         || form.user_id.is_empty()
         || form.outbound_url.trim().is_empty()
     {
-        return Redirect::to("/pipes/webhook/new?error=Name%2C+owner%2C+and+outbound+URL+are+required.").into_response();
+        return Redirect::to(&format!("{}/pipes/webhook/new?error=Name%2C+owner%2C+and+outbound+URL+are+required.", state.base_path)).into_response();
     }
 
     let id = Uuid::new_v4().to_string();
@@ -308,14 +314,15 @@ pub async fn pipes_webhook_create(
 
     match result {
         Ok(_) => Redirect::to(&format!(
-            "/pipes?created=1&pipe_id={}&token={}",
+            "{}/pipes?created=1&pipe_id={}&token={}",
+            state.base_path,
             urlencoding::encode(&id),
             urlencoding::encode(&inbound_token),
         ))
         .into_response(),
         Err(e) => {
             error!("Failed to create pipe: {e}");
-            Redirect::to("/pipes/webhook/new?error=Failed+to+create+pipe.+Please+try+again.").into_response()
+            Redirect::to(&format!("{}/pipes/webhook/new?error=Failed+to+create+pipe.+Please+try+again.", state.base_path)).into_response()
         }
     }
 }
@@ -327,7 +334,7 @@ pub async fn pipes_web_new(
     State(state): State<AppState>,
 ) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
 
     let users = db_users(&state.db).await;
@@ -335,6 +342,7 @@ pub async fn pipes_web_new(
     match (PipesWebNewTemplate {
         active_nav: "pipes",
         is_admin: user.is_admin,
+        base_path: state.base_path.clone(),
         users,
         error: q.error,
     }).render() {
@@ -353,10 +361,10 @@ pub async fn pipes_web_create(
     Form(form): Form<WebCreateForm>,
 ) -> Response {
     if !user.is_admin {
-        return Redirect::to("/chat").into_response();
+        return prefixed_redirect(&state, "/chat").into_response();
     }
     if form.name.trim().is_empty() || form.user_id.is_empty() {
-        return Redirect::to("/pipes/web/new?error=Name+and+owner+are+required.").into_response();
+        return Redirect::to(&format!("{}/pipes/web/new?error=Name+and+owner+are+required.", state.base_path)).into_response();
     }
 
     let id = Uuid::new_v4().to_string();
@@ -383,13 +391,14 @@ pub async fn pipes_web_create(
 
     match result {
         Ok(_) => Redirect::to(&format!(
-            "/pipes?msg=Web+pipe+%22{}%22+created.+Go+to+Chat+to+start+talking.",
+            "{}/pipes?msg=Web+pipe+%22{}%22+created.+Go+to+Chat+to+start+talking.",
+            state.base_path,
             urlencoding::encode(&form.name),
         ))
         .into_response(),
         Err(e) => {
             error!("Failed to create web pipe: {e}");
-            Redirect::to("/pipes/web/new?error=Failed+to+create+pipe.+Please+try+again.").into_response()
+            Redirect::to(&format!("{}/pipes/web/new?error=Failed+to+create+pipe.+Please+try+again.", state.base_path)).into_response()
         }
     }
 }
