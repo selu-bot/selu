@@ -23,7 +23,12 @@ impl AnthropicProvider {
     pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
         let model_str = model.into();
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .pool_max_idle_per_host(4)
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
+                .build()
+                .expect("Failed to build HTTP client"),
             api_key: api_key.into(),
             base_url: "https://api.anthropic.com".into(),
             model: if model_str.is_empty() { "claude-sonnet-4-20250514".into() } else { model_str },
@@ -157,6 +162,7 @@ impl LlmProvider for AnthropicProvider {
             .post(format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
+            .timeout(std::time::Duration::from_secs(120))
             .json(&body)
             .send()
             .await?;
@@ -232,36 +238,77 @@ impl LlmProvider for AnthropicProvider {
             return Err(anyhow!("Anthropic API error {}: {}", status, text));
         }
 
-        let stream = resp.bytes_stream().eventsource().filter_map(|event| async move {
-            let event = event.ok()?;
-            let data: Value = serde_json::from_str(&event.data).ok()?;
-            let event_type = data["type"].as_str()?;
+        let mut tool_call_index: usize = 0;
+
+        let stream = resp.bytes_stream().eventsource().filter_map(move |event| {
+            let event = match event {
+                Ok(e) => e,
+                Err(_) => return std::future::ready(None),
+            };
+            let data: Value = match serde_json::from_str(&event.data) {
+                Ok(v) => v,
+                Err(_) => return std::future::ready(None),
+            };
+            let event_type = match data["type"].as_str() {
+                Some(t) => t,
+                None => return std::future::ready(None),
+            };
 
             match event_type {
                 "content_block_delta" => {
-                    let delta_type = data["delta"]["type"].as_str()?;
+                    let delta_type = match data["delta"]["type"].as_str() {
+                        Some(t) => t,
+                        None => return std::future::ready(None),
+                    };
                     match delta_type {
                         "text_delta" => {
-                            let text = data["delta"]["text"].as_str()?.to_string();
-                            Some(Ok(StreamChunk::Text(text)))
+                            let text = match data["delta"]["text"].as_str() {
+                                Some(t) => t.to_string(),
+                                None => return std::future::ready(None),
+                            };
+                            std::future::ready(Some(Ok(StreamChunk::Text(text))))
                         }
-                        _ => None,
+                        "input_json_delta" => {
+                            let partial = data["delta"]["partial_json"]
+                                .as_str()
+                                .unwrap_or("")
+                                .to_string();
+                            std::future::ready(Some(Ok(StreamChunk::ToolCallDelta {
+                                index: tool_call_index.saturating_sub(1),
+                                id: None,
+                                name: None,
+                                arguments_delta: partial,
+                            })))
+                        }
+                        _ => std::future::ready(None),
                     }
                 }
                 "content_block_start" => {
-                    let block_type = data["content_block"]["type"].as_str()?;
+                    let block_type = match data["content_block"]["type"].as_str() {
+                        Some(t) => t,
+                        None => return std::future::ready(None),
+                    };
                     if block_type == "tool_use" {
-                        if data["content_block"]["name"].as_str().is_some() {
-                            Some(Ok(StreamChunk::ToolCallStart))
+                        let name = data["content_block"]["name"].as_str().map(|s| s.to_string());
+                        let id = data["content_block"]["id"].as_str().map(|s| s.to_string());
+                        if name.is_some() {
+                            let idx = tool_call_index;
+                            tool_call_index += 1;
+                            std::future::ready(Some(Ok(StreamChunk::ToolCallDelta {
+                                index: idx,
+                                id,
+                                name,
+                                arguments_delta: String::new(),
+                            })))
                         } else {
-                            None
+                            std::future::ready(None)
                         }
                     } else {
-                        None
+                        std::future::ready(None)
                     }
                 }
-                "message_stop" => Some(Ok(StreamChunk::Done)),
-                _ => None,
+                "message_stop" => std::future::ready(Some(Ok(StreamChunk::Done))),
+                _ => std::future::ready(None),
             }
         });
 

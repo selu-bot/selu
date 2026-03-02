@@ -4,16 +4,17 @@
 /// GitHub release archive (tar.gz) containing the agent's files. Capability
 /// Docker images are pulled from a container registry (e.g. GHCR).
 use anyhow::{Context, Result};
+use arc_swap::ArcSwap;
 use ring::digest;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 use crate::agents::loader::{self, AgentDefinition};
+use crate::capabilities::CapabilityEngine;
+use crate::state::AgentMap;
 
 // ── Marketplace types ─────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ pub async fn install_agent(
     entry: &MarketplaceEntry,
     installed_dir: &str,
     db: &SqlitePool,
-    agents: &Arc<RwLock<HashMap<String, AgentDefinition>>>,
+    agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
 ) -> Result<AgentDefinition> {
     let agent_dir = Path::new(installed_dir).join(&entry.id);
@@ -136,8 +137,10 @@ pub async fn install_agent(
 
             // Remove from in-memory map (best-effort, may not have been added)
             {
-                let mut map = agents.write().await;
-                map.remove(&entry.id);
+                let current = agents.load();
+                let mut new = (**current).clone();
+                new.remove(&entry.id);
+                agents.store(Arc::new(new));
             }
 
             // Remove partially-inserted DB row (best-effort)
@@ -162,7 +165,7 @@ async fn install_agent_inner(
     entry: &MarketplaceEntry,
     agent_dir: &Path,
     db: &SqlitePool,
-    agents: &Arc<RwLock<HashMap<String, AgentDefinition>>>,
+    agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
 ) -> Result<AgentDefinition> {
     // 4. Pull Docker images
@@ -195,8 +198,10 @@ async fn install_agent_inner(
 
     // 6. Add to in-memory map (only if setup is complete / no steps needed)
     if !has_steps {
-        let mut map = agents.write().await;
-        map.insert(agent_def.id.clone(), agent_def.clone());
+        let current = agents.load();
+        let mut new = (**current).clone();
+        new.insert(agent_def.id.clone(), Arc::new(agent_def.clone()));
+        agents.store(Arc::new(new));
     }
 
     info!(agent = %entry.id, setup_complete, "Agent installed");
@@ -208,7 +213,7 @@ pub async fn complete_setup(
     agent_id: &str,
     installed_dir: &str,
     db: &SqlitePool,
-    agents: &Arc<RwLock<HashMap<String, AgentDefinition>>>,
+    agents: &Arc<ArcSwap<AgentMap>>,
 ) -> Result<()> {
     sqlx::query("UPDATE agents SET setup_complete = 1 WHERE id = ?")
         .bind(agent_id)
@@ -219,11 +224,242 @@ pub async fn complete_setup(
     let agent_dir = Path::new(installed_dir).join(agent_id);
     let agent_def = loader::load_one(&agent_dir).await?;
 
-    let mut map = agents.write().await;
-    map.insert(agent_def.id.clone(), agent_def);
+    {
+        let current = agents.load();
+        let mut new = (**current).clone();
+        new.insert(agent_def.id.clone(), Arc::new(agent_def));
+        agents.store(Arc::new(new));
+    }
 
     info!(agent = agent_id, "Agent setup completed");
     Ok(())
+}
+
+/// Compare two semver-like version strings and return true if `marketplace`
+/// is newer than `installed`. Falls back to lexicographic comparison when
+/// versions don't parse as semver triples.
+pub fn is_newer_version(installed: &str, marketplace: &str) -> bool {
+    fn parse_triple(v: &str) -> Option<(u64, u64, u64)> {
+        let parts: Vec<&str> = v.trim_start_matches('v').split('.').collect();
+        if parts.len() == 3 {
+            let major = parts[0].parse().ok()?;
+            let minor = parts[1].parse().ok()?;
+            // Strip any pre-release suffix (e.g. "1-beta" -> "1")
+            let patch_str = parts[2].split('-').next()?;
+            let patch = patch_str.parse().ok()?;
+            Some((major, minor, patch))
+        } else {
+            None
+        }
+    }
+
+    if installed.is_empty() || marketplace.is_empty() {
+        return false;
+    }
+
+    match (parse_triple(installed), parse_triple(marketplace)) {
+        (Some(i), Some(m)) => m > i,
+        _ => marketplace > installed, // lexicographic fallback
+    }
+}
+
+/// Update an already-installed agent to a newer marketplace version.
+///
+/// This is similar to `install_agent` but handles the existing installation:
+/// 1. Stop running capability containers for this agent
+/// 2. Remove the old agent directory
+/// 3. Download + verify + extract the new archive
+/// 4. Pull new Docker images
+/// 5. Update the DB row (version, source_url)
+/// 6. Reload agent definition into memory
+///
+/// Credentials and tool policies are preserved (they live in separate DB tables).
+pub async fn update_agent(
+    entry: &MarketplaceEntry,
+    installed_dir: &str,
+    db: &SqlitePool,
+    agents: &Arc<ArcSwap<AgentMap>>,
+    docker: &bollard::Docker,
+    capabilities: &CapabilityEngine,
+) -> Result<AgentDefinition> {
+    let agent_dir = Path::new(installed_dir).join(&entry.id);
+
+    // Verify the agent is actually installed
+    if !agent_dir.exists() {
+        return Err(anyhow::anyhow!(
+            "Agent '{}' is not installed — cannot update",
+            entry.id
+        ));
+    }
+
+    // Don't allow updating the bundled default
+    let row = sqlx::query_as::<_, (i32,)>(
+        "SELECT is_bundled FROM agents WHERE id = ?",
+    )
+    .bind(&entry.id)
+    .fetch_optional(db)
+    .await?;
+
+    if let Some((1,)) = row {
+        return Err(anyhow::anyhow!(
+            "Cannot update the bundled default agent"
+        ));
+    }
+
+    info!(agent = %entry.id, from_url = %entry.archive_url, version = %entry.version, "Updating agent");
+
+    // 1. Remove from in-memory map to prevent new sessions
+    {
+        let current = agents.load();
+        let mut new = (**current).clone();
+        new.remove(&entry.id);
+        agents.store(Arc::new(new));
+    }
+
+    // 2. Stop any running capability containers for this agent
+    // Collect capability IDs before removing files
+    let old_cap_ids: Vec<String> = loader::load_one(&agent_dir)
+        .await
+        .map(|d| d.capability_manifests.keys().cloned().collect())
+        .unwrap_or_default();
+
+    for cap_id in &old_cap_ids {
+        capabilities.close_capability(cap_id).await;
+    }
+
+    // 3. Download the new archive
+    let archive_bytes = download_archive(&entry.archive_url).await?;
+
+    // 4. Verify checksum
+    if !entry.archive_sha256.is_empty() {
+        verify_sha256(&archive_bytes, &entry.archive_sha256)?;
+    } else {
+        warn!(agent = %entry.id, "No SHA-256 checksum provided — skipping verification");
+    }
+
+    // 5. Remove old agent directory
+    tokio::fs::remove_dir_all(&agent_dir).await
+        .with_context(|| format!("Failed to remove old agent dir {}", agent_dir.display()))?;
+
+    // 6. Extract new archive
+    extract_archive(&archive_bytes, installed_dir, &entry.id)?;
+
+    // 7. Pull Docker images + update DB + reload into memory
+    match update_agent_inner(entry, &agent_dir, db, agents, docker).await {
+        Ok(agent_def) => Ok(agent_def),
+        Err(e) => {
+            warn!(agent = %entry.id, "Update failed after extraction: {e}");
+            // Best-effort: remove broken extraction
+            if agent_dir.exists() {
+                let _ = tokio::fs::remove_dir_all(&agent_dir).await;
+            }
+            Err(e)
+        }
+    }
+}
+
+/// Inner update logic (pull images, update DB, reload).
+async fn update_agent_inner(
+    entry: &MarketplaceEntry,
+    agent_dir: &Path,
+    db: &SqlitePool,
+    agents: &Arc<ArcSwap<AgentMap>>,
+    docker: &bollard::Docker,
+) -> Result<AgentDefinition> {
+    // Pull Docker images
+    for image in &entry.capability_images {
+        pull_image(docker, image).await?;
+    }
+
+    // Load the new agent definition
+    let agent_def = loader::load_one(agent_dir).await
+        .with_context(|| format!("Failed to load updated agent from {}", agent_dir.display()))?;
+
+    let has_steps = !agent_def.install_steps.is_empty();
+    let setup_complete = if has_steps { 0 } else { 1 };
+
+    // Update DB row: version + source_url, preserve auto_update and credentials
+    sqlx::query(
+        "UPDATE agents SET display_name = ?, version = ?, source_url = ?, \
+         setup_complete = ? WHERE id = ?",
+    )
+    .bind(&entry.name)
+    .bind(&entry.version)
+    .bind(&entry.archive_url)
+    .bind(setup_complete)
+    .bind(&entry.id)
+    .execute(db)
+    .await
+    .context("Failed to update agent in DB")?;
+
+    // Add to in-memory map (only if setup is complete)
+    if !has_steps {
+        let current = agents.load();
+        let mut new = (**current).clone();
+        new.insert(agent_def.id.clone(), Arc::new(agent_def.clone()));
+        agents.store(Arc::new(new));
+    }
+
+    info!(agent = %entry.id, version = %entry.version, setup_complete, "Agent updated");
+    Ok(agent_def)
+}
+
+/// Perform auto-update for all agents that have `auto_update = 1`.
+///
+/// Called periodically from the background task. Returns the number of agents updated.
+pub async fn auto_update_agents(
+    marketplace_url: &str,
+    installed_dir: &str,
+    db: &SqlitePool,
+    agents: &Arc<ArcSwap<AgentMap>>,
+    capabilities: &CapabilityEngine,
+) -> Result<usize> {
+    // Fetch the current catalogue
+    let catalogue = fetch_catalogue(marketplace_url).await?;
+
+    // Get agents with auto_update enabled
+    let auto_rows = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, version FROM agents WHERE auto_update = 1 AND is_bundled = 0 AND setup_complete = 1",
+    )
+    .fetch_all(db)
+    .await
+    .context("Failed to query auto-update agents")?;
+
+    if auto_rows.is_empty() {
+        return Ok(0);
+    }
+
+    let docker = bollard::Docker::connect_with_local_defaults()
+        .context("Failed to connect to Docker for auto-update")?;
+
+    let mut updated = 0;
+
+    for (agent_id, installed_version) in &auto_rows {
+        // Find the matching marketplace entry
+        let entry = match catalogue.agents.iter().find(|e| &e.id == agent_id) {
+            Some(e) => e,
+            None => continue,
+        };
+
+        if !is_newer_version(installed_version, &entry.version) {
+            continue;
+        }
+
+        info!(agent = %agent_id, from = %installed_version, to = %entry.version, "Auto-updating agent");
+
+        match update_agent(entry, installed_dir, db, agents, &docker, capabilities).await {
+            Ok(_) => {
+                updated += 1;
+                info!(agent = %agent_id, version = %entry.version, "Auto-update completed");
+            }
+            Err(e) => {
+                // Log but don't fail the whole batch
+                tracing::error!(agent = %agent_id, "Auto-update failed: {e}");
+            }
+        }
+    }
+
+    Ok(updated)
 }
 
 /// Uninstall an agent: remove from DB, memory, and filesystem.
@@ -231,7 +467,7 @@ pub async fn uninstall_agent(
     agent_id: &str,
     installed_dir: &str,
     db: &SqlitePool,
-    agents: &Arc<RwLock<HashMap<String, AgentDefinition>>>,
+    agents: &Arc<ArcSwap<AgentMap>>,
 ) -> Result<()> {
     // Don't allow uninstalling the bundled default
     let row = sqlx::query_as::<_, (i32,)>(
@@ -250,11 +486,10 @@ pub async fn uninstall_agent(
     // Collect capability IDs before we tear anything down. Try the
     // in-memory map first; fall back to loading from disk.
     let cap_ids: Vec<String> = {
-        let map = agents.read().await;
+        let map = agents.load();
         if let Some(def) = map.get(agent_id) {
             def.capability_manifests.keys().cloned().collect()
         } else {
-            drop(map);
             let agent_dir = Path::new(installed_dir).join(agent_id);
             loader::load_one(&agent_dir)
                 .await
@@ -265,8 +500,10 @@ pub async fn uninstall_agent(
 
     // Remove from in-memory map
     {
-        let mut map = agents.write().await;
-        map.remove(agent_id);
+        let current = agents.load();
+        let mut new = (**current).clone();
+        new.remove(agent_id);
+        agents.store(Arc::new(new));
     }
 
     // Remove tool policies for this agent (all users — per-user overrides)
@@ -510,4 +747,46 @@ async fn pull_image(docker: &bollard::Docker, image: &str) -> Result<()> {
 
     info!(image, "Docker image pulled");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_newer_version_basic() {
+        assert!(is_newer_version("1.0.0", "1.0.1"));
+        assert!(is_newer_version("1.0.0", "1.1.0"));
+        assert!(is_newer_version("1.0.0", "2.0.0"));
+        assert!(!is_newer_version("1.0.1", "1.0.0"));
+        assert!(!is_newer_version("1.0.0", "1.0.0"));
+    }
+
+    #[test]
+    fn test_is_newer_version_with_prefix() {
+        assert!(is_newer_version("v1.0.0", "v1.0.1"));
+        assert!(is_newer_version("1.0.0", "v2.0.0"));
+        assert!(!is_newer_version("v2.0.0", "1.0.0"));
+    }
+
+    #[test]
+    fn test_is_newer_version_empty() {
+        assert!(!is_newer_version("", "1.0.0"));
+        assert!(!is_newer_version("1.0.0", ""));
+        assert!(!is_newer_version("", ""));
+    }
+
+    #[test]
+    fn test_is_newer_version_pre_release() {
+        // Pre-release suffix is stripped for comparison
+        assert!(is_newer_version("1.0.0-beta", "1.0.1"));
+        assert!(is_newer_version("1.0.0", "1.0.1-beta"));
+    }
+
+    #[test]
+    fn test_is_newer_version_multi_digit() {
+        assert!(is_newer_version("1.9.0", "1.10.0"));
+        assert!(is_newer_version("0.1.0", "0.1.12"));
+        assert!(!is_newer_version("1.10.0", "1.9.0"));
+    }
 }

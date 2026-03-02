@@ -101,9 +101,21 @@ pub enum LlmResponse {
 pub enum StreamChunk {
     /// A text delta token
     Text(String),
-    /// LLM is about to call a tool (signals streaming should stop)
-    ToolCallStart,
-    /// All tool results have been fed back and a final text response is complete
+    /// A tool-use input JSON delta for the tool call currently being built.
+    /// Providers emit these as the LLM streams the arguments incrementally.
+    ToolCallDelta {
+        /// Index of the tool call in the current turn (0-based).
+        index: usize,
+        /// Set once at the start of a new tool-call block.
+        id: Option<String>,
+        /// Set once at the start of a new tool-call block.
+        name: Option<String>,
+        /// Incremental JSON fragment for the arguments.
+        arguments_delta: String,
+    },
+    /// The stream has ended. If tool calls were being built, this signals
+    /// that all deltas have been received and the caller can parse the
+    /// accumulated argument strings.
     Done,
 }
 

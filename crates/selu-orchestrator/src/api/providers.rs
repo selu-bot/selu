@@ -89,6 +89,8 @@ pub async fn set_api_key(
 
     match result {
         Ok(r) if r.rows_affected() > 0 => {
+            // Invalidate cached provider so the new key is picked up
+            state.provider_cache.invalidate().await;
             Json(serde_json::json!({"ok": true})).into_response()
         }
         Ok(_) => StatusCode::NOT_FOUND.into_response(),
@@ -115,6 +117,8 @@ pub async fn set_region(
 
     match result {
         Ok(r) if r.rows_affected() > 0 => {
+            // Invalidate cached provider since region/URL changed
+            state.provider_cache.invalidate().await;
             Json(serde_json::json!({"ok": true})).into_response()
         }
         Ok(_) => StatusCode::NOT_FOUND.into_response(),

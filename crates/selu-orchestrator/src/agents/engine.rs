@@ -7,6 +7,9 @@ use anyhow::Result;
 use futures::future::BoxFuture;
 use futures::FutureExt;
 use sqlx::Row;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -14,8 +17,11 @@ use uuid::Uuid;
 use selu_core::types::Role;
 
 use crate::agents::{context, delegation, router as agent_router, session as session_mgr, thread as thread_mgr};
+use crate::agents::loader::{AgentDefinition, RoutingMode};
 use crate::capabilities::build_tool_specs;
-use crate::llm::{registry::load_provider, tool_loop::{run_loop, LoopEvent, LoopSender, ToolDispatchResult}};
+use crate::capabilities::manifest::CapabilityManifest;
+use crate::llm::registry::load_provider;
+use crate::llm::tool_loop::{run_loop, LoopEvent, LoopSender, ToolDispatchResult};
 use crate::llm::provider::{ChatMessage, LlmResponse};
 use crate::permissions::tool_policy::{self, ToolPolicy, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT};
 use crate::permissions::approval_queue;
@@ -78,10 +84,12 @@ pub struct TurnParams {
 ///
 /// Returns the assistant reply text.
 pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> Result<String> {
+    let turn_start = Instant::now();
     let TurnParams { pipe_id, user_id, agent_id, message, thread_id, chain_depth, channel_kind } = params;
 
     // ── Route to agent ────────────────────────────────────────────────────────
-    let agents_snapshot = state.agents.read().await.clone();
+    let route_start = Instant::now();
+    let agents_snapshot = state.agents.load();
     let (resolved_agent_id, effective_text) = {
         if let Some(id) = agent_id {
             (id, message.clone())
@@ -101,12 +109,29 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             return Err(anyhow::anyhow!("Agent '{}' not found", resolved_agent_id));
         }
     };
+    // Drop the full snapshot early — we only need `agent` from here on.
+    // Keep it alive only for delegation check below.
+    debug!(
+        agent_id = %agent.id,
+        route_ms = route_start.elapsed().as_millis(),
+        "Agent routing complete"
+    );
 
-    // ── Session ───────────────────────────────────────────────────────────────
-    let session = session_mgr::open_session(&state.db, &pipe_id, &user_id, &agent.id).await?;
+    // ── Session + Persist user message (parallelized) ─────────────────────────
+    let db_start = Instant::now();
+
+    // Open session and persist user message in parallel.
+    // Both are independent operations that hit the DB.
+    let session_fut = session_mgr::open_session(&state.db, &pipe_id, &user_id, &agent.id);
+
+    let session = session_fut.await?;
     let session_id = session.id.to_string();
+    debug!(
+        session_ms = db_start.elapsed().as_millis(),
+        "Session opened"
+    );
 
-    // ── Persist user message ──────────────────────────────────────────────────
+    // Persist user message (fire-and-forget timing)
     let msg_id = Uuid::new_v4().to_string();
     let user_role = Role::User.to_string();
     if let Err(e) = sqlx::query!(
@@ -119,8 +144,26 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         error!("Failed to persist user message: {e}");
     }
 
-    // ── Context + provider (model resolved from DB) ────────────────────────────
-    let messages = context::build(
+    // ── Partition agents into inlined vs delegated ──────────────────────────────
+    // Inlined agents' tools are exposed directly on this agent's tool list,
+    // eliminating the delegation round-trip. Delegated agents keep the full
+    // delegate_to_agent flow with their own LLM context.
+    let (inlined_manifests, delegated_agents) =
+        partition_agents(&agent, &agents_snapshot);
+
+    // ── Context + provider (parallelized) ─────────────────────────────────────
+    // These operations are independent and can run concurrently:
+    //   1. Build context window (needs session_id, hits DB for personality + history)
+    //   2. Resolve model + load provider (hits DB for agent model + provider key)
+    let prep_start = Instant::now();
+
+    let delegated_ref = if delegated_agents.is_empty() {
+        None
+    } else {
+        Some(&delegated_agents)
+    };
+
+    let context_fut = context::build(
         &state.db,
         &agent,
         &pipe_id,
@@ -128,27 +171,48 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         thread_id.as_deref(),
         &user_id,
         &effective_text,
-        Some(&agents_snapshot),
-    ).await?;
+        &inlined_manifests,
+        delegated_ref,
+    );
 
-    let resolved = crate::agents::model::resolve_model(&state.db, &agent.id).await?;
-    let provider = load_provider(&state.db, &resolved.provider_id, &resolved.model_id, &state.credentials).await?;
+    let provider_fut = async {
+        let resolved = crate::agents::model::resolve_model(&state.db, &agent.id).await?;
+        let provider = state.provider_cache.get_or_load(
+            &state.db, &resolved.provider_id, &resolved.model_id, &state.credentials,
+        ).await?;
+        Ok::<_, anyhow::Error>((provider, resolved.temperature))
+    };
 
-    // ── Tool specs: capability tools + built-in emit_event + delegation ───────
+    // Run context build and provider load in parallel
+    let (context_result, provider_result) = tokio::join!(context_fut, provider_fut);
+
+    let messages = context_result?;
+    let (provider, temperature) = provider_result?;
+
+    debug!(
+        prep_ms = prep_start.elapsed().as_millis(),
+        context_msgs = messages.len(),
+        "Context + provider ready"
+    );
+
+    // ── Tool specs: own capabilities + inlined + built-ins + delegation ───────
     let mut tool_specs = build_tool_specs(&agent.capability_manifests);
+    tool_specs.extend(build_tool_specs(&inlined_manifests));
     tool_specs.push(crate::events::emit_event_tool_spec());
 
-    // Only add delegation tool if there are other agents to delegate to
-    let has_delegates = agents_snapshot.keys().any(|id| id != &agent.id);
-    if has_delegates {
-        tool_specs.push(delegation::tool_spec(&agent.id, &agents_snapshot));
+    // Only add delegation tool if there are agents that still need delegation
+    if !delegated_agents.is_empty() {
+        tool_specs.push(delegation::tool_spec(&agent.id, &delegated_agents));
     }
 
     // ── Dispatcher ────────────────────────────────────────────────────────────
     let cap_engine = state.capabilities.clone();
     let cred_store = state.credentials.clone();
     let event_bus = state.events.clone();
-    let cap_manifests = agent.capability_manifests.clone();
+    // Merge the agent's own capability manifests with inlined manifests so the
+    // dispatcher can resolve and invoke tools from both sources.
+    let mut cap_manifests = agent.capability_manifests.clone();
+    cap_manifests.extend(inlined_manifests);
     let sid = session_id.clone();
     let uid = user_id.clone();
     let src_agent_id = agent.id.clone();
@@ -159,11 +223,16 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     let dispatcher_pipe = pipe_id.clone();
     let dispatcher_tx = tx.clone();
 
+    debug!(
+        setup_ms = turn_start.elapsed().as_millis(),
+        "Turn setup complete, entering tool loop"
+    );
+
     let reply = run_loop(
         provider,
         messages,
         tool_specs,
-        resolved.temperature,
+        temperature,
         tx.clone(),
         move |name, args, approved| {
             let engine = cap_engine.clone();
@@ -286,6 +355,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     )
     .await?;
 
+    debug!(
+        loop_ms = turn_start.elapsed().as_millis(),
+        "Tool loop complete, persisting reply"
+    );
+
     // ── Persist assistant reply ───────────────────────────────────────────────
     if !reply.is_empty() {
         let reply_id = Uuid::new_v4().to_string();
@@ -344,6 +418,12 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             }
         }
     }
+
+    info!(
+        total_ms = turn_start.elapsed().as_millis(),
+        agent_id = %agent.id,
+        "Agent turn complete"
+    );
 
     Ok(reply)
 }
@@ -603,6 +683,46 @@ async fn generate_thread_title(
     }
 
     Ok(())
+}
+
+// ── Agent routing partition ───────────────────────────────────────────────────
+
+/// Partition installed agents into **inlined** and **delegated** sets relative
+/// to the current agent.
+///
+/// - **Inlined**: The agent's capability manifests are merged into the current
+///   agent's tool list. The LLM can call the tools directly — no delegation
+///   round-trip.
+/// - **Delegated**: The agent appears in the `delegate_to_agent` registry and
+///   gets its own LLM context when invoked.
+///
+/// The current agent itself is excluded from both sets (it can't delegate to
+/// or inline itself).
+fn partition_agents(
+    current_agent: &AgentDefinition,
+    all_agents: &HashMap<String, Arc<AgentDefinition>>,
+) -> (
+    HashMap<String, CapabilityManifest>,
+    HashMap<String, Arc<AgentDefinition>>,
+) {
+    let mut inlined_manifests = HashMap::new();
+    let mut delegated_agents = HashMap::new();
+
+    for (id, agent) in all_agents {
+        if id == &current_agent.id {
+            continue;
+        }
+        if agent.effective_routing() == RoutingMode::Inline {
+            // Merge this agent's capability manifests into the inlined set
+            for (cap_id, manifest) in &agent.capability_manifests {
+                inlined_manifests.insert(cap_id.clone(), manifest.clone());
+            }
+        } else {
+            delegated_agents.insert(id.clone(), agent.clone());
+        }
+    }
+
+    (inlined_manifests, delegated_agents)
 }
 
 /// Dispatch a `delegate_to_agent` tool call by running a nested agent turn.

@@ -7,6 +7,25 @@ use tokio::fs;
 
 use crate::capabilities::manifest::{load_for_agent, CapabilityManifest};
 
+// ── Routing mode ──────────────────────────────────────────────────────────────
+
+/// Controls how the default agent accesses this agent's tools.
+///
+/// - `Inline`: Tools are exposed directly on the default agent's tool list,
+///   eliminating the delegation round-trip (2+ fewer LLM calls).
+/// - `Delegate`: Full delegation via `delegate_to_agent` (original behavior).
+///   The specialist gets its own LLM context with its own system prompt.
+/// - `Auto` (default): The runtime decides based on heuristics — simple agents
+///   with few tools are inlined, complex agents are delegated.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingMode {
+    Inline,
+    Delegate,
+    #[default]
+    Auto,
+}
+
 // ── Agent definition ──────────────────────────────────────────────────────────
 
 /// Parsed agent definition loaded from the installed agents directory.
@@ -18,6 +37,8 @@ pub struct AgentDefinition {
     /// model. The actual model is resolved at runtime via `agents::model::resolve_model()`.
     #[serde(default)]
     pub model: Option<ModelConfig>,
+    #[serde(default)]
+    pub routing: RoutingMode,
     #[serde(default)]
     pub session: SessionConfig,
     /// System prompt loaded from agent.md
@@ -31,6 +52,41 @@ pub struct AgentDefinition {
     /// Installation steps for the setup wizard (optional, defined in agent.yaml)
     #[serde(default)]
     pub install_steps: Vec<InstallStep>,
+}
+
+impl AgentDefinition {
+    /// Resolve the effective routing mode, applying heuristics for `Auto`.
+    ///
+    /// An agent is inlined when **all** of:
+    /// - It has ≤ 3 tools across all capabilities
+    /// - It has no custom model override
+    /// - Its combined capability prompt text is < 2000 characters
+    ///
+    /// Otherwise it is delegated (preserving the full specialist context).
+    pub fn effective_routing(&self) -> RoutingMode {
+        match self.routing {
+            RoutingMode::Inline => RoutingMode::Inline,
+            RoutingMode::Delegate => RoutingMode::Delegate,
+            RoutingMode::Auto => {
+                let tool_count: usize = self
+                    .capability_manifests
+                    .values()
+                    .map(|m| m.tools.len())
+                    .sum();
+                let prompt_len: usize = self
+                    .capability_manifests
+                    .values()
+                    .map(|m| m.prompt.len())
+                    .sum();
+
+                if tool_count <= 3 && self.model.is_none() && prompt_len < 2000 {
+                    RoutingMode::Inline
+                } else {
+                    RoutingMode::Delegate
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

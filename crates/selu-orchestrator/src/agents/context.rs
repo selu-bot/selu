@@ -1,15 +1,17 @@
 use anyhow::Result;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::debug;
 
 use crate::agents::delegation;
 use crate::agents::loader::AgentDefinition;
 use crate::agents::personality;
+use crate::capabilities::manifest::CapabilityManifest;
 use crate::llm::provider::ChatMessage;
 
 /// Builds the LLM context window for a turn:
-///   [system prompt + capability prompts + agent registry]
+///   [system prompt + capability prompts (own + inlined) + agent registry (delegated only)]
 ///   [user personality facts (if any)]
 ///   [recent N messages from this thread (or session/pipe if no thread)]
 pub async fn build(
@@ -20,7 +22,8 @@ pub async fn build(
     thread_id: Option<&str>,
     user_id: &str,
     latest_message: &str,
-    all_agents: Option<&HashMap<String, AgentDefinition>>,
+    inlined_manifests: &HashMap<String, CapabilityManifest>,
+    delegated_agents: Option<&HashMap<String, Arc<AgentDefinition>>>,
 ) -> Result<Vec<ChatMessage>> {
     let mut messages = Vec::new();
     let _ = latest_message; // reserved for future use
@@ -28,9 +31,20 @@ pub async fn build(
     // ── System prompt ─────────────────────────────────────────────────────────
     let mut system = agent.system_prompt.clone();
 
-    // Append each capability's prompt.md (if non-empty) so the LLM knows
-    // what tools are available and how to use them.
+    // Append each of the agent's own capability prompts (if non-empty) so the
+    // LLM knows what tools are available and how to use them.
     for manifest in agent.capability_manifests.values() {
+        if !manifest.prompt.is_empty() {
+            system.push_str("\n\n## Capability: ");
+            system.push_str(&manifest.id);
+            system.push('\n');
+            system.push_str(&manifest.prompt);
+        }
+    }
+
+    // Append capability prompts from inlined agents — their tools are directly
+    // available on this agent's tool list, so the LLM needs usage instructions.
+    for manifest in inlined_manifests.values() {
         if !manifest.prompt.is_empty() {
             system.push_str("\n\n## Capability: ");
             system.push_str(&manifest.id);
@@ -41,9 +55,10 @@ pub async fn build(
 
     // Append agent registry so the orchestrator knows which specialists exist
     // and can use the delegate_to_agent tool effectively.
-    if let Some(agents) = all_agents {
-        let has_delegates = agents.keys().any(|id| id != &agent.id);
-        if has_delegates {
+    // Only delegated agents appear here — inlined agents' tools are already
+    // directly available, so they don't need delegation.
+    if let Some(agents) = delegated_agents {
+        if !agents.is_empty() {
             system.push_str("\n\n");
             system.push_str(&delegation::agent_registry_prompt(&agent.id, agents));
         }
@@ -97,10 +112,11 @@ pub async fn build(
     if let Some(tid) = thread_id {
         let history = sqlx::query!(
             r#"SELECT role, content FROM messages
-               WHERE thread_id = ?
+               WHERE thread_id = ? AND pipe_id = ?
                ORDER BY created_at DESC
                LIMIT 30"#,
             tid,
+            pipe_id,
         )
         .fetch_all(db)
         .await?;

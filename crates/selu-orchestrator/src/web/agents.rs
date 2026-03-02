@@ -22,22 +22,33 @@ use crate::web::auth::AuthUser;
 pub struct InstalledAgentView {
     pub id: String,
     pub name: String,
+    pub version: String,
     pub provider_id: String,
     pub model_id: String,
     pub model_display_name: String,
     pub capability_count: usize,
     pub is_bundled: bool,
     pub setup_complete: bool,
+    pub auto_update: bool,
+    /// True if a newer version is available in the marketplace
+    pub update_available: bool,
+    /// The marketplace version (if update is available)
+    pub marketplace_version: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct MarketplaceAgentView {
+    pub id: String,
     pub name: String,
     pub description: String,
     pub version: String,
     pub author: String,
     pub is_installed: bool,
-    /// JSON-encoded MarketplaceEntry for the install form
+    /// If installed, the currently installed version (empty string if not installed)
+    pub installed_version: String,
+    /// True when the marketplace version is newer than the installed version
+    pub update_available: bool,
+    /// JSON-encoded MarketplaceEntry for the install/update form
     pub entry_json: String,
 }
 
@@ -216,6 +227,11 @@ pub struct InstallForm {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct ToggleAutoUpdateForm {
+    pub auto_update: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct SetupSubmitForm {
     /// Step values as step_<id>=<value> pairs
     #[serde(flatten)]
@@ -230,12 +246,13 @@ pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(st
         return Redirect::to("/chat").into_response();
     }
     // Installed agents from in-memory map + DB metadata
-    let agents_map = state.agents.read().await;
+    let agents_map = state.agents.load();
     let mut agents: Vec<InstalledAgentView> = Vec::new();
 
     for def in agents_map.values() {
-        let db_row = sqlx::query_as::<_, (Option<String>, Option<String>, f64, i32, i32)>(
-            "SELECT provider_id, model_id, temperature, is_bundled, setup_complete \
+        let db_row = sqlx::query_as::<_, (Option<String>, Option<String>, f64, i32, i32, String, i32)>(
+            "SELECT provider_id, model_id, temperature, is_bundled, setup_complete, \
+             version, auto_update \
              FROM agents WHERE id = ?",
         )
         .bind(&def.id)
@@ -244,8 +261,8 @@ pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(st
         .ok()
         .flatten();
 
-        let (provider_id, model_id, _temp, is_bundled, setup_complete) =
-            db_row.unwrap_or((None, None, 0.7, 0, 1));
+        let (provider_id, model_id, _temp, is_bundled, setup_complete, version, auto_update) =
+            db_row.unwrap_or((None, None, 0.7, 0, 1, "0.1.0".into(), 0));
 
         let prov_id = provider_id.unwrap_or_default();
         let mod_id = model_id.unwrap_or_default();
@@ -254,12 +271,16 @@ pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(st
         agents.push(InstalledAgentView {
             id: def.id.clone(),
             name: def.name.clone(),
+            version,
             provider_id: prov_id,
             model_id: mod_id,
             model_display_name,
             capability_count: def.capability_manifests.len(),
             is_bundled: is_bundled != 0,
             setup_complete: setup_complete != 0,
+            auto_update: auto_update != 0,
+            update_available: false,
+            marketplace_version: String::new(),
         });
     }
     drop(agents_map);
@@ -278,12 +299,16 @@ pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(st
             agents.push(InstalledAgentView {
                 id,
                 name,
+                version: String::new(),
                 provider_id: String::new(),
                 model_id: String::new(),
                 model_display_name: String::new(),
                 capability_count: 0,
                 is_bundled: false,
                 setup_complete: false,
+                auto_update: false,
+                update_available: false,
+                marketplace_version: String::new(),
             });
         }
     }
@@ -292,22 +317,50 @@ pub async fn agents_index(user: AuthUser, Query(q): Query<AgentsQuery>, State(st
     let marketplace_url = state.config.marketplace_url.clone();
     let (marketplace_agents, marketplace_error) = match marketplace::fetch_catalogue(&marketplace_url).await {
         Ok(catalogue) => {
-            let installed_ids: Vec<String> = agents.iter().map(|a| a.id.clone()).collect();
+            // Build a map of installed agent ID -> installed version
+            let installed_versions: std::collections::HashMap<String, String> = agents
+                .iter()
+                .map(|a| (a.id.clone(), a.version.clone()))
+                .collect();
+
             let views: Vec<MarketplaceAgentView> = catalogue
                 .agents
                 .iter()
                 .map(|entry| {
                     let entry_json = serde_json::to_string(entry).unwrap_or_default();
+                    let is_installed = installed_versions.contains_key(&entry.id);
+                    let installed_version = installed_versions
+                        .get(&entry.id)
+                        .cloned()
+                        .unwrap_or_default();
+                    let update_available = is_installed
+                        && marketplace::is_newer_version(&installed_version, &entry.version);
+
+                    // Also update the installed agents list with marketplace info
                     MarketplaceAgentView {
+                        id: entry.id.clone(),
                         name: entry.name.clone(),
                         description: entry.description.clone(),
                         version: entry.version.clone(),
                         author: entry.author.clone(),
-                        is_installed: installed_ids.contains(&entry.id),
+                        is_installed,
+                        installed_version,
+                        update_available,
                         entry_json,
                     }
                 })
                 .collect();
+
+            // Back-fill update_available into the installed agents list
+            for mv in &views {
+                if mv.update_available {
+                    if let Some(agent) = agents.iter_mut().find(|a| a.id == mv.id) {
+                        agent.update_available = true;
+                        agent.marketplace_version = mv.version.clone();
+                    }
+                }
+            }
+
             (views, String::new())
         }
         Err(e) => {
@@ -737,7 +790,7 @@ pub async fn agent_detail(
     State(state): State<AppState>,
 ) -> Response {
     // Load agent definition
-    let agents_map = state.agents.read().await;
+    let agents_map = state.agents.load();
     let agent = match agents_map.get(&agent_id) {
         Some(a) => a.clone(),
         None => return StatusCode::NOT_FOUND.into_response(),
@@ -1028,6 +1081,88 @@ pub async fn reset_tool_policy_handler(
         "",
     )
         .into_response()
+}
+
+/// Update an already-installed agent to a newer marketplace version
+pub async fn update_agent(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Form(form): Form<InstallForm>,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let entry: MarketplaceEntry = match serde_json::from_str(&form.entry_json) {
+        Ok(e) => e,
+        Err(e) => {
+            error!("Invalid entry JSON: {e}");
+            return Redirect::to("/agents?error=Invalid+agent+data.+Please+try+again.").into_response();
+        }
+    };
+
+    let docker = match bollard::Docker::connect_with_local_defaults() {
+        Ok(d) => d,
+        Err(e) => {
+            error!("Failed to connect to Docker: {e}");
+            return Redirect::to("/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F").into_response();
+        }
+    };
+
+    match marketplace::update_agent(
+        &entry,
+        &state.config.installed_agents_dir,
+        &state.db,
+        &state.agents,
+        &docker,
+        &state.capabilities,
+    )
+    .await
+    {
+        Ok(agent_def) => {
+            // If the updated agent has new install steps or tools, redirect to setup
+            let has_tools = agent_def.capability_manifests.values()
+                .any(|m| !m.tools.is_empty());
+            if !agent_def.install_steps.is_empty() || has_tools {
+                Redirect::to(&format!("/agents/{}/setup", entry.id)).into_response()
+            } else {
+                let msg = urlencoding::encode("Agent updated successfully.");
+                Redirect::to(&format!("/agents?success={msg}")).into_response()
+            }
+        }
+        Err(e) => {
+            error!("Agent update failed: {e}");
+            let text = format!("Agent update failed: {e}");
+            let msg = urlencoding::encode(&text);
+            Redirect::to(&format!("/agents?error={msg}")).into_response()
+        }
+    }
+}
+
+/// Toggle auto-update for an agent
+pub async fn toggle_auto_update(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    State(state): State<AppState>,
+    Form(form): Form<ToggleAutoUpdateForm>,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let enabled = form.auto_update.as_deref() == Some("on") || form.auto_update.as_deref() == Some("1");
+    let value: i32 = if enabled { 1 } else { 0 };
+
+    if let Err(e) = sqlx::query("UPDATE agents SET auto_update = ? WHERE id = ? AND is_bundled = 0")
+        .bind(value)
+        .bind(&agent_id)
+        .execute(&state.db)
+        .await
+    {
+        error!("Failed to toggle auto-update: {e}");
+        return Redirect::to("/agents?error=Failed+to+update+setting.+Please+try+again.").into_response();
+    }
+
+    Redirect::to("/agents?success=Auto-update+setting+saved.").into_response()
 }
 
 /// Uninstall an agent

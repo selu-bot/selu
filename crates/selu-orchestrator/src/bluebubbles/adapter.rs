@@ -43,11 +43,9 @@ use crate::state::AppState;
 #[serde(rename_all = "camelCase")]
 struct BbMessage {
     text: Option<String>,
-    #[allow(dead_code)]
     is_from_me: bool,
     handle: Option<BbHandle>,
     guid: Option<String>,
-    #[allow(dead_code)]
     date_created: Option<i64>,
     /// The GUID of the first message in this thread (the "thread originator").
     /// Set when the message is part of an iMessage reply chain.
@@ -59,15 +57,27 @@ struct BbMessage {
     /// *specific* message being replied to.
     reply_to_guid: Option<String>,
     /// Associated message GUID (for tapbacks/reactions, not regular replies).
+    #[allow(dead_code)]
     associated_message_guid: Option<String>,
     /// The type of association (e.g. tapback type).
+    #[allow(dead_code)]
     associated_message_type: Option<String>,
+    /// Chat(s) this message belongs to. Used to route webhook messages to
+    /// the correct adapter config (BB sends all events to all webhooks).
+    #[serde(default)]
+    chats: Vec<BbChat>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BbHandle {
     address: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BbChat {
+    guid: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -230,42 +240,48 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
     let pipe_id = cfg.pipe_id.clone();
     state.channel_registry.register(&pipe_id, sender).await;
 
-    // Auto-upgrade: register webhook with BB if not yet done
-    if cfg.bb_webhook_id.is_none() {
-        info!(
-            config_id = %cfg.id,
-            name = %cfg.name,
-            "No webhook registered yet — registering with BlueBubbles"
-        );
-        let callback_url = format!(
-            "{}/api/bb/webhook/{}?token={}",
-            base_url, cfg.id, cfg.inbound_token
-        );
-        match register_webhook_with_bb(&cfg.server_url, &cfg.server_password, &callback_url).await {
-            Ok(webhook_id) => {
-                let wh_id_str = webhook_id.to_string();
-                if let Err(e) = sqlx::query!(
-                    "UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?",
-                    wh_id_str, cfg.id,
-                )
-                .execute(&state.db)
-                .await
-                {
-                    error!(config_id = %cfg.id, "Failed to store bb_webhook_id: {e}");
-                }
-                info!(config_id = %cfg.id, webhook_id = webhook_id, "Webhook registered with BlueBubbles");
-            }
-            Err(e) => {
-                warn!(config_id = %cfg.id, "Failed to register webhook with BlueBubbles: {e}. Will retry on next startup.");
-            }
+    // Ensure webhook is registered with BlueBubbles.
+    // If we already have a webhook ID, delete and re-register to make sure
+    // the event subscription is correct (handles upgrades from older formats).
+    let callback_url = format!(
+        "{}/api/bb/webhook/{}?token={}",
+        base_url, cfg.id, cfg.inbound_token
+    );
+
+    // Clean up any stale webhook first
+    if let Some(ref old_id) = cfg.bb_webhook_id {
+        debug!(config_id = %cfg.id, old_webhook_id = %old_id, "Deregistering old webhook before re-registration");
+        match deregister_webhook_from_bb(&cfg.server_url, &cfg.server_password, old_id).await {
+            Ok(()) => debug!(config_id = %cfg.id, old_webhook_id = %old_id, "Old webhook deregistered"),
+            Err(e) => warn!(config_id = %cfg.id, old_webhook_id = %old_id, error = %e, "Failed to deregister old webhook (continuing anyway)"),
         }
     } else {
-        info!(
-            config_id = %cfg.id,
-            name = %cfg.name,
-            chat = %cfg.chat_guid,
-            "BlueBubbles adapter ready (webhook)"
-        );
+        debug!(config_id = %cfg.id, "No previous webhook ID stored — registering fresh");
+    }
+
+    info!(
+        config_id = %cfg.id,
+        name = %cfg.name,
+        callback_url = %callback_url,
+        "Registering webhook with BlueBubbles"
+    );
+    match register_webhook_with_bb(&cfg.server_url, &cfg.server_password, &callback_url).await {
+        Ok(webhook_id) => {
+            let wh_id_str = webhook_id.to_string();
+            if let Err(e) = sqlx::query!(
+                "UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?",
+                wh_id_str, cfg.id,
+            )
+            .execute(&state.db)
+            .await
+            {
+                error!(config_id = %cfg.id, "Failed to store bb_webhook_id: {e}");
+            }
+            info!(config_id = %cfg.id, webhook_id = webhook_id, "Webhook registered with BlueBubbles");
+        }
+        Err(e) => {
+            warn!(config_id = %cfg.id, "Failed to register webhook with BlueBubbles: {e}. Will retry on next startup.");
+        }
     }
 }
 
@@ -294,12 +310,22 @@ async fn webhook_handler(
     State(state): State<AppState>,
     Path(config_id): Path<String>,
     Query(query): Query<WebhookQuery>,
-    axum::Json(payload): axum::Json<BbWebhookPayload>,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
+    let body_str = String::from_utf8_lossy(&body);
+    debug!(
+        config_id = %config_id,
+        body_len = body.len(),
+        "BB webhook received"
+    );
+
     // 1. Authenticate via token
     let provided_token = match query.token {
         Some(t) => t,
-        None => return StatusCode::UNAUTHORIZED,
+        None => {
+            warn!(config_id = %config_id, "BB webhook REJECTED: no token provided");
+            return StatusCode::UNAUTHORIZED;
+        }
     };
 
     // Look up the pipe's inbound_token for this config
@@ -315,51 +341,155 @@ async fn webhook_handler(
 
     let expected_token = match pipe_token {
         Ok(Some(row)) => row.inbound_token,
-        _ => return StatusCode::NOT_FOUND,
-    };
-
-    if provided_token != expected_token {
-        return StatusCode::UNAUTHORIZED;
-    }
-
-    // 2. Only process new-message events
-    if payload.event_type != "new-message" {
-        debug!(event_type = %payload.event_type, "Ignoring non-message webhook event");
-        return StatusCode::OK;
-    }
-
-    // 3. Parse the message from the payload data
-    let msg: BbMessage = match serde_json::from_value(payload.data) {
-        Ok(m) => m,
-        Err(e) => {
-            warn!("Failed to parse BB webhook message payload: {e}");
-            return StatusCode::OK; // Don't make BB retry on parse errors
+        Ok(None) => {
+            warn!(config_id = %config_id, "BB webhook REJECTED: config not found or inactive");
+            return StatusCode::NOT_FOUND;
         }
-    };
-
-    // 4. Look up adapter state from registry
-    let reg = registry().read().await;
-    let adapter = match reg.get(&config_id) {
-        Some(a) => a,
-        None => {
-            warn!(config_id = %config_id, "Webhook received for unknown config");
+        Err(e) => {
+            error!(config_id = %config_id, error = %e, "BB webhook REJECTED: DB error");
             return StatusCode::NOT_FOUND;
         }
     };
 
-    // 5. Skip messages we sent ourselves (loop prevention)
+    if provided_token != expected_token {
+        warn!(config_id = %config_id, "BB webhook REJECTED: token mismatch");
+        return StatusCode::UNAUTHORIZED;
+    }
+
+    // 2. Parse the webhook envelope from raw body
+    let payload: BbWebhookPayload = match serde_json::from_slice(&body) {
+        Ok(p) => p,
+        Err(e) => {
+            warn!(
+                config_id = %config_id,
+                error = %e,
+                body = %body_str,
+                "BB webhook REJECTED: failed to parse payload"
+            );
+            return StatusCode::OK;
+        }
+    };
+
+    // 3. Only process new-message events
+    if payload.event_type != "new-message" {
+        debug!(
+            config_id = %config_id,
+            event_type = %payload.event_type,
+            "BB webhook SKIPPED: not a new-message event"
+        );
+        return StatusCode::OK;
+    }
+
+    // 4. Parse the message from the payload data
+    let msg: BbMessage = match serde_json::from_value(payload.data) {
+        Ok(m) => m,
+        Err(e) => {
+            warn!(
+                config_id = %config_id,
+                error = %e,
+                "BB webhook REJECTED: failed to parse message data"
+            );
+            return StatusCode::OK;
+        }
+    };
+
+    let msg_guid_display = msg.guid.clone().unwrap_or_else(|| "<no-guid>".into());
+
+    // 5. Skip messages we sent ourselves (is_from_me).
+    if msg.is_from_me {
+        debug!(
+            config_id = %config_id,
+            guid = %msg_guid_display,
+            "Skipping is_from_me message"
+        );
+        return StatusCode::OK;
+    }
+
+    // 6. Skip old messages. BB fires webhooks for messages it "catches up" on
+    //    at startup or reconnect (e.g. old unread messages).
+    if let Some(date_created) = msg.date_created {
+        let now_ms = current_epoch_ms();
+        let age_ms = now_ms - date_created;
+        debug!(
+            config_id = %config_id,
+            guid = %msg_guid_display,
+            age_ms = age_ms,
+            "BB webhook: message age check"
+        );
+        if age_ms > 60_000 {
+            debug!(
+                config_id = %config_id,
+                guid = %msg_guid_display,
+                age_secs = age_ms / 1000,
+                "BB webhook SKIPPED: message too old (>60s)"
+            );
+            return StatusCode::OK;
+        }
+    } else {
+        warn!(
+            config_id = %config_id,
+            guid = %msg_guid_display,
+            "BB webhook: no dateCreated on message"
+        );
+    }
+
+    // 7. Look up adapter state from registry
+    let reg = registry().read().await;
+    let adapter = match reg.get(&config_id) {
+        Some(a) => a,
+        None => {
+            warn!(config_id = %config_id, "BB webhook REJECTED: config not in adapter registry");
+            return StatusCode::NOT_FOUND;
+        }
+    };
+
+    // 8. BB sends all events to all registered webhooks. Filter by chat_guid.
+    let msg_chat_guids: Vec<String> = msg.chats.iter()
+        .filter_map(|c| c.guid.clone())
+        .collect();
+    let msg_belongs_to_chat = msg_chat_guids.iter().any(|g| g == &adapter.chat_guid);
+
+    debug!(
+        config_id = %config_id,
+        guid = %msg_guid_display,
+        expected_chat = %adapter.chat_guid,
+        belongs = msg_belongs_to_chat,
+        "BB webhook: chat filter check"
+    );
+
+    if !msg_belongs_to_chat && !msg.chats.is_empty() {
+        debug!(
+            config_id = %config_id,
+            expected_chat = %adapter.chat_guid,
+            "Skipping message for different chat"
+        );
+        return StatusCode::OK;
+    }
+
+    // 9. Skip messages we sent ourselves (GUID-based loop prevention)
     if let Some(ref guid) = msg.guid {
         let sent = adapter.sent_guids.read().await;
         if sent.contains(guid) {
-            debug!(guid = %guid, "Skipping adapter-sent message (webhook)");
+            debug!(
+                config_id = %config_id,
+                guid = %guid,
+                "BB webhook SKIPPED: GUID in sent_guids (loop prevention)"
+            );
             return StatusCode::OK;
         }
     }
 
-    // 6. Skip empty messages
+    // 10. Skip empty messages
     let text = match &msg.text {
         Some(t) if !t.is_empty() => t.clone(),
-        _ => return StatusCode::OK,
+        _ => {
+            debug!(
+                config_id = %config_id,
+                guid = %msg_guid_display,
+                "BB webhook SKIPPED: empty or missing text"
+            );
+            return StatusCode::OK;
+        }
     };
 
     let sender_ref = msg
@@ -372,27 +502,27 @@ async fn webhook_handler(
     let thread_originator_guid = msg.thread_originator_guid.clone();
     let reply_to_guid = msg.reply_to_guid.clone();
 
-    // Log threading fields for tracing
-    info!(
-        message_guid = ?message_guid,
+    debug!(
+        config_id = %config_id,
+        guid = %msg_guid_display,
+        sender = %sender_ref,
         thread_originator_guid = ?thread_originator_guid,
         reply_to_guid = ?reply_to_guid,
-        associated_message_guid = ?msg.associated_message_guid,
-        associated_message_type = ?msg.associated_message_type,
-        is_from_me = msg.is_from_me,
-        text_preview = %if text.len() > 50 { &text[..50] } else { &text },
+        text_len = text.len(),
+        text_preview = %if text.len() > 80 { &text[..80] } else { &text },
         "BB webhook inbound message"
     );
 
-    // 7. Resolve sender
+    // 11. Resolve sender
     let pipe_id = adapter.pipe_id.clone();
     let resolved_user_id = match resolve_sender(&state, &pipe_id, &sender_ref).await {
         Some(uid) => uid,
         None => {
             debug!(
+                config_id = %config_id,
                 sender = %sender_ref,
                 pipe_id = %pipe_id,
-                "Ignoring webhook message from unknown sender"
+                "BB webhook SKIPPED: unknown sender"
             );
             return StatusCode::OK;
         }
@@ -405,7 +535,7 @@ async fn webhook_handler(
         "Processing BlueBubbles webhook message"
     );
 
-    // 8. Dispatch in background (return 200 immediately)
+    // 12. Dispatch in background (return 200 immediately)
     let chat_guid = adapter.chat_guid.clone();
     let server_url = adapter.server_url.clone();
     let server_password = adapter.server_password.clone();
@@ -466,15 +596,32 @@ pub async fn register_webhook_with_bb(
         anyhow::bail!("BlueBubbles rejected webhook registration: {status} — {body}");
     }
 
-    let bb_resp: BbWebhookResponse = resp
-        .json()
-        .await
+    let resp_text = resp.text().await.unwrap_or_default();
+    debug!(response = %resp_text, "BB webhook registration response");
+
+    let bb_resp: BbWebhookResponse = serde_json::from_str(&resp_text)
         .context("Failed to parse BlueBubbles webhook response")?;
 
     let webhook_id = bb_resp
         .data
         .and_then(|d| d.id)
         .context("BlueBubbles returned no webhook ID")?;
+
+    // Verify the webhook was actually persisted by fetching it back
+    let verify_url = format!("{}/api/v1/webhook", bb_server_url);
+    let verify_resp = http
+        .get(&verify_url)
+        .query(&[("password", bb_password)])
+        .send()
+        .await;
+    match verify_resp {
+        Ok(r) if r.status().is_success() => {
+            let body = r.text().await.unwrap_or_default();
+            debug!(webhooks = %body, "BB registered webhooks (verification)");
+        }
+        Ok(r) => warn!(status = %r.status(), "Could not verify webhooks with BB"),
+        Err(e) => warn!("Webhook verification request failed: {e}"),
+    }
 
     Ok(webhook_id)
 }
@@ -573,7 +720,7 @@ async fn dispatch_message(
     http: Client,
 ) {
     // Route to agent
-    let agents_snapshot = state.agents.read().await.clone();
+    let agents_snapshot = state.agents.load();
     let default_agent_id = sqlx::query!(
         "SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id
     )
@@ -599,7 +746,7 @@ async fn dispatch_message(
         .as_deref()
         .or(thread_originator_guid.as_deref());
 
-    info!(
+    debug!(
         pipe_id = %pipe_id,
         message_guid = ?message_guid,
         reply_to_guid = ?reply_to_guid,
@@ -624,7 +771,7 @@ async fn dispatch_message(
 
     let thread_id = thread.id.to_string();
 
-    info!(
+    debug!(
         thread_id = %thread_id,
         thread_origin_message_ref = ?thread.origin_message_ref,
         thread_last_reply_guid = ?thread.last_reply_guid,
@@ -690,10 +837,10 @@ async fn dispatch_message(
 
     // Send reply via BlueBubbles
     let clean_text = strip_markdown(&reply_text);
-    info!(
+    debug!(
         thread_id = %thread_id,
         reply_to_guid = ?message_guid,
-        "Sending BB reply (will store returned GUID for thread matching)"
+        "Sending BB reply"
     );
     let sent_guid = send_bb_reply(
         &http,
@@ -708,7 +855,7 @@ async fn dispatch_message(
     // Store Selu's reply GUID so future incoming replies can be matched
     // back to this thread.
     if let Some(ref guid) = sent_guid {
-        info!(
+        debug!(
             thread_id = %thread_id,
             sent_guid = %guid,
             "Storing outbound GUID for thread reply matching"

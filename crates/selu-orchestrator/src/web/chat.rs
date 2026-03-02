@@ -478,6 +478,8 @@ async fn process_message(
     stream_id: String,
     notify: Arc<Notify>,
 ) {
+    let process_start = std::time::Instant::now();
+
     // Wait for the SSE endpoint to connect and register its sender (with timeout)
     tokio::select! {
         _ = notify.notified() => {}
@@ -486,7 +488,12 @@ async fn process_message(
         }
     }
 
-    // Fetch pipe's default agent
+    let sse_wait_ms = process_start.elapsed().as_millis();
+    if sse_wait_ms > 100 {
+        warn!(stream_id = %stream_id, sse_wait_ms, "Slow SSE client connection");
+    }
+
+    // Fetch pipe's default agent for routing
     let default_agent_id = sqlx::query!(
         "SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id
     )
@@ -496,8 +503,8 @@ async fn process_message(
     .flatten()
     .and_then(|r| r.default_agent_id);
 
-    // Route to determine agent_id
-    let agents_snapshot = state.agents.read().await.clone();
+    // Resolve @mention routing (same as webhook/iMessage adapters)
+    let agents_snapshot = state.agents.load();
     let (agent_id, effective_text) = agent_router::route(
         &text,
         default_agent_id.as_deref(),
@@ -524,9 +531,19 @@ async fn process_message(
         channel_kind: ChannelKind::Interactive,
     };
 
+    tracing::debug!(
+        setup_ms = process_start.elapsed().as_millis(),
+        "process_message setup complete, starting turn"
+    );
+
     if let Err(e) = run_turn(&state, params, tx).await {
         error!("Agent turn failed: {e}");
     }
+
+    tracing::debug!(
+        total_ms = process_start.elapsed().as_millis(),
+        "process_message complete"
+    );
 
     state.active_streams.lock().await.remove(&stream_id);
 }

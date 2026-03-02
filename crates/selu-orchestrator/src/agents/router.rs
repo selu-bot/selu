@@ -1,5 +1,6 @@
 use crate::agents::loader::AgentDefinition;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Parse an @mention from the start of a message.
 /// Returns (agent_id, remaining_text_without_mention)
@@ -21,7 +22,7 @@ pub fn parse_mention(text: &str) -> Option<(String, String)> {
 pub fn route(
     text: &str,
     default_agent_id: Option<&str>,
-    available_agents: &HashMap<String, AgentDefinition>,
+    available_agents: &HashMap<String, Arc<AgentDefinition>>,
 ) -> (String, String) {
     if let Some((agent_id, remaining)) = parse_mention(text) {
         if available_agents.contains_key(&agent_id) {
@@ -68,16 +69,17 @@ mod tests {
         let mut agents = HashMap::new();
         agents.insert(
             "dev".to_string(),
-            AgentDefinition {
+            Arc::new(AgentDefinition {
                 id: "dev".to_string(),
                 name: "Dev".to_string(),
                 model: None,
+                routing: Default::default(),
                 session: Default::default(),
                 system_prompt: String::new(),
                 capabilities: vec![],
                 capability_manifests: std::collections::HashMap::new(),
                 install_steps: vec![],
-            },
+            }),
         );
 
         let (agent_id, text) = route("@dev fix the tests", Some("default"), &agents);

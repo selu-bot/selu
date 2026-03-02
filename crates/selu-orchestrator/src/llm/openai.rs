@@ -23,7 +23,12 @@ impl OpenAiProvider {
     pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
         let model_str = model.into();
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .pool_max_idle_per_host(4)
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
+                .build()
+                .expect("Failed to build HTTP client"),
             api_key: api_key.into(),
             base_url: "https://api.openai.com".into(),
             default_model: if model_str.is_empty() { "gpt-4o".into() } else { model_str },
@@ -33,7 +38,12 @@ impl OpenAiProvider {
     /// Construct an Ollama-compatible provider (OpenAI-compatible API)
     pub fn ollama(base_url: impl Into<String>, model: impl Into<String>) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .pool_max_idle_per_host(4)
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
+                .build()
+                .expect("Failed to build HTTP client"),
             api_key: "ollama".into(), // Ollama doesn't need a real key
             base_url: base_url.into(),
             default_model: model.into(),
@@ -122,6 +132,7 @@ impl LlmProvider for OpenAiProvider {
             .client
             .post(format!("{}/v1/chat/completions", self.base_url))
             .bearer_auth(&self.api_key)
+            .timeout(std::time::Duration::from_secs(120))
             .json(&body)
             .send()
             .await?;
@@ -206,12 +217,22 @@ impl LlmProvider for OpenAiProvider {
             let data: Value = serde_json::from_str(&event.data).ok()?;
             let delta = &data["choices"][0]["delta"];
 
-            // Tool call start
+            // Tool call delta
             if let Some(tool_calls) = delta["tool_calls"].as_array() {
                 if let Some(first) = tool_calls.first() {
-                    if first["function"]["name"].as_str().is_some() {
-                        return Some(Ok(StreamChunk::ToolCallStart));
-                    }
+                    let index = first["index"].as_u64().unwrap_or(0) as usize;
+                    let id = first["id"].as_str().map(|s| s.to_string());
+                    let name = first["function"]["name"].as_str().map(|s| s.to_string());
+                    let args_delta = first["function"]["arguments"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string();
+                    return Some(Ok(StreamChunk::ToolCallDelta {
+                        index,
+                        id,
+                        name,
+                        arguments_delta: args_delta,
+                    }));
                 }
                 return None;
             }
