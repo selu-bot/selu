@@ -179,13 +179,13 @@ async fn handle_connection(
 ) -> Result<()> {
     // Read the initial request
     let mut buf = vec![0u8; 8192];
-    let n = stream.read(&mut buf).await?;
+    let mut n = stream.read(&mut buf).await?;
     if n == 0 {
         return Ok(());
     }
 
-    let request_str = String::from_utf8_lossy(&buf[..n]);
-    let first_line = request_str.lines().next().unwrap_or("");
+    let mut request_str = String::from_utf8_lossy(&buf[..n]).to_string();
+    let first_line = request_str.lines().next().unwrap_or("").to_string();
 
     // Parse method, target, version from "METHOD target HTTP/x.x"
     let parts: Vec<&str> = first_line.splitn(3, ' ').collect();
@@ -194,12 +194,36 @@ async fn handle_connection(
         return Ok(());
     }
 
-    let method = parts[0];
-    let target = parts[1];
+    let method = parts[0].to_string();
+    let target = parts[1].to_string();
 
     // Extract the auth token from the Proxy-Authorization header.
     // Format: "Proxy-Authorization: Basic <base64(selu:token)>"
-    let token = extract_proxy_auth_token(&request_str);
+    let mut token = extract_proxy_auth_token(&request_str);
+
+    // If no credentials were provided, challenge the client with 407 so that
+    // browsers (Chromium/Playwright) know to resend with Proxy-Authorization.
+    // Standard HTTP clients send credentials proactively, but browsers use a
+    // challenge-response flow: they send the first request without auth and
+    // only attach Proxy-Authorization after receiving a 407.
+    if token.is_none() {
+        stream
+            .write_all(
+                b"HTTP/1.1 407 Proxy Authentication Required\r\n\
+                  Proxy-Authenticate: Basic realm=\"selu-egress\"\r\n\
+                  Content-Length: 0\r\n\r\n",
+            )
+            .await?;
+
+        // Read the retried request (now with Proxy-Authorization)
+        n = stream.read(&mut buf).await?;
+        if n == 0 {
+            return Ok(());
+        }
+
+        request_str = String::from_utf8_lossy(&buf[..n]).to_string();
+        token = extract_proxy_auth_token(&request_str);
+    }
 
     // Look up policy by token
     let policy = match &token {
@@ -212,9 +236,9 @@ async fn handle_connection(
 
     let ident = token.as_deref().unwrap_or("no-token");
 
-    match method {
-        "CONNECT" => handle_connect(stream, target, ident, policy, &log_tx).await,
-        _ => handle_http(stream, method, target, &buf[..n], ident, policy, &log_tx).await,
+    match method.as_str() {
+        "CONNECT" => handle_connect(stream, &target, ident, policy, &log_tx).await,
+        _ => handle_http(stream, &method, &target, &buf[..n], ident, policy, &log_tx).await,
     }
 }
 
