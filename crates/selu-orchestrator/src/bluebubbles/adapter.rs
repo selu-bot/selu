@@ -250,13 +250,13 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
 
     // Clean up any stale webhook first
     if let Some(ref old_id) = cfg.bb_webhook_id {
-        info!(config_id = %cfg.id, old_webhook_id = %old_id, "Deregistering old webhook before re-registration");
+        debug!(config_id = %cfg.id, old_webhook_id = %old_id, "Deregistering old webhook before re-registration");
         match deregister_webhook_from_bb(&cfg.server_url, &cfg.server_password, old_id).await {
-            Ok(()) => info!(config_id = %cfg.id, old_webhook_id = %old_id, "Old webhook deregistered"),
+            Ok(()) => debug!(config_id = %cfg.id, old_webhook_id = %old_id, "Old webhook deregistered"),
             Err(e) => warn!(config_id = %cfg.id, old_webhook_id = %old_id, error = %e, "Failed to deregister old webhook (continuing anyway)"),
         }
     } else {
-        info!(config_id = %cfg.id, "No previous webhook ID stored — registering fresh");
+        debug!(config_id = %cfg.id, "No previous webhook ID stored — registering fresh");
     }
 
     info!(
@@ -313,10 +313,9 @@ async fn webhook_handler(
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
     let body_str = String::from_utf8_lossy(&body);
-    info!(
+    debug!(
         config_id = %config_id,
         body_len = body.len(),
-        body = %body_str,
         "BB webhook received"
     );
 
@@ -373,7 +372,7 @@ async fn webhook_handler(
 
     // 3. Only process new-message events
     if payload.event_type != "new-message" {
-        info!(
+        debug!(
             config_id = %config_id,
             event_type = %payload.event_type,
             "BB webhook SKIPPED: not a new-message event"
@@ -398,10 +397,10 @@ async fn webhook_handler(
 
     // 5. Skip messages we sent ourselves (is_from_me).
     if msg.is_from_me {
-        info!(
+        debug!(
             config_id = %config_id,
             guid = %msg_guid_display,
-            "BB webhook SKIPPED: is_from_me=true"
+            "Skipping is_from_me message"
         );
         return StatusCode::OK;
     }
@@ -411,16 +410,14 @@ async fn webhook_handler(
     if let Some(date_created) = msg.date_created {
         let now_ms = current_epoch_ms();
         let age_ms = now_ms - date_created;
-        info!(
+        debug!(
             config_id = %config_id,
             guid = %msg_guid_display,
-            date_created = date_created,
-            now_ms = now_ms,
             age_ms = age_ms,
             "BB webhook: message age check"
         );
         if age_ms > 60_000 {
-            info!(
+            debug!(
                 config_id = %config_id,
                 guid = %msg_guid_display,
                 age_secs = age_ms / 1000,
@@ -452,21 +449,19 @@ async fn webhook_handler(
         .collect();
     let msg_belongs_to_chat = msg_chat_guids.iter().any(|g| g == &adapter.chat_guid);
 
-    info!(
+    debug!(
         config_id = %config_id,
         guid = %msg_guid_display,
-        msg_chats = ?msg_chat_guids,
         expected_chat = %adapter.chat_guid,
         belongs = msg_belongs_to_chat,
-        chats_empty = msg.chats.is_empty(),
         "BB webhook: chat filter check"
     );
 
     if !msg_belongs_to_chat && !msg.chats.is_empty() {
-        info!(
+        debug!(
             config_id = %config_id,
-            guid = %msg_guid_display,
-            "BB webhook SKIPPED: message for different chat"
+            expected_chat = %adapter.chat_guid,
+            "Skipping message for different chat"
         );
         return StatusCode::OK;
     }
@@ -475,7 +470,7 @@ async fn webhook_handler(
     if let Some(ref guid) = msg.guid {
         let sent = adapter.sent_guids.read().await;
         if sent.contains(guid) {
-            info!(
+            debug!(
                 config_id = %config_id,
                 guid = %guid,
                 "BB webhook SKIPPED: GUID in sent_guids (loop prevention)"
@@ -488,10 +483,9 @@ async fn webhook_handler(
     let text = match &msg.text {
         Some(t) if !t.is_empty() => t.clone(),
         _ => {
-            info!(
+            debug!(
                 config_id = %config_id,
                 guid = %msg_guid_display,
-                text = ?msg.text,
                 "BB webhook SKIPPED: empty or missing text"
             );
             return StatusCode::OK;
@@ -508,7 +502,7 @@ async fn webhook_handler(
     let thread_originator_guid = msg.thread_originator_guid.clone();
     let reply_to_guid = msg.reply_to_guid.clone();
 
-    info!(
+    debug!(
         config_id = %config_id,
         guid = %msg_guid_display,
         sender = %sender_ref,
@@ -516,7 +510,7 @@ async fn webhook_handler(
         reply_to_guid = ?reply_to_guid,
         text_len = text.len(),
         text_preview = %if text.len() > 80 { &text[..80] } else { &text },
-        "BB webhook: message accepted, resolving sender"
+        "BB webhook inbound message"
     );
 
     // 11. Resolve sender
@@ -524,9 +518,8 @@ async fn webhook_handler(
     let resolved_user_id = match resolve_sender(&state, &pipe_id, &sender_ref).await {
         Some(uid) => uid,
         None => {
-            info!(
+            debug!(
                 config_id = %config_id,
-                guid = %msg_guid_display,
                 sender = %sender_ref,
                 pipe_id = %pipe_id,
                 "BB webhook SKIPPED: unknown sender"
@@ -536,12 +529,10 @@ async fn webhook_handler(
     };
 
     info!(
-        config_id = %config_id,
-        guid = %msg_guid_display,
         sender = %sender_ref,
         user_id = %resolved_user_id,
         pipe_id = %pipe_id,
-        "BB webhook DISPATCHING message"
+        "Processing BlueBubbles webhook message"
     );
 
     // 12. Dispatch in background (return 200 immediately)
@@ -606,7 +597,7 @@ pub async fn register_webhook_with_bb(
     }
 
     let resp_text = resp.text().await.unwrap_or_default();
-    info!(response = %resp_text, "BB webhook registration response");
+    debug!(response = %resp_text, "BB webhook registration response");
 
     let bb_resp: BbWebhookResponse = serde_json::from_str(&resp_text)
         .context("Failed to parse BlueBubbles webhook response")?;
@@ -626,7 +617,7 @@ pub async fn register_webhook_with_bb(
     match verify_resp {
         Ok(r) if r.status().is_success() => {
             let body = r.text().await.unwrap_or_default();
-            info!(webhooks = %body, "BB registered webhooks (verification)");
+            debug!(webhooks = %body, "BB registered webhooks (verification)");
         }
         Ok(r) => warn!(status = %r.status(), "Could not verify webhooks with BB"),
         Err(e) => warn!("Webhook verification request failed: {e}"),
@@ -755,7 +746,7 @@ async fn dispatch_message(
         .as_deref()
         .or(thread_originator_guid.as_deref());
 
-    info!(
+    debug!(
         pipe_id = %pipe_id,
         message_guid = ?message_guid,
         reply_to_guid = ?reply_to_guid,
@@ -780,7 +771,7 @@ async fn dispatch_message(
 
     let thread_id = thread.id.to_string();
 
-    info!(
+    debug!(
         thread_id = %thread_id,
         thread_origin_message_ref = ?thread.origin_message_ref,
         thread_last_reply_guid = ?thread.last_reply_guid,
@@ -846,10 +837,10 @@ async fn dispatch_message(
 
     // Send reply via BlueBubbles
     let clean_text = strip_markdown(&reply_text);
-    info!(
+    debug!(
         thread_id = %thread_id,
         reply_to_guid = ?message_guid,
-        "Sending BB reply (will store returned GUID for thread matching)"
+        "Sending BB reply"
     );
     let sent_guid = send_bb_reply(
         &http,
@@ -864,7 +855,7 @@ async fn dispatch_message(
     // Store Selu's reply GUID so future incoming replies can be matched
     // back to this thread.
     if let Some(ref guid) = sent_guid {
-        info!(
+        debug!(
             thread_id = %thread_id,
             sent_guid = %guid,
             "Storing outbound GUID for thread reply matching"

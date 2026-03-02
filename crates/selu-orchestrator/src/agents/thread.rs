@@ -1,6 +1,6 @@
 use anyhow::Result;
 use sqlx::SqlitePool;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use selu_core::types::{Thread, ThreadStatus};
@@ -25,7 +25,7 @@ pub async fn create_thread(
 
     let thread_id = Uuid::new_v4().to_string();
 
-    info!(
+    debug!(
         thread_id = %thread_id,
         session_id = %session_id,
         pipe_id = %pipe_id,
@@ -95,7 +95,7 @@ pub async fn find_thread_by_message_ref(
     .await?;
 
     if let Some(r) = row {
-        info!(
+        debug!(
             thread_id = ?r.id,
             origin_message_ref = ?r.origin_message_ref,
             last_reply_guid = ?r.last_reply_guid,
@@ -137,7 +137,7 @@ pub async fn find_thread_by_message_ref(
 
     match row {
         Some(r) => {
-            info!(
+            debug!(
                 thread_id = ?r.id,
                 "find_thread_by_message_ref: MATCHED via thread_reply_guids table"
             );
@@ -155,10 +155,10 @@ pub async fn find_thread_by_message_ref(
             }))
         }
         None => {
-            warn!(
+            debug!(
                 pipe_id = %pipe_id,
                 message_ref = %message_ref,
-                "find_thread_by_message_ref: NO MATCH anywhere — will create new thread"
+                "find_thread_by_message_ref: no match — will create new thread"
             );
             Ok(None)
         }
@@ -182,7 +182,7 @@ pub async fn find_or_create_thread(
     origin_message_ref: Option<&str>,
     reply_to_ref: Option<&str>,
 ) -> Result<Thread> {
-    info!(
+    debug!(
         pipe_id = %pipe_id,
         origin_message_ref = ?origin_message_ref,
         reply_to_ref = ?reply_to_ref,
@@ -192,14 +192,14 @@ pub async fn find_or_create_thread(
     // 1. Try to match an existing thread via the reply-to reference
     if let Some(ref_guid) = reply_to_ref {
         if let Some(existing) = find_thread_by_message_ref(db, pipe_id, ref_guid).await? {
-            info!(
+            debug!(
                 thread_id = %existing.id,
                 reply_to = %ref_guid,
                 "Reusing existing thread via reply-to match"
             );
             return Ok(existing);
         }
-        warn!(
+        debug!(
             pipe_id = %pipe_id,
             reply_to_ref = %ref_guid,
             "reply_to_ref provided but no matching thread found"
@@ -218,7 +218,7 @@ pub async fn find_or_create_thread(
     //    implicitly continuous.
     if origin_message_ref.is_none() {
         if let Some(recent) = find_recent_active_thread(db, pipe_id, user_id).await? {
-            info!(
+            debug!(
                 thread_id = %recent.id,
                 title = ?recent.title,
                 "Reusing most recent active thread for user+pipe (no message ref)"
@@ -228,7 +228,7 @@ pub async fn find_or_create_thread(
     }
 
     // 3. No match — create a new thread
-    info!("find_or_create_thread: no existing thread found — creating new");
+    debug!("find_or_create_thread: no existing thread found — creating new");
     create_thread(db, pipe_id, user_id, agent_id, origin_message_ref).await
 }
 
@@ -291,7 +291,7 @@ async fn find_recent_active_thread(
 /// `thread_reply_guids` lookup table so that ALL outbound GUIDs are
 /// searchable (not just the most recent one).
 pub async fn update_reply_guid(db: &SqlitePool, thread_id: &str, pipe_id: &str, reply_guid: &str) -> Result<()> {
-    info!(
+    debug!(
         thread_id = %thread_id,
         pipe_id = %pipe_id,
         reply_guid = %reply_guid,
