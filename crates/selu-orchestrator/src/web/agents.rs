@@ -673,7 +673,7 @@ pub async fn setup_submit(
                 Err(e) => {
                     error!("Failed to encrypt credential: {e}");
                     let msg =
-                        urlencoding::encode("Failed to encrypt credential. Please try again.");
+                        urlencoding::encode("encrypt_failed");
                     return Redirect::to(&format!(
                         "{}/agents/{agent_id}/setup?error={msg}",
                         base_path
@@ -697,7 +697,7 @@ pub async fn setup_submit(
                 .await
                 {
                     error!("Failed to store system credential: {e}");
-                    let msg = urlencoding::encode("Failed to store credential. Please try again.");
+                    let msg = urlencoding::encode("store_cred_failed");
                     return Redirect::to(&format!("{}/agents/{agent_id}/setup?error={msg}", base_path)).into_response();
                 }
             }
@@ -743,7 +743,7 @@ pub async fn setup_submit(
             if let Err(e) = tool_policy::set_global_policies(&state.db, &agent_id, &policies).await
             {
                 error!("Failed to save global tool policies: {e}");
-                let msg = urlencoding::encode("Failed to save tool permissions. Please try again.");
+                let msg = urlencoding::encode("save_perms_failed");
                 return Redirect::to(&format!(
                     "{}/agents/{agent_id}/setup?error={msg}",
                     base_path
@@ -763,7 +763,7 @@ pub async fn setup_submit(
         return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
     }
 
-    let msg = urlencoding::encode("Agent setup completed successfully.");
+    let msg = urlencoding::encode("setup_complete");
     Redirect::to(&format!("{}/agents?success={msg}", base_path)).into_response()
 }
 
@@ -1158,7 +1158,7 @@ pub async fn agent_credential_set(
 
     if form.value.is_empty() {
         return Redirect::to(&format!(
-            "{}/agents/{}?error=Secret+value+cannot+be+empty.",
+            "{}/agents/{}?error=secret_empty",
             base_path, agent_id
         ))
         .into_response();
@@ -1184,7 +1184,7 @@ pub async fn agent_credential_set(
         }
         _ => {
             return Redirect::to(&format!(
-                "{}/agents/{}?error=Invalid+credential+scope.",
+                "{}/agents/{}?error=invalid_scope",
                 base_path, agent_id
             ))
             .into_response();
@@ -1193,14 +1193,14 @@ pub async fn agent_credential_set(
 
     match result {
         Ok(_) => Redirect::to(&format!(
-            "{}/agents/{}?success=Secret+saved.",
+            "{}/agents/{}?success=secret_saved",
             base_path, agent_id
         ))
         .into_response(),
         Err(e) => {
             error!("Failed to set agent credential: {e}");
             Redirect::to(&format!(
-                "{}/agents/{}?error=Could+not+save+secret.+Please+try+again.",
+                "{}/agents/{}?error=secret_save_failed",
                 base_path, agent_id
             ))
             .into_response()
@@ -1229,7 +1229,7 @@ pub async fn agent_credential_delete(
         }
         _ => {
             return Redirect::to(&format!(
-                "{}/agents/{}?error=Invalid+credential+scope.",
+                "{}/agents/{}?error=invalid_scope",
                 base_path, agent_id
             ))
             .into_response();
@@ -1240,7 +1240,7 @@ pub async fn agent_credential_delete(
         error!("Failed to delete agent credential: {e}");
     }
     Redirect::to(&format!(
-        "{}/agents/{}?success=Secret+removed.",
+        "{}/agents/{}?success=secret_removed",
         base_path, agent_id
     ))
     .into_response()
@@ -1420,7 +1420,7 @@ pub async fn update_agent(
                 Redirect::to(&format!("{}/agents/{}/setup", base_path, entry.id))
                     .into_response()
             } else {
-                let msg = urlencoding::encode("Agent updated successfully.");
+                let msg = urlencoding::encode("updated");
                 Redirect::to(&format!("{}/agents?success={msg}", base_path))
                     .into_response()
             }
@@ -1491,12 +1491,12 @@ pub async fn rate_agent(
     .is_some();
 
     if !is_installed {
-        let msg = urlencoding::encode("This agent is not installed yet.");
+        let msg = urlencoding::encode("not_installed");
         return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
     }
 
     if !(1..=5).contains(&form.rating) {
-        let msg = urlencoding::encode("Please choose a rating between 1 and 5 stars.");
+        let msg = urlencoding::encode("rating_invalid");
         return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
     }
 
@@ -1504,7 +1504,7 @@ pub async fn rate_agent(
         Ok(id) => id,
         Err(e) => {
             error!("Failed to load instance ID: {e}");
-            let msg = urlencoding::encode("Couldn't submit your rating. Please try again.");
+            let msg = urlencoding::encode("rating_submit_failed");
             return Redirect::to(&format!("{}/agents?error={msg}", base_path))
                 .into_response();
         }
@@ -1514,7 +1514,7 @@ pub async fn rate_agent(
         Some(base) => base,
         None => {
             error!("Invalid marketplace URL: {}", state.config.marketplace_url);
-            let msg = urlencoding::encode("Couldn't submit your rating right now.");
+            let msg = urlencoding::encode("rating_unavailable");
             return Redirect::to(&format!("{}/agents?error={msg}", base_path))
                 .into_response();
         }
@@ -1532,7 +1532,7 @@ pub async fn rate_agent(
         Ok(c) => c,
         Err(e) => {
             error!("Failed to build HTTP client for rating submit: {e}");
-            let msg = urlencoding::encode("Couldn't submit your rating right now.");
+            let msg = urlencoding::encode("rating_unavailable");
             return Redirect::to(&format!("{}/agents?error={msg}", base_path))
                 .into_response();
         }
@@ -1547,17 +1547,17 @@ pub async fn rate_agent(
 
     match response {
         Ok(resp) if resp.status().is_success() => {
-            let msg = urlencoding::encode("Thanks. Your rating was saved.");
+            let msg = urlencoding::encode("rating_saved");
             Redirect::to(&format!("{}/agents?success={msg}", base_path)).into_response()
         }
         Ok(resp) => {
             error!("Rating submission failed with status {}", resp.status());
-            let msg = urlencoding::encode("Couldn't save your rating. Please try again.");
+            let msg = urlencoding::encode("rating_save_failed");
             Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response()
         }
         Err(e) => {
             error!("Rating submission request failed: {e}");
-            let msg = urlencoding::encode("Couldn't save your rating. Please try again.");
+            let msg = urlencoding::encode("rating_save_failed");
             Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response()
         }
     }

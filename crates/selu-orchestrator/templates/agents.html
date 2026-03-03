@@ -13,11 +13,28 @@
     </div>
 
     {% if let Some(err) = error %}
-    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
+      {% if err == "encrypt_failed" %}<span data-i18n="agents.error.encrypt_failed">Couldn't save the credential. Please try again.</span>
+      {% else if err == "store_cred_failed" %}<span data-i18n="agents.error.store_cred_failed">Couldn't store the credential. Please try again.</span>
+      {% else if err == "save_perms_failed" %}<span data-i18n="agents.error.save_perms_failed">Couldn't save tool permissions. Please try again.</span>
+      {% else if err == "not_installed" %}<span data-i18n="agents.error.not_installed">This agent is not installed yet.</span>
+      {% else if err == "rating_invalid" %}<span data-i18n="agents.error.rating_invalid">Please choose a rating between 1 and 5 stars.</span>
+      {% else if err == "rating_submit_failed" %}<span data-i18n="agents.error.rating_submit_failed">Couldn't submit your rating. Please try again.</span>
+      {% else if err == "rating_unavailable" %}<span data-i18n="agents.error.rating_unavailable">Couldn't submit your rating right now.</span>
+      {% else if err == "rating_save_failed" %}<span data-i18n="agents.error.rating_save_failed">Couldn't save your rating. Please try again.</span>
+      {% else %}{{ err }}
+      {% endif %}
+    </div>
     {% endif %}
 
     {% if let Some(msg) = success %}
-    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{{ msg }}</div>
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+      {% if msg == "setup_complete" %}<span data-i18n="agents.success.setup_complete">Agent setup completed successfully.</span>
+      {% else if msg == "updated" %}<span data-i18n="agents.success.updated">Agent updated successfully.</span>
+      {% else if msg == "rating_saved" %}<span data-i18n="agents.success.rating_saved">Thanks! Your rating was saved.</span>
+      {% else %}{{ msg }}
+      {% endif %}
+    </div>
     {% endif %}
 
     <!-- Global Default Model -->

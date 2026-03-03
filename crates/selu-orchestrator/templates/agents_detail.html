@@ -26,11 +26,22 @@
     </div>
 
     {% if let Some(err) = error %}
-    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
+      {% if err == "secret_empty" %}<span data-i18n="agents.error.secret_empty">Secret value cannot be empty.</span>
+      {% else if err == "invalid_scope" %}<span data-i18n="agents.error.invalid_scope">Invalid credential scope.</span>
+      {% else if err == "secret_save_failed" %}<span data-i18n="agents.error.secret_save_failed">Couldn't save the secret. Please try again.</span>
+      {% else %}{{ err }}
+      {% endif %}
+    </div>
     {% endif %}
 
     {% if let Some(msg) = success %}
-    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{{ msg }}</div>
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+      {% if msg == "secret_saved" %}<span data-i18n="agents.success.secret_saved">Secret saved.</span>
+      {% else if msg == "secret_removed" %}<span data-i18n="agents.success.secret_removed">Secret removed.</span>
+      {% else %}{{ msg }}
+      {% endif %}
+    </div>
     {% endif %}
 
     <!-- Capabilities (infrastructure info) -->
