@@ -107,10 +107,10 @@ pub async fn run_loop(
     tx: LoopSender,
     tool_dispatcher: impl Fn(String, serde_json::Value, bool) -> futures::future::BoxFuture<'static, Result<ToolDispatchResult>> + Send + Sync + 'static,
 ) -> Result<String> {
-    let max_iterations = 10;
     let loop_start = Instant::now();
+    let mut iteration: u32 = 0;
 
-    for iteration in 0..max_iterations {
+    loop {
         debug!(iteration, "Tool loop iteration");
 
         // ── State for accumulating tool calls from the stream ─────────────
@@ -428,10 +428,7 @@ pub async fn run_loop(
                 }
             }
         }
+        iteration += 1;
         // Continue loop — next iteration will stream the post-tool response
     }
-
-    let _ = tx.send(LoopEvent::Error("Max tool iterations reached".into())).await;
-    let _ = tx.send(LoopEvent::Done).await;
-    anyhow::bail!("Max tool iterations reached without a final text response")
 }
