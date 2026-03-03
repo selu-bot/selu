@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM schedule_pipes WHERE schedule_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a5d2856c03e7e15c6feaa71a1bb06375feca6dbf0bf1fa567b34d05c1757266f"
+}

@@ -821,6 +821,7 @@ async fn dispatch_message(
             pipe_id: pipe_id.clone(),
             thread_id: thread_id.clone(),
         },
+        skip_user_persist: false,
     };
 
     let reply = run_turn(&state, params, noop_sender()).await;

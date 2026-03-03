@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::agents::engine::{ChannelKind, TurnParams, run_turn};
 use crate::agents::router as agent_router;
 use crate::agents::thread as thread_mgr;
+use crate::commands;
 use crate::llm::tool_loop::LoopEvent;
 use crate::state::AppState;
 use crate::web::BasePath;
@@ -280,6 +281,48 @@ pub async fn chat_send(
 
     let pipe_id_str = pipe_id.to_string();
     let thread_id_str = thread_id.to_string();
+
+    // ── Slash command interception ───────────────────────────────────────────
+    // If the message starts with '/', try to handle it as a command instead
+    // of routing to the agent engine.
+    if let Some(cmd) = commands::parse_command(&text) {
+        let ctx = commands::CommandContext {
+            state: &state,
+            user_id: &user.user_id,
+            pipe_id: &pipe_id_str,
+            language: &user.language,
+        };
+        let result = commands::dispatch(cmd, ctx).await;
+
+        // Persist both the user command and the response as messages
+        let _ = sqlx::query!(
+            "INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content) VALUES (?, ?, '', ?, 'user', ?)",
+            pipe_id_str, pipe_id_str, thread_id_str, text,
+        ).execute(&state.db).await;
+        let reply_id = uuid::Uuid::new_v4().to_string();
+        let _ = sqlx::query!(
+            "INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content) VALUES (?, ?, '', ?, 'assistant', ?)",
+            reply_id, pipe_id_str, thread_id_str, result.text,
+        ).execute(&state.db).await;
+
+        let escaped_input = html_escape(&text);
+        let escaped_reply = html_escape(&result.text);
+        let html = format!(
+            r#"<div class="flex justify-end">
+  <div class="max-w-[72%] bg-gradient-to-br from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">
+    <p class="text-sm leading-relaxed whitespace-pre-wrap break-words text-txt-heading">{escaped_input}</p>
+  </div>
+</div>
+<div class="flex justify-start">
+  <div class="max-w-[72%] bg-surface-raised border border-edge rounded-2xl rounded-bl-md px-4 py-2.5">
+    <div class="text-sm leading-relaxed break-words markdown-body md-source">{escaped_reply}</div>
+  </div>
+</div>"#,
+            escaped_input = escaped_input,
+            escaped_reply = escaped_reply,
+        );
+        return Html(html).into_response();
+    }
 
     // Create a Notify so the background task waits for the SSE client to connect
     let stream_id = Uuid::new_v4().to_string();
@@ -549,6 +592,7 @@ async fn process_message(
         thread_id: Some(thread_id),
         chain_depth: 0,
         channel_kind: ChannelKind::Interactive,
+        skip_user_persist: false,
     };
 
     tracing::debug!(

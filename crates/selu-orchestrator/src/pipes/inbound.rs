@@ -226,6 +226,7 @@ async fn handle_inbound(
             thread_id: Some(thread_id.clone()),
             chain_depth: 0,
             channel_kind,
+            skip_user_persist: false,
         };
 
         let reply = run_turn(&state, params, noop_sender()).await;

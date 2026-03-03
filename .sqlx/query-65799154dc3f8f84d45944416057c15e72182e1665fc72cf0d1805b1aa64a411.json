@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT sp.pipe_id, p.name\n               FROM schedule_pipes sp\n               LEFT JOIN pipes p ON sp.pipe_id = p.id\n               WHERE sp.schedule_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "pipe_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "65799154dc3f8f84d45944416057c15e72182e1665fc72cf0d1805b1aa64a411"
+}

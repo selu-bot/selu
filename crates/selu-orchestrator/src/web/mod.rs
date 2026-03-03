@@ -6,6 +6,7 @@ pub mod integrations;
 pub mod personality;
 pub mod pipes;
 pub mod providers;
+pub mod schedules;
 pub mod subscriptions;
 pub mod telegram;
 pub mod users;
@@ -386,6 +387,18 @@ pub fn router(state: AppState) -> Router<AppState> {
             "/subscriptions/{id}",
             delete(subscriptions::subscriptions_delete),
         )
+        // Schedules
+        .route(
+            "/schedules",
+            get(schedules::schedules_index).post(schedules::schedules_create),
+        )
+        .route("/schedules/{id}", delete(schedules::schedules_delete))
+        .route("/schedules/{id}/toggle", post(schedules::schedules_toggle))
+        .route(
+            "/schedules/{id}/pipes",
+            post(schedules::schedules_update_pipes),
+        )
+        .route("/user/timezone", post(schedules::user_set_timezone))
         // Users
         .route("/users", get(users::users_index).post(users::users_create))
         .route("/users/{id}", delete(users::users_delete))

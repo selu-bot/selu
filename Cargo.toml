@@ -94,3 +94,7 @@ arc-swap = "1"
 aws-smithy-eventstream = "0.60"
 aws-smithy-types = "1.4"
 bytes = "1"
+
+# Cron expression parsing and scheduling
+cron = "0.15"
+chrono-tz = "0.10"

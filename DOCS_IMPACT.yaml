@@ -180,3 +180,78 @@ entries:
           hosts:
             - "api.example.com:443"
             - "*.cdn.example.com:443"
+
+  - id: 2026-03-03-schedules
+    date: "2026-03-03"
+    pr:
+    area: ui
+    type: added
+    audience: users
+    summary: "Recurring schedules allow users to automate agent tasks on a cron-based timing"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0019_schedules.sql
+      - crates/selu-orchestrator/src/schedules/mod.rs
+      - crates/selu-orchestrator/src/schedules/nl_to_cron.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+      - crates/selu-orchestrator/src/commands/mod.rs
+      - crates/selu-orchestrator/src/commands/schedule.rs
+      - crates/selu-orchestrator/src/web/schedules.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/main.rs
+      - crates/selu-orchestrator/templates/schedules.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/channels/web-chat
+    details: |
+      Users can now create recurring schedules that run agent prompts
+      automatically. Schedules are created via:
+
+      1. The new /schedules web page (accessible to all users via sidebar)
+      2. Chat slash commands: /schedule add, /schedule list, /schedule delete
+
+      Key features:
+      - Natural language timing (e.g. "every weekday at 6:45 AM") is parsed
+        by the LLM into cron expressions
+      - Each schedule can fire on one or more pipes; results appear as new
+        conversation threads in Chat
+      - Per-user timezone support (configurable on the Schedules page)
+      - Toggle schedules on/off, delete them
+      - Background executor checks for due schedules every 30 seconds
+
+      This also introduces the slash command system to Selu. Messages starting
+      with "/" are intercepted before the agent engine and handled as commands.
+      Currently supported: /schedule add, /schedule list, /schedule delete.
+
+      New database tables: schedules, schedule_pipes.
+      New column on users: timezone (TEXT, default 'UTC').
+
+  - id: 2026-03-03-slash-commands
+    date: "2026-03-03"
+    pr:
+    area: ui
+    type: added
+    audience: both
+    summary: "Slash command system for chat (/schedule add, /schedule list, /schedule delete)"
+    affected_files:
+      - crates/selu-orchestrator/src/commands/mod.rs
+      - crates/selu-orchestrator/src/commands/schedule.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+    docs_sections:
+      - user-guide/channels/web-chat
+    details: |
+      A new extensible slash command system intercepts messages starting
+      with "/" in web chat before they reach the agent engine. Commands
+      are handled synchronously (no SSE streaming) and the response is
+      rendered as a static assistant message.
+
+      Currently available commands:
+      - /schedule add <prompt + timing> - create a recurring schedule
+      - /schedule list - list your schedules
+      - /schedule delete <name> - delete a schedule by name
+
+      The command system is designed for easy extension: adding new
+      commands only requires a new module and a match arm in the
+      dispatcher. Other channels (Telegram, iMessage) can integrate
+      the same command dispatcher in future.

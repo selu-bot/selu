@@ -71,6 +71,10 @@ pub struct TurnParams {
     pub chain_depth: i32,
     /// Channel type — determines how "ask" policies are handled.
     pub channel_kind: ChannelKind,
+    /// When true, the user message is NOT persisted as a "user" role row.
+    /// Used by the schedule executor: the prompt is still sent to the LLM
+    /// but should not appear as a user bubble in chat.
+    pub skip_user_persist: bool,
 }
 
 /// Run one agent turn end-to-end:
@@ -96,6 +100,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         thread_id,
         chain_depth,
         channel_kind,
+        skip_user_persist,
     } = params;
 
     // ── Route to agent ────────────────────────────────────────────────────────
@@ -148,16 +153,20 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     );
 
     // Persist user message (fire-and-forget timing)
-    let msg_id = Uuid::new_v4().to_string();
-    let user_role = Role::User.to_string();
-    if let Err(e) = sqlx::query!(
-        "INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content) VALUES (?, ?, ?, ?, ?, ?)",
-        msg_id, pipe_id, session_id, thread_id, user_role, effective_text
-    )
-    .execute(&state.db)
-    .await
-    {
-        error!("Failed to persist user message: {e}");
+    // Skip for schedule-triggered turns — the prompt should not show as a
+    // user bubble; the executor persists a "status" note instead.
+    if !skip_user_persist {
+        let msg_id = Uuid::new_v4().to_string();
+        let user_role = Role::User.to_string();
+        if let Err(e) = sqlx::query!(
+            "INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content) VALUES (?, ?, ?, ?, ?, ?)",
+            msg_id, pipe_id, session_id, thread_id, user_role, effective_text
+        )
+        .execute(&state.db)
+        .await
+        {
+            error!("Failed to persist user message: {e}");
+        }
     }
 
     // ── Partition agents into inlined vs delegated ──────────────────────────────
@@ -862,9 +871,15 @@ fn partition_agents(
 
 /// Dispatch a `delegate_to_agent` tool call by running a nested agent turn.
 ///
-/// The delegated turn inherits the parent's channel kind and event sender
-/// so that tool confirmations can bubble up to the user (e.g. via the
-/// web UI SSE stream).
+/// The delegated turn uses a **noop sender** — its tokens are not streamed
+/// directly to the user.  Instead, the delegation result is returned as a
+/// tool result string, which the outer (parent) LLM incorporates into its
+/// own streamed response.  This avoids the duplicate-response problem where
+/// the user would see both the delegated agent's raw stream AND the
+/// orchestrator's summary of the same content.
+///
+/// Tool confirmations (Ask policy) still work because the nested turn's
+/// `check_policy_and_dispatch` uses the approval queue, not the SSE sender.
 ///
 /// Returns a `BoxFuture` (rather than being `async fn`) so that the recursive
 /// `run_turn` call satisfies the `Send` bound required by the tool dispatcher.
@@ -875,7 +890,7 @@ fn dispatch_delegation(
     args: serde_json::Value,
     chain_depth: i32,
     channel_kind: ChannelKind,
-    tx: LoopSender,
+    _tx: LoopSender,
 ) -> BoxFuture<'static, Result<String>> {
     async move {
         let (target_agent_id, message) = delegation::parse_args(&args)?;
@@ -894,11 +909,13 @@ fn dispatch_delegation(
             thread_id: None, // Delegation gets its own context, no thread
             chain_depth: chain_depth + 1,
             channel_kind,
+            skip_user_persist: false,
         };
 
-        // Run the delegated turn with the parent's sender so that
-        // confirmation prompts and status updates reach the user.
-        let reply = run_turn(&state, params, tx).await?;
+        // Use a noop sender so the delegated agent's tokens are collected
+        // but not streamed to the user.  The outer LLM will present the
+        // result in its own response.
+        let reply = run_turn(&state, params, noop_sender()).await?;
 
         Ok(reply)
     }

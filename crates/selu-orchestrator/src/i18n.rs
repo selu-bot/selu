@@ -34,6 +34,59 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
             "error.agent_turn_failed",
             "Something went wrong — please try again.",
         );
+
+        // ── Schedule commands ────────────────────────────────────────
+        en.insert(
+            "cmd.unknown",
+            "Unknown command: `{cmd}`\n\nAvailable commands:\n- `/schedule add <what to do + when>` — Create a schedule\n- `/schedule list` — List your schedules\n- `/schedule delete <name>` — Delete a schedule",
+        );
+        en.insert(
+            "cmd.schedule.created",
+            "Schedule created!\n\n**{name}** — {timing}\n> {prompt}\n\nTimezone: {timezone}",
+        );
+        en.insert(
+            "cmd.schedule.create_error",
+            "Something went wrong while creating the schedule. Please try again.",
+        );
+        en.insert(
+            "cmd.schedule.parse_error",
+            "Couldn't understand that schedule. Please try something like:\n`/schedule add Check my emails every day at 8am`\n`/schedule add Give me a weather report at 7:00 on weekdays`",
+        );
+        en.insert(
+            "cmd.schedule.no_provider",
+            "No LLM provider configured. Please set up a default model in Providers first.",
+        );
+        en.insert(
+            "cmd.schedule.provider_error",
+            "Couldn't load the LLM provider. Is the API key configured?",
+        );
+        en.insert("cmd.schedule.list_title", "Your Schedules:");
+        en.insert(
+            "cmd.schedule.list_empty",
+            "You don't have any schedules yet.\n\nCreate one with:\n`/schedule add Give me a morning summary at 8am on weekdays`",
+        );
+        en.insert(
+            "cmd.schedule.list_error",
+            "Something went wrong while listing schedules.",
+        );
+        en.insert("cmd.schedule.status_on", "On");
+        en.insert("cmd.schedule.status_off", "Off");
+        en.insert("cmd.schedule.no_pipes", "no pipes");
+        en.insert("cmd.schedule.next_run", "Next");
+        en.insert("cmd.schedule.deleted", "Schedule **{name}** deleted.");
+        en.insert(
+            "cmd.schedule.not_found",
+            "No schedule found matching \"**{name}**\". Use `/schedule list` to see your schedules.",
+        );
+        en.insert(
+            "cmd.schedule.not_found_hint",
+            "Couldn't find that schedule. Use `/schedule list` to see your schedules.",
+        );
+        en.insert(
+            "cmd.schedule.delete_error",
+            "Something went wrong while deleting the schedule.",
+        );
+        en.insert("schedule.run_label", "Scheduled run");
         m.insert("en", en);
 
         // ── German ───────────────────────────────────────────────────────
@@ -55,6 +108,62 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
             "error.agent_turn_failed",
             "Da ist leider etwas schiefgelaufen — versuch es bitte nochmal.",
         );
+
+        // ── Schedule commands ────────────────────────────────────────
+        de.insert(
+            "cmd.unknown",
+            "Unbekannter Befehl: `{cmd}`\n\nVerf\u{00fc}gbare Befehle:\n- `/schedule add <was + wann>` — Zeitplan erstellen\n- `/schedule list` — Zeitpl\u{00e4}ne anzeigen\n- `/schedule delete <Name>` — Zeitplan l\u{00f6}schen",
+        );
+        de.insert(
+            "cmd.schedule.created",
+            "Zeitplan erstellt!\n\n**{name}** — {timing}\n> {prompt}\n\nZeitzone: {timezone}",
+        );
+        de.insert(
+            "cmd.schedule.create_error",
+            "Beim Erstellen des Zeitplans ist etwas schiefgelaufen. Bitte versuche es erneut.",
+        );
+        de.insert(
+            "cmd.schedule.parse_error",
+            "Konnte den Zeitplan nicht verstehen. Versuch es zum Beispiel so:\n`/schedule add Pr\u{00fc}fe meine E-Mails jeden Tag um 8 Uhr`\n`/schedule add Gib mir einen Wetterbericht um 7:00 an Werktagen`",
+        );
+        de.insert(
+            "cmd.schedule.no_provider",
+            "Kein LLM-Anbieter konfiguriert. Bitte richte zuerst ein Standardmodell unter Anbieter ein.",
+        );
+        de.insert(
+            "cmd.schedule.provider_error",
+            "LLM-Anbieter konnte nicht geladen werden. Ist der API-Schl\u{00fc}ssel eingerichtet?",
+        );
+        de.insert("cmd.schedule.list_title", "Deine Zeitpl\u{00e4}ne:");
+        de.insert(
+            "cmd.schedule.list_empty",
+            "Du hast noch keine Zeitpl\u{00e4}ne.\n\nErstelle einen mit:\n`/schedule add Gib mir eine Morgenzusammenfassung um 8 Uhr an Werktagen`",
+        );
+        de.insert(
+            "cmd.schedule.list_error",
+            "Beim Laden der Zeitpl\u{00e4}ne ist etwas schiefgelaufen.",
+        );
+        de.insert("cmd.schedule.status_on", "An");
+        de.insert("cmd.schedule.status_off", "Aus");
+        de.insert("cmd.schedule.no_pipes", "keine Pipes");
+        de.insert("cmd.schedule.next_run", "N\u{00e4}chster Lauf");
+        de.insert(
+            "cmd.schedule.deleted",
+            "Zeitplan **{name}** gel\u{00f6}scht.",
+        );
+        de.insert(
+            "cmd.schedule.not_found",
+            "Kein Zeitplan gefunden f\u{00fc}r \"**{name}**\". Nutze `/schedule list` um deine Zeitpl\u{00e4}ne zu sehen.",
+        );
+        de.insert(
+            "cmd.schedule.not_found_hint",
+            "Zeitplan nicht gefunden. Nutze `/schedule list` um deine Zeitpl\u{00e4}ne zu sehen.",
+        );
+        de.insert(
+            "cmd.schedule.delete_error",
+            "Beim L\u{00f6}schen des Zeitplans ist etwas schiefgelaufen.",
+        );
+        de.insert("schedule.run_label", "Geplanter Lauf");
         m.insert("de", de);
 
         m

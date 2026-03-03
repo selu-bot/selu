@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT active, cron_expression FROM schedules WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "active",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cron_expression",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "abf1170a4b18593faaba84c601f5214381d0d76bf4556837e263d354dabf1587"
+}

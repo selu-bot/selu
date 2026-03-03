@@ -219,6 +219,7 @@ async fn dispatch_agent_invocation(
         thread_id: None, // Event fanout doesn't use threads
         chain_depth: event.chain_depth + 1,
         channel_kind: ChannelKind::NonInteractive,
+        skip_user_persist: false,
     };
 
     // Clone for the log lines below (config is moved into the spawn)

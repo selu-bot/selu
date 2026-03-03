@@ -7,6 +7,7 @@ mod api;
 mod bluebubbles;
 mod capabilities;
 mod channels;
+mod commands;
 mod config;
 mod events;
 mod i18n;
@@ -14,6 +15,7 @@ mod llm;
 mod permissions;
 mod persistence;
 mod pipes;
+mod schedules;
 mod state;
 mod telegram;
 mod web;
@@ -223,6 +225,16 @@ async fn main() -> Result<()> {
                 Ok(n) => info!("Auto-updated {n} agent(s)"),
                 Err(e) => tracing::warn!("Agent auto-update check failed: {e}"),
             }
+        }
+    });
+
+    // Schedule executor: fires due schedules every 30 seconds
+    let schedule_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            schedules::executor::tick(&schedule_state).await;
         }
     });
 

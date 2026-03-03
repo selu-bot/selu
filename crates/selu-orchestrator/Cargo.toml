@@ -88,6 +88,10 @@ bytes = { workspace = true }
 # Lock-free atomic pointer swap
 arc-swap = { workspace = true }
 
+# Cron expression parsing and scheduling
+cron = { workspace = true }
+chrono-tz = { workspace = true }
+
 [build-dependencies]
 tonic-build = { version = "0.13", features = ["prost"] }
 protox = "0.7"

@@ -86,6 +86,22 @@ pub async fn build(
         lang_name
     ));
 
+    // ── Slash commands ────────────────────────────────────────────────────────
+    // Tell the agent about available slash commands so it can guide users
+    // instead of trying to handle scheduling requests with its own tools.
+    system.push_str(
+        "\n\n## System commands\n\
+         The following slash commands are available to the user. \
+         If a user asks you to set up a schedule, reminder, or recurring task, \
+         tell them to use these commands. Do NOT try to implement scheduling yourself \
+         using store_set or emit_event — the system has built-in scheduling.\n\n\
+         - `/schedule add <what to do + when>` — Create a recurring schedule \
+         (e.g. `/schedule add Give me a morning summary at 06:45 from monday to friday`)\n\
+         - `/schedule list` — List all schedules\n\
+         - `/schedule delete <name>` — Delete a schedule by name\n\n\
+         Users can also manage schedules from the Schedules page in the web interface.",
+    );
+
     messages.push(ChatMessage::system(system));
 
     // ── User personality ──────────────────────────────────────────────────────
