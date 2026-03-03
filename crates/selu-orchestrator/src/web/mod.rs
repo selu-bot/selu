@@ -13,19 +13,22 @@ pub mod users;
 use crate::state::AppState;
 use axum::{
     Router,
-    extract::{FromRequestParts, State},
-    http::{request::Parts, HeaderMap, Uri},
-    middleware::Next,
-    response::{IntoResponse, Redirect},
+    extract::FromRequestParts,
+    http::{request::Parts, Uri},
+    response::Redirect,
     routing::{delete, get, post},
 };
+use std::convert::Infallible;
+use std::task::{Context, Poll};
+use tower::{Layer, Service};
 
 // ── BasePath extractor ───────────────────────────────────────────────────────
 
 /// Per-request URL path prefix resolved from the `X-Forwarded-Prefix` header,
 /// falling back to the static `SELU__BASE_PATH` config, then to `""`.
 ///
-/// Middleware inserts this into request extensions before any handler runs.
+/// The [`StripPrefixService`] Tower service inserts this into request extensions
+/// before Axum's router performs route matching.
 /// Handlers extract it as `BasePath(base_path): BasePath`.
 #[derive(Debug, Clone)]
 pub struct BasePath(pub String);
@@ -43,93 +46,132 @@ pub struct BasePath(pub String);
 #[derive(Debug, Clone)]
 pub struct ExternalOrigin(pub String);
 
-/// Middleware that resolves the base path and strips it from the request URI
-/// so Axum's router matches the bare paths (e.g. `/chat`, `/login`).
-///
-/// When a reverse proxy forwards `/selu/chat` and sets
-/// `X-Forwarded-Prefix: /selu`, this middleware:
-///   1. Sets `BasePath("/selu")` in request extensions (for templates/links)
-///   2. Rewrites the URI from `/selu/chat` to `/chat` (for route matching)
-///
-/// This means nginx does NOT need `rewrite` — just a plain `proxy_pass`.
-///
-/// Also resolves the full external origin URL for features that need to
-/// register webhook callbacks (Telegram, etc.).
-pub async fn resolve_base_path(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    mut req: axum::extract::Request,
-    next: Next,
-) -> impl IntoResponse {
-    let bp = headers
-        .get("x-forwarded-prefix")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.trim_end_matches('/').to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| state.base_path.clone());
+// ── Tower service: prefix stripping + extension injection ────────────────────
+//
+// This runs BEFORE Axum's router performs route matching, which is critical
+// because `Router::layer()` only wraps matched handlers — it cannot rewrite
+// the URI before route matching.  A Tower service wrapping the entire Router
+// from the outside does run first.
 
-    // Strip the base path prefix from the request URI so the router matches
-    // bare paths like `/chat` even when the browser requested `/selu/chat`.
-    if !bp.is_empty() {
-        let uri = req.uri().clone();
-        let path = uri.path();
-        if let Some(stripped) = path.strip_prefix(&bp) {
-            // Ensure the stripped path starts with `/`
-            let new_path = if stripped.is_empty() || !stripped.starts_with('/') {
-                format!("/{}", stripped)
-            } else {
-                stripped.to_string()
-            };
-            // Rebuild the URI with the stripped path, preserving query string
-            let new_uri = if let Some(q) = uri.query() {
-                format!("{}?{}", new_path, q)
-            } else {
-                new_path
-            };
-            if let Ok(parsed) = new_uri.parse::<Uri>() {
-                *req.uri_mut() = parsed;
-            }
-        }
-    }
-
-    // Resolve external origin URL.
-    // Priority: SELU__EXTERNAL_URL config > auto-detect from headers > fallback
-    let origin = if let Some(ref configured) = state.config.external_url {
-        configured.trim_end_matches('/').to_string()
-    } else {
-        // Auto-detect from reverse-proxy headers
-        let proto = headers
-            .get("x-forwarded-proto")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("http");
-        let host = headers
-            .get("x-forwarded-host")
-            .or_else(|| headers.get("host"))
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-
-        if host.is_empty() {
-            // No host info at all — use the static fallback
-            format!("http://localhost:{}", state.config.server.port)
-        } else {
-            format!("{}://{}", proto, host)
-        }
-    };
-
-    // Append the base path so the full URL works behind a reverse proxy
-    let full_origin = if bp.is_empty() {
-        origin
-    } else {
-        format!("{}{}", origin, bp)
-    };
-
-    req.extensions_mut().insert(BasePath(bp));
-    req.extensions_mut().insert(ExternalOrigin(full_origin));
-    next.run(req).await
+/// Tower [`Layer`] that wraps a service with [`StripPrefixService`].
+#[derive(Clone)]
+pub struct StripPrefixLayer {
+    pub state: AppState,
 }
 
+impl<S> Layer<S> for StripPrefixLayer {
+    type Service = StripPrefixService<S>;
+    fn layer(&self, inner: S) -> Self::Service {
+        StripPrefixService {
+            inner,
+            state: self.state.clone(),
+        }
+    }
+}
+
+/// Tower service that intercepts every inbound request and:
+///
+///   1. Reads the `X-Forwarded-Prefix` header (e.g. `/selu`)
+///   2. Strips that prefix from the request URI (`/selu/chat` → `/chat`)
+///      so Axum's router can match the bare path
+///   3. Injects [`BasePath`] and [`ExternalOrigin`] into request extensions
+///      for handlers / templates / redirects
+///
+/// Because this is a Tower service wrapping the entire Axum router, the URI
+/// rewrite happens **before** route matching.
+#[derive(Clone)]
+pub struct StripPrefixService<S> {
+    inner: S,
+    state: AppState,
+}
+
+impl<S> Service<axum::extract::Request> for StripPrefixService<S>
+where
+    S: Service<axum::extract::Request, Response = axum::response::Response, Error = Infallible>
+        + Clone
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = axum::response::Response;
+    type Error = Infallible;
+    type Future = S::Future;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: axum::extract::Request) -> Self::Future {
+        // ── 1. Resolve base path ─────────────────────────────────────────
+        let bp = req
+            .headers()
+            .get("x-forwarded-prefix")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.trim_end_matches('/').to_string())
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| self.state.base_path.clone());
+
+        // ── 2. Strip prefix from URI ─────────────────────────────────────
+        if !bp.is_empty() {
+            let path = req.uri().path().to_string();
+            if let Some(stripped) = path.strip_prefix(bp.as_str()) {
+                let new_path = if stripped.is_empty() || !stripped.starts_with('/') {
+                    format!("/{}", stripped)
+                } else {
+                    stripped.to_string()
+                };
+                let new_uri = if let Some(q) = req.uri().query() {
+                    format!("{}?{}", new_path, q)
+                } else {
+                    new_path
+                };
+                if let Ok(parsed) = new_uri.parse::<Uri>() {
+                    *req.uri_mut() = parsed;
+                }
+            }
+        }
+
+        // ── 3. Resolve external origin ───────────────────────────────────
+        let origin = if let Some(ref configured) = self.state.config.external_url {
+            configured.trim_end_matches('/').to_string()
+        } else {
+            let proto = req
+                .headers()
+                .get("x-forwarded-proto")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("http");
+            let host = req
+                .headers()
+                .get("x-forwarded-host")
+                .or_else(|| req.headers().get("host"))
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+            if host.is_empty() {
+                format!("http://localhost:{}", self.state.config.server.port)
+            } else {
+                format!("{}://{}", proto, host)
+            }
+        };
+
+        let full_origin = if bp.is_empty() {
+            origin
+        } else {
+            format!("{}{}", origin, bp)
+        };
+
+        // ── 4. Inject extensions ─────────────────────────────────────────
+        req.extensions_mut().insert(BasePath(bp));
+        req.extensions_mut().insert(ExternalOrigin(full_origin));
+
+        // ── 5. Forward to inner service (Axum Router) ────────────────────
+        self.inner.call(req)
+    }
+}
+
+// ── Extractors ───────────────────────────────────────────────────────────────
+
 impl FromRequestParts<AppState> for BasePath {
-    type Rejection = std::convert::Infallible;
+    type Rejection = Infallible;
 
     async fn from_request_parts(
         parts: &mut Parts,
@@ -144,7 +186,7 @@ impl FromRequestParts<AppState> for BasePath {
 }
 
 impl FromRequestParts<AppState> for ExternalOrigin {
-    type Rejection = std::convert::Infallible;
+    type Rejection = Infallible;
 
     async fn from_request_parts(
         parts: &mut Parts,

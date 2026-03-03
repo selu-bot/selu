@@ -217,11 +217,15 @@ async fn main() -> Result<()> {
         .merge(pipes::inbound::router())
         .merge(bluebubbles::adapter::router())
         .merge(telegram::adapter::router())
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            web::resolve_base_path,
-        ))
-        .with_state(state);
+        .with_state(state.clone());
+
+    // Wrap the entire Axum router with a Tower service that strips the
+    // X-Forwarded-Prefix from the URI *before* route matching.  This must
+    // be an outer Tower service — Axum's Router::layer() only wraps handlers
+    // and cannot rewrite the URI before routes are matched.
+    let app = tower::ServiceBuilder::new()
+        .layer(web::StripPrefixLayer { state })
+        .service(app);
 
     let addr: std::net::SocketAddr = format!("{}:{}", cfg.server.host, cfg.server.port).parse()?;
     info!("Listening on {}", addr);
@@ -230,7 +234,7 @@ async fn main() -> Result<()> {
 
     // Graceful shutdown: stop accepting requests when a signal arrives, then
     // tear down all running capability containers so they don't get orphaned.
-    axum::serve(listener, app)
+    axum::serve(listener, tower::make::Shared::new(app))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
