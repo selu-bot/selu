@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "name": "selu-docs-scripts",
+  "description": "CI scripts for docs generation via AWS Bedrock"
+}

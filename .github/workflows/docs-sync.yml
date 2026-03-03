@@ -1,0 +1,256 @@
+name: Docs Sync
+
+# Triggered when DOCS_IMPACT.yaml changes land on main.
+# Reads new entries, generates docs updates via AWS Bedrock (Claude),
+# and creates a PR in selu-site.
+#
+# Required secrets:
+#   DOCS_BOT_APP_ID        — GitHub App ID for "Selu Docs Bot"
+#   DOCS_BOT_PRIVATE_KEY   — GitHub App private key (PEM)
+#   AWS_BEDROCK_BEARER_TOKEN — Bearer token for AWS Bedrock model access
+#
+# The bearer token authenticates directly with Bedrock — no IAM role
+# assumption, no OIDC federation, no AWS account ID needed.
+# Generate one via the Bedrock console under "Model access" > "API keys"
+# or use a service account token from your AWS setup.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - DOCS_IMPACT.yaml
+
+permissions:
+  contents: read
+
+env:
+  BEDROCK_MODEL_ID: us.anthropic.claude-sonnet-4-20250514-v1:0
+  AWS_REGION: us-east-1
+  SELU_SITE_REPO: selu-bot/selu-site
+  DOCS_STYLE_PATH: docs/DOCS_STYLE.md
+
+jobs:
+  sync-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout selu (full history for diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Detect new DOCS_IMPACT entries ───────────────────────
+      - name: Extract new docs impact entries
+        id: entries
+        run: |
+          set -euo pipefail
+
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          # Get only the lines added to DOCS_IMPACT.yaml in this push
+          DIFF=$(git diff "$BEFORE".."$AFTER" -- DOCS_IMPACT.yaml | grep "^+" | grep -v "^+++" | sed 's/^+//' || true)
+
+          if [ -z "$DIFF" ]; then
+            echo "No new entries in DOCS_IMPACT.yaml. Skipping."
+            echo "has_entries=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_entries=true" >> "$GITHUB_OUTPUT"
+
+          # Save the full current DOCS_IMPACT.yaml for the generation script
+          cp DOCS_IMPACT.yaml /tmp/docs_impact.yaml
+
+          # Save the diff for context
+          git diff "$BEFORE".."$AFTER" -- DOCS_IMPACT.yaml > /tmp/docs_impact_diff.txt
+
+          echo "New entries detected in DOCS_IMPACT.yaml"
+
+      - name: Early exit if no entries
+        if: steps.entries.outputs.has_entries == 'false'
+        run: echo "Nothing to do." && exit 0
+
+      # ── Checkout selu-site to read current docs ──────────────
+      - name: Generate GitHub App token
+        if: steps.entries.outputs.has_entries == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.DOCS_BOT_APP_ID }}
+          private-key: ${{ secrets.DOCS_BOT_PRIVATE_KEY }}
+          repositories: selu-site
+
+      - name: Checkout selu-site
+        if: steps.entries.outputs.has_entries == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SELU_SITE_REPO }}
+          token: ${{ steps.app-token.outputs.token }}
+          path: selu-site
+
+      # ── Gather context for the LLM ──────────────────────────
+      - name: Collect context
+        if: steps.entries.outputs.has_entries == 'true'
+        id: context
+        run: |
+          set -euo pipefail
+
+          CONTEXT_DIR="/tmp/docs-context"
+          mkdir -p "$CONTEXT_DIR"
+
+          # 1. Copy the docs style guide (if it exists)
+          if [ -f "selu-site/${{ env.DOCS_STYLE_PATH }}" ]; then
+            cp "selu-site/${{ env.DOCS_STYLE_PATH }}" "$CONTEXT_DIR/style_guide.md"
+          else
+            echo "No style guide found at selu-site/${{ env.DOCS_STYLE_PATH }}" > "$CONTEXT_DIR/style_guide.md"
+          fi
+
+          # 2. Parse affected_files from DOCS_IMPACT.yaml and collect source code
+          # Extract file paths listed under affected_files
+          AFFECTED_FILES=$(grep -A 100 'affected_files:' /tmp/docs_impact_diff.txt \
+            | grep '^\+.*- crates/' \
+            | sed 's/^+\s*- //' \
+            | head -20 || true)
+
+          echo "--- AFFECTED SOURCE FILES ---" > "$CONTEXT_DIR/source_code.txt"
+          for FILE in $AFFECTED_FILES; do
+            if [ -f "$FILE" ]; then
+              echo "" >> "$CONTEXT_DIR/source_code.txt"
+              echo "=== FILE: $FILE ===" >> "$CONTEXT_DIR/source_code.txt"
+              cat "$FILE" >> "$CONTEXT_DIR/source_code.txt"
+            fi
+          done
+
+          # 3. Parse docs_sections and collect current docs content
+          DOCS_SECTIONS=$(grep -A 100 'docs_sections:' /tmp/docs_impact_diff.txt \
+            | grep '^\+.*- [a-z]' \
+            | grep -v 'affected_files\|crates/' \
+            | sed 's/^+\s*- //' \
+            | head -20 || true)
+
+          echo "--- CURRENT DOCUMENTATION ---" > "$CONTEXT_DIR/current_docs.txt"
+          for SECTION in $DOCS_SECTIONS; do
+            # Check both .mdx and .md extensions, in en/ directory
+            for EXT in mdx md; do
+              DOC_FILE="selu-site/docs/src/content/docs/en/${SECTION}.${EXT}"
+              if [ -f "$DOC_FILE" ]; then
+                echo "" >> "$CONTEXT_DIR/current_docs.txt"
+                echo "=== FILE: en/${SECTION}.${EXT} ===" >> "$CONTEXT_DIR/current_docs.txt"
+                cat "$DOC_FILE" >> "$CONTEXT_DIR/current_docs.txt"
+              fi
+            done
+          done
+
+          # 4. Recent git log for affected files (for additional context)
+          echo "--- RECENT CHANGES ---" > "$CONTEXT_DIR/git_log.txt"
+          for FILE in $AFFECTED_FILES; do
+            if [ -f "$FILE" ]; then
+              echo "" >> "$CONTEXT_DIR/git_log.txt"
+              echo "=== $FILE ===" >> "$CONTEXT_DIR/git_log.txt"
+              git log --oneline -5 -- "$FILE" >> "$CONTEXT_DIR/git_log.txt" 2>/dev/null || true
+            fi
+          done
+
+          echo "Context collection complete."
+          ls -la "$CONTEXT_DIR/"
+
+      # ── Generate docs via Bedrock ─────────────────────────────
+      - name: Setup Node.js
+        if: steps.entries.outputs.has_entries == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate docs via Bedrock
+        if: steps.entries.outputs.has_entries == 'true'
+        run: |
+          node .github/scripts/generate-docs.js \
+            --impact /tmp/docs_impact.yaml \
+            --diff /tmp/docs_impact_diff.txt \
+            --context /tmp/docs-context \
+            --output /tmp/docs-output
+        env:
+          AWS_BEDROCK_BEARER_TOKEN: ${{ secrets.AWS_BEDROCK_BEARER_TOKEN }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          BEDROCK_MODEL_ID: ${{ env.BEDROCK_MODEL_ID }}
+
+      # ── Create PR in selu-site ──────────────────────────────
+      - name: Create docs PR
+        if: steps.entries.outputs.has_entries == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          SHORT_SHA=$(echo "${{ github.sha }}" | head -c 7)
+          BRANCH="docs/auto-${SHORT_SHA}-$(date -u +%Y%m%d)"
+          SELU_SITE="selu-site"
+
+          # Check if any output files were generated
+          if [ ! -d "/tmp/docs-output" ] || [ -z "$(ls -A /tmp/docs-output 2>/dev/null)" ]; then
+            echo "No docs files generated. The LLM determined no docs changes were needed."
+            exit 0
+          fi
+
+          cd "$SELU_SITE"
+
+          # Create branch
+          git checkout -b "$BRANCH"
+
+          # Copy generated files into the docs directory
+          # The generate-docs.js script outputs files with their relative paths
+          # e.g., /tmp/docs-output/en/developer-guide/capabilities/container-guidelines.mdx
+          cp -r /tmp/docs-output/* docs/src/content/docs/ 2>/dev/null || true
+
+          # Check if there are actually changes
+          if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+            echo "No changes to commit. Generated content matches current docs."
+            exit 0
+          fi
+
+          # Commit
+          git config user.name "selu-docs-bot[bot]"
+          git config user.email "selu-docs-bot[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: auto-update from selu@${SHORT_SHA}"
+
+          # Push
+          git push origin "$BRANCH"
+
+          # Build PR body
+          COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          IMPACT_DIFF=$(cat /tmp/docs_impact_diff.txt | head -100)
+
+          gh pr create \
+            --repo "${{ env.SELU_SITE_REPO }}" \
+            --base main \
+            --head "$BRANCH" \
+            --title "docs: auto-update from selu@${SHORT_SHA}" \
+            --label "auto-docs" \
+            --body "$(cat <<EOF
+          ## Auto-generated Documentation Update
+
+          This PR was automatically created by the docs-sync workflow in the selu repo.
+
+          **Triggered by:** [${SHORT_SHA}](${COMMIT_URL})
+
+          ### Changes from DOCS_IMPACT.yaml
+
+          \`\`\`diff
+          ${IMPACT_DIFF}
+          \`\`\`
+
+          ### Review Checklist
+
+          - [ ] Factual accuracy — does the generated content correctly describe the feature?
+          - [ ] Tone and style — does it match the Selu docs voice (warm, clear, accessible)?
+          - [ ] English content is complete and correct
+          - [ ] German content is complete and correct
+          - [ ] Code examples work as shown
+          - [ ] Links to other docs sections are valid
+
+          > **Note:** This content was generated by an LLM based on code changes. Always verify technical accuracy before merging.
+          EOF
+          )"
+
+          echo "PR created successfully on branch $BRANCH"

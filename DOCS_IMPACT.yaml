@@ -1,0 +1,30 @@
+# Documentation Impact Log
+#
+# This file tracks code changes that require documentation updates.
+# It is append-only — entries are never removed.
+#
+# HOW IT WORKS:
+# 1. When you make a docs-relevant change, append an entry below.
+# 2. CI checks that docs-relevant PRs include an entry (or the `docs-impact: none` label).
+# 3. After merge to main, a workflow reads new entries and creates a docs PR in selu-site.
+#
+# See AGENTS.md section "Documentation impact" for full details on when and how to add entries.
+#
+# ENTRY FORMAT:
+#
+# - id: YYYY-MM-DD-short-slug       # unique identifier
+#   date: YYYY-MM-DD                 # date of the change
+#   pr: <number>                     # selu PR number (fill in when known)
+#   area: <area>                     # capabilities | agents | channels | llm | permissions | events | api | ui | config
+#   type: <type>                     # added | changed | removed | deprecated
+#   audience: <audience>             # users | developers | both
+#   summary: "Short description"     # one-line summary of the docs impact
+#   affected_files:                  # source files that changed
+#     - path/to/file.rs
+#   docs_sections:                   # which docs pages need updating
+#     - developer-guide/capabilities/container-guidelines
+#   details: |                       # enough context for a docs author to write the update
+#     Multi-line description of what changed, why, and how it affects
+#     the user or developer experience.
+
+entries: []

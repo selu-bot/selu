@@ -177,6 +177,88 @@ Use `tokio::spawn` for fire-and-forget async work (personality extraction, title
 - Run with `cargo test --workspace`.
 - When adding new logic (especially parsing, filtering, encryption, routing), add unit tests.
 
+### 5. Documentation impact
+
+External user-facing documentation lives at `docs.selu.bot` (source in `selu-site/docs/`). When code changes affect what users see or what developers build against, the docs must be updated too. Stale docs erode trust faster than missing docs.
+
+**Docs-relevant paths:**
+
+Any change touching these directories is potentially docs-relevant:
+
+- `src/web/` — UI pages and behavior users interact with
+- `src/api/` — REST API endpoints developers call
+- `src/agents/` — Agent format, routing, sessions, execution
+- `src/capabilities/` — Capability system, manifests, gRPC interface, container lifecycle
+- `src/pipes/`, `src/channels/` — Messaging channels (Telegram, iMessage, webhooks, web chat)
+- `src/permissions/` — Security model, tool policies, credential management
+- `src/llm/` — LLM provider configuration and behavior
+- `src/events/` — EventBus, subscriptions, CEL filters
+- `migrations/` — Schema changes that imply feature changes
+- `.env.example` — Configuration changes
+- `agents/` — Agent package format (agent.yaml, agent.md)
+
+**When to add a docs impact entry:**
+
+Ask yourself: "If a user or agent developer read the current docs after this change, would anything be wrong or missing?" If yes, add an entry to `DOCS_IMPACT.yaml`.
+
+Examples that need an entry:
+- Adding a new field to `agent.yaml` or `manifest.yaml`
+- Changing how a channel is configured
+- Adding or removing an LLM provider
+- Changing tool policy behavior
+- New API endpoints
+- New UI pages or significant UI changes
+- Changed environment variables
+
+Examples that do NOT need an entry (use `docs-impact: none` label on the PR instead):
+- Internal refactors that don't change behavior
+- Bug fixes that restore already-documented behavior
+- Performance improvements
+- Test additions
+- Code style changes
+
+**How to add an entry:**
+
+Append to the `DOCS_IMPACT.yaml` file in the repo root. Each entry needs enough context for a docs author (human or AI) to write the update without reading the full diff:
+
+```yaml
+- id: 2026-03-03-gpu-resources          # date + short slug, must be unique
+  date: 2026-03-03
+  pr: 47                                 # PR number (fill in when known)
+  area: capabilities                     # general area of the change
+  type: changed                          # added | changed | removed | deprecated
+  audience: developers                   # users | developers | both
+  summary: "Capability containers can now request GPU memory"
+  affected_files:
+    - crates/selu-orchestrator/src/capabilities/container.rs
+    - crates/selu-orchestrator/src/capabilities/manifest.rs
+  docs_sections:
+    - developer-guide/capabilities/container-guidelines
+    - reference/manifest-yaml-schema
+  details: |
+    The manifest.yaml `resources` block now accepts an optional `gpu_memory`
+    field (string, e.g. "1Gi"). When set, the container is scheduled with
+    GPU access. Default remains no GPU.
+```
+
+Valid `docs_sections` values map to the docs site structure:
+
+- `getting-started/*` — Installation, quick start, first conversation
+- `user-guide/channels/*` — Web chat, iMessage, Telegram
+- `user-guide/agents/*` — Installing, sessions, subscriptions
+- `user-guide/personality` — Personality and memory
+- `user-guide/llm-providers/*` — Anthropic, OpenAI, Bedrock, Ollama
+- `user-guide/security/*` — Credentials, tool policies
+- `user-guide/self-hosting/*` — Docker, env vars, updating
+- `developer-guide/agent-format/*` — Package structure, agent.yaml, agent.md, routing
+- `developer-guide/building-your-first-agent/*` — Tutorial, testing locally
+- `developer-guide/capabilities/*` — Manifests, gRPC, containers, examples
+- `developer-guide/built-in-tools/*` — emit_event, delegate_to_agent
+- `developer-guide/publishing/*` — Marketplace, release pipeline, versioning
+- `reference/*` — Schemas, API, proto, env vars
+
+CI will block the PR if docs-relevant files changed but neither `DOCS_IMPACT.yaml` was updated nor the `docs-impact: none` label was added. After merge, a workflow automatically reads new entries and creates a docs update PR in `selu-site`.
+
 ---
 
 ## Checklist — before you consider a change complete
@@ -188,3 +270,4 @@ Use `tokio::spawn` for fire-and-forget async work (personality extraction, title
 5. Does `cargo test --workspace` pass?
 6. If you changed any `sqlx::query!` / `sqlx::query_as!` call or migration, did you run `cargo sqlx prepare --workspace` and verify the `.sqlx/` directory is staged? (The pre-commit hook does this automatically, but always run it explicitly too — do not rely on the hook alone.)
 7. If there are compile warnings -> fix them! We want to have a clean as debt free as possible codebase.
+8. Does this change affect user-facing behavior or developer-facing APIs? If yes, add an entry to `DOCS_IMPACT.yaml`. If not, add the `docs-impact: none` label to the PR. CI enforces this — PRs that touch docs-relevant paths without either will fail.
