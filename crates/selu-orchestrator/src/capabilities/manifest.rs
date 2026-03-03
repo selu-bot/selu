@@ -28,7 +28,7 @@ pub struct CapabilityManifest {
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityClass {
     #[default]
-    Tool,        // stateless, short-lived
+    Tool, // stateless, short-lived
     Environment, // stateful, needs a workspace volume
 }
 
@@ -86,7 +86,7 @@ pub struct NetworkPolicy {
 #[serde(rename_all = "snake_case")]
 pub enum NetworkMode {
     #[default]
-    None,      // no external network access
+    None, // no external network access
     Allowlist, // only listed hosts
     Any,       // unrestricted (not recommended)
 }
@@ -95,7 +95,7 @@ pub enum NetworkMode {
 #[serde(rename_all = "snake_case")]
 pub enum FilesystemPolicy {
     #[default]
-    None,      // read-only root, no persistent storage
+    None, // read-only root, no persistent storage
     Temp,      // tmpfs /tmp only
     Workspace, // named Docker volume mounted at /workspace (Environment class only)
 }
@@ -112,8 +112,12 @@ pub struct CredentialDeclaration {
     pub description: String,
 }
 
-fn default_cred_type() -> String { "secret".to_string() }
-fn default_true() -> bool { true }
+fn default_cred_type() -> String {
+    "secret".to_string()
+}
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -145,24 +149,34 @@ impl Default for ResourceLimits {
     }
 }
 
-fn default_memory_mb() -> u32 { 128 }
-fn default_cpu() -> f32 { 0.5 }
-fn default_cpu_seconds() -> u32 { 30 }
-fn default_pids() -> u32 { 64 }
+fn default_memory_mb() -> u32 {
+    128
+}
+fn default_cpu() -> f32 {
+    0.5
+}
+fn default_cpu_seconds() -> u32 {
+    30
+}
+fn default_pids() -> u32 {
+    64
+}
 
 /// Load a capability manifest from a directory containing manifest.yaml (+ optional prompt.md)
 pub async fn load_from_dir(dir: &Path) -> Result<CapabilityManifest> {
     let yaml_path = dir.join("manifest.yaml");
     let prompt_path = dir.join("prompt.md");
 
-    let yaml = fs::read_to_string(&yaml_path).await
+    let yaml = fs::read_to_string(&yaml_path)
+        .await
         .with_context(|| format!("Missing manifest.yaml in {}", dir.display()))?;
 
     let mut manifest: CapabilityManifest = serde_yaml::from_str(&yaml)
         .with_context(|| format!("Invalid manifest.yaml in {}", dir.display()))?;
 
     if prompt_path.exists() {
-        manifest.prompt = fs::read_to_string(&prompt_path).await
+        manifest.prompt = fs::read_to_string(&prompt_path)
+            .await
             .with_context(|| format!("Failed to read prompt.md in {}", dir.display()))?;
     }
 
@@ -177,7 +191,8 @@ pub async fn load_for_agent(agent_dir: &Path) -> Result<Vec<CapabilityManifest>>
     }
 
     let mut caps = Vec::new();
-    let mut entries = fs::read_dir(&caps_dir).await
+    let mut entries = fs::read_dir(&caps_dir)
+        .await
         .with_context(|| format!("Cannot read capabilities dir: {}", caps_dir.display()))?;
 
     while let Some(entry) = entries.next_entry().await? {

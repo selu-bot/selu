@@ -5,7 +5,7 @@
 /// subsystems that need to send out-of-band messages (approval prompts,
 /// notifications) call `ChannelRegistry::send()` without knowing which
 /// transport backs the pipe.
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -62,7 +62,10 @@ impl ChannelRegistry {
     /// Replaces any previously registered sender for the same pipe_id
     /// (e.g. when a BlueBubbles adapter is restarted).
     pub async fn register(&self, pipe_id: &str, sender: Arc<dyn ChannelSender>) {
-        self.senders.write().await.insert(pipe_id.to_string(), sender);
+        self.senders
+            .write()
+            .await
+            .insert(pipe_id.to_string(), sender);
         debug!(pipe_id = %pipe_id, "Channel sender registered");
     }
 

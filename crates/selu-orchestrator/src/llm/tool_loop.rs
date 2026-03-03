@@ -66,7 +66,10 @@ pub enum LoopEvent {
     ConfirmationRequired(ConfirmationRequest),
     /// A tool call has been queued for async approval on a non-interactive
     /// channel. The caller can use this to update the UI.
-    ApprovalQueued { tool_name: String, approval_id: String },
+    ApprovalQueued {
+        tool_name: String,
+        approval_id: String,
+    },
     /// Final complete text response
     Done,
     /// An error occurred
@@ -105,7 +108,14 @@ pub async fn run_loop(
     tools: Vec<ToolSpec>,
     temperature: f32,
     tx: LoopSender,
-    tool_dispatcher: impl Fn(String, serde_json::Value, bool) -> futures::future::BoxFuture<'static, Result<ToolDispatchResult>> + Send + Sync + 'static,
+    tool_dispatcher: impl Fn(
+        String,
+        serde_json::Value,
+        bool,
+    ) -> futures::future::BoxFuture<'static, Result<ToolDispatchResult>>
+    + Send
+    + Sync
+    + 'static,
 ) -> Result<String> {
     let loop_start = Instant::now();
     let mut iteration: u32 = 0;
@@ -139,7 +149,12 @@ pub async fn run_loop(
                             streamed_text.push_str(&t);
                             let _ = tx.send(LoopEvent::Token(t)).await;
                         }
-                        StreamChunk::ToolCallDelta { index, id, name, arguments_delta } => {
+                        StreamChunk::ToolCallDelta {
+                            index,
+                            id,
+                            name,
+                            arguments_delta,
+                        } => {
                             if !got_first_token {
                                 debug!(
                                     iteration,
@@ -150,7 +165,11 @@ pub async fn run_loop(
                             }
                             // Grow the vec if needed
                             while pending_tool_calls.len() <= index {
-                                pending_tool_calls.push((String::new(), String::new(), String::new()));
+                                pending_tool_calls.push((
+                                    String::new(),
+                                    String::new(),
+                                    String::new(),
+                                ));
                             }
                             if let Some(id) = id {
                                 pending_tool_calls[index].0 = id;
@@ -194,7 +213,10 @@ pub async fn run_loop(
                 return Ok(streamed_text);
             }
             // Stream completed but returned no text and no tool calls — fall through to non-streaming
-            debug!(iteration, "Stream returned no content, falling back to non-streaming");
+            debug!(
+                iteration,
+                "Stream returned no content, falling back to non-streaming"
+            );
         }
 
         // ── Build ToolCall objects from stream deltas (or fall back) ─────
@@ -252,8 +274,15 @@ pub async fn run_loop(
 
         // Add the assistant's tool call message with the actual
         // ToolCall data so providers can emit proper toolUse blocks.
-        let summary = calls.iter().map(|c| format!("[calling {}]", c.name)).collect::<Vec<_>>().join(", ");
-        messages.push(ChatMessage::assistant_with_tool_calls(summary, calls.clone()));
+        let summary = calls
+            .iter()
+            .map(|c| format!("[calling {}]", c.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        messages.push(ChatMessage::assistant_with_tool_calls(
+            summary,
+            calls.clone(),
+        ));
 
         // Send all status events upfront so the UI shows activity immediately
         for call in &calls {
@@ -266,9 +295,10 @@ pub async fn run_loop(
         // and invokes the tool (for Allow) or returns NeedsConfirmation/Queued
         // immediately (for Ask) — so parallel dispatch is safe.
         let dispatch_start = Instant::now();
-        let dispatch_futures: Vec<_> = calls.iter().map(|call| {
-            tool_dispatcher(call.name.clone(), call.arguments.clone(), false)
-        }).collect();
+        let dispatch_futures: Vec<_> = calls
+            .iter()
+            .map(|call| tool_dispatcher(call.name.clone(), call.arguments.clone(), false))
+            .collect();
         let dispatch_results = join_all(dispatch_futures).await;
 
         debug!(
@@ -293,11 +323,10 @@ pub async fn run_loop(
         let mut deferred_queued: Vec<DeferredQueued<'_>> = Vec::new();
 
         for (call, result) in calls.iter().zip(dispatch_results) {
-            let dispatch_result = result
-                .unwrap_or_else(|e| {
-                    warn!(tool = %call.name, "Tool dispatch failed: {e}");
-                    ToolDispatchResult::Done(format!("Tool error: {}", e))
-                });
+            let dispatch_result = result.unwrap_or_else(|e| {
+                warn!(tool = %call.name, "Tool dispatch failed: {e}");
+                ToolDispatchResult::Done(format!("Tool error: {}", e))
+            });
 
             match dispatch_result {
                 ToolDispatchResult::Done(result) => {
@@ -317,8 +346,17 @@ pub async fn run_loop(
                     deferred_confirmations.push(DeferredConfirmation { call });
                 }
 
-                ToolDispatchResult::Queued { approval_id, receiver, timeout } => {
-                    deferred_queued.push(DeferredQueued { call, approval_id, receiver, timeout });
+                ToolDispatchResult::Queued {
+                    approval_id,
+                    receiver,
+                    timeout,
+                } => {
+                    deferred_queued.push(DeferredQueued {
+                        call,
+                        approval_id,
+                        receiver,
+                        timeout,
+                    });
                 }
             }
         }
@@ -373,10 +411,12 @@ pub async fn run_loop(
         // Handle async approvals sequentially (non-interactive channels)
         for deferred in deferred_queued {
             let call = deferred.call;
-            let _ = tx.send(LoopEvent::ApprovalQueued {
-                tool_name: call.name.clone(),
-                approval_id: deferred.approval_id.clone(),
-            }).await;
+            let _ = tx
+                .send(LoopEvent::ApprovalQueued {
+                    tool_name: call.name.clone(),
+                    approval_id: deferred.approval_id.clone(),
+                })
+                .await;
 
             info!(
                 tool = %call.name,

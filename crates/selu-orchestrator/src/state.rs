@@ -2,7 +2,8 @@ use arc_swap::ArcSwap;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{oneshot, Mutex, Notify};
+use std::time::Instant;
+use tokio::sync::{Mutex, Notify, oneshot};
 
 use crate::agents::loader::AgentDefinition;
 use crate::capabilities::CapabilityEngine;
@@ -16,6 +17,21 @@ use crate::permissions::CredentialStore;
 /// Agent map type alias: values are `Arc<AgentDefinition>` so that cloning
 /// the map (or individual entries) only copies cheap `Arc` pointers.
 pub type AgentMap = HashMap<String, Arc<AgentDefinition>>;
+
+#[derive(Debug, Clone)]
+pub struct AgentUpdateJob {
+    pub owner_user_id: String,
+    pub agent_id: String,
+    pub agent_name: String,
+    pub target_version: String,
+    pub progress: u8,
+    pub message_key: String,
+    pub done: bool,
+    pub success: bool,
+    pub redirect_to: Option<String>,
+    pub error_key: Option<String>,
+    pub updated_at: Instant,
+}
 
 /// Shared application state threaded through all Axum handlers
 #[derive(Clone)]
@@ -43,6 +59,8 @@ pub struct AppState {
     /// Used for non-interactive channels (iMessage, webhooks) where the
     /// user approves by replying to a thread rather than clicking a button.
     pub pending_approvals: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
+    /// In-flight and recent agent update jobs keyed by update job id.
+    pub agent_update_jobs: Arc<Mutex<HashMap<String, AgentUpdateJob>>>,
     /// Capability engine: manages Docker container lifecycle + gRPC dispatch
     pub capabilities: CapabilityEngine,
     /// Channel-agnostic outbound message registry.
@@ -78,6 +96,7 @@ impl AppState {
             stream_notifies: Arc::new(Mutex::new(HashMap::new())),
             pending_confirmations: Arc::new(Mutex::new(HashMap::new())),
             pending_approvals: Arc::new(Mutex::new(HashMap::new())),
+            agent_update_jobs: Arc::new(Mutex::new(HashMap::new())),
             capabilities,
             channel_registry,
             credentials,

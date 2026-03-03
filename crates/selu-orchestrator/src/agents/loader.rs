@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs;
 
-use crate::capabilities::manifest::{load_for_agent, CapabilityManifest};
+use crate::capabilities::manifest::{CapabilityManifest, load_for_agent};
 
 // ── Routing mode ──────────────────────────────────────────────────────────────
 
@@ -97,7 +97,9 @@ pub struct ModelConfig {
     pub temperature: f32,
 }
 
-fn default_temperature() -> f32 { 0.7 }
+fn default_temperature() -> f32 {
+    0.7
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SessionConfig {
@@ -107,8 +109,12 @@ pub struct SessionConfig {
     pub idle_timeout_minutes: u32,
 }
 
-fn default_trigger() -> String { "mention".to_string() }
-fn default_idle_timeout() -> u32 { 30 }
+fn default_trigger() -> String {
+    "mention".to_string()
+}
+fn default_idle_timeout() -> u32 {
+    30
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapabilityRef {
@@ -235,23 +241,22 @@ pub async fn load_one(dir: &Path) -> Result<AgentDefinition> {
     let yaml_path = dir.join("agent.yaml");
     let md_path = dir.join("agent.md");
 
-    let yaml_content = fs::read_to_string(&yaml_path).await
+    let yaml_content = fs::read_to_string(&yaml_path)
+        .await
         .with_context(|| format!("Missing agent.yaml in {}", dir.display()))?;
 
     let mut agent: AgentDefinition = serde_yaml::from_str(&yaml_content)
         .with_context(|| format!("Invalid agent.yaml in {}", dir.display()))?;
 
     if md_path.exists() {
-        agent.system_prompt = fs::read_to_string(&md_path).await
+        agent.system_prompt = fs::read_to_string(&md_path)
+            .await
             .with_context(|| format!("Failed to read agent.md in {}", dir.display()))?;
     }
 
     // Load capability manifests from capabilities/ subdirectory
     let cap_list = load_for_agent(dir).await.unwrap_or_default();
-    agent.capability_manifests = cap_list
-        .into_iter()
-        .map(|m| (m.id.clone(), m))
-        .collect();
+    agent.capability_manifests = cap_list.into_iter().map(|m| (m.id.clone(), m)).collect();
 
     Ok(agent)
 }

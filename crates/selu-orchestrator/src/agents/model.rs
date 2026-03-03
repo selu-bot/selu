@@ -112,16 +112,14 @@ pub async fn set_agent_model(
     model_id: &str,
     temperature: f32,
 ) -> Result<()> {
-    sqlx::query(
-        "UPDATE agents SET provider_id = ?, model_id = ?, temperature = ? WHERE id = ?",
-    )
-    .bind(provider_id)
-    .bind(model_id)
-    .bind(temperature as f64)
-    .bind(agent_id)
-    .execute(db)
-    .await
-    .context("Failed to set agent model")?;
+    sqlx::query("UPDATE agents SET provider_id = ?, model_id = ?, temperature = ? WHERE id = ?")
+        .bind(provider_id)
+        .bind(model_id)
+        .bind(temperature as f64)
+        .bind(agent_id)
+        .execute(db)
+        .await
+        .context("Failed to set agent model")?;
 
     Ok(())
 }

@@ -9,9 +9,12 @@
 /// Two scopes:
 ///   - `user`   → `user_credentials` table: per-user, per-capability
 ///   - `system` → `system_credentials` table: shared across all users
-use anyhow::{anyhow, Context, Result};
-use base64::{engine::general_purpose::STANDARD as B64, Engine};
-use ring::aead::{self, BoundKey, Nonce, NonceSequence, SealingKey, OpeningKey, UnboundKey, AES_256_GCM, NONCE_LEN};
+use anyhow::{Context, Result, anyhow};
+use base64::{Engine, engine::general_purpose::STANDARD as B64};
+use ring::aead::{
+    self, AES_256_GCM, BoundKey, NONCE_LEN, Nonce, NonceSequence, OpeningKey, SealingKey,
+    UnboundKey,
+};
 use ring::error::Unspecified;
 use ring::rand::{SecureRandom, SystemRandom};
 use sqlx::SqlitePool;
@@ -32,10 +35,11 @@ impl NonceSequence for OneNonce {
 pub fn encrypt(key_bytes: &[u8; 32], plaintext: &[u8]) -> Result<String> {
     let rng = SystemRandom::new();
     let mut nonce_bytes = [0u8; NONCE_LEN];
-    rng.fill(&mut nonce_bytes).map_err(|_| anyhow!("RNG failed"))?;
+    rng.fill(&mut nonce_bytes)
+        .map_err(|_| anyhow!("RNG failed"))?;
 
-    let unbound = UnboundKey::new(&AES_256_GCM, key_bytes)
-        .map_err(|_| anyhow!("Invalid AES key"))?;
+    let unbound =
+        UnboundKey::new(&AES_256_GCM, key_bytes).map_err(|_| anyhow!("Invalid AES key"))?;
     let mut sealing = SealingKey::new(unbound, OneNonce(nonce_bytes));
 
     let mut in_out = plaintext.to_vec();
@@ -50,15 +54,17 @@ pub fn encrypt(key_bytes: &[u8; 32], plaintext: &[u8]) -> Result<String> {
 
 /// Decrypt a base64 blob produced by `encrypt`.
 pub fn decrypt(key_bytes: &[u8; 32], blob_b64: &str) -> Result<Vec<u8>> {
-    let blob = B64.decode(blob_b64).context("Invalid base64 in credential blob")?;
+    let blob = B64
+        .decode(blob_b64)
+        .context("Invalid base64 in credential blob")?;
     if blob.len() < NONCE_LEN {
         return Err(anyhow!("Credential blob too short"));
     }
     let (nonce_bytes, ciphertext) = blob.split_at(NONCE_LEN);
     let nonce_arr: [u8; NONCE_LEN] = nonce_bytes.try_into().unwrap();
 
-    let unbound = UnboundKey::new(&AES_256_GCM, key_bytes)
-        .map_err(|_| anyhow!("Invalid AES key"))?;
+    let unbound =
+        UnboundKey::new(&AES_256_GCM, key_bytes).map_err(|_| anyhow!("Invalid AES key"))?;
     let mut opening = OpeningKey::new(unbound, OneNonce(nonce_arr));
 
     let mut in_out = ciphertext.to_vec();
@@ -71,7 +77,8 @@ pub fn decrypt(key_bytes: &[u8; 32], blob_b64: &str) -> Result<Vec<u8>> {
 
 /// Parse a base64-encoded 32-byte key from the app config.
 pub fn parse_key(base64_key: &str) -> Result<[u8; 32]> {
-    let raw = B64.decode(base64_key.trim())
+    let raw = B64
+        .decode(base64_key.trim())
         .context("SELU_ENCRYPTION_KEY is not valid base64")?;
     raw.try_into()
         .map_err(|_| anyhow!("SELU_ENCRYPTION_KEY must decode to exactly 32 bytes"))
@@ -123,7 +130,11 @@ impl CredentialStore {
                ON CONFLICT(user_id, capability_id, credential_name)
                DO UPDATE SET encrypted_value = excluded.encrypted_value,
                              created_at = datetime('now')"#,
-            id, user_id, capability_id, credential_name, encrypted
+            id,
+            user_id,
+            capability_id,
+            credential_name,
+            encrypted
         )
         .execute(&self.db)
         .await
@@ -143,7 +154,9 @@ impl CredentialStore {
             "SELECT encrypted_value FROM user_credentials
              WHERE user_id = ? AND capability_id = ? AND credential_name = ?
                AND (expires_at IS NULL OR expires_at > datetime('now'))",
-            user_id, capability_id, credential_name
+            user_id,
+            capability_id,
+            credential_name
         )
         .fetch_optional(&self.db)
         .await
@@ -153,7 +166,9 @@ impl CredentialStore {
             None => Ok(None),
             Some(r) => {
                 let plain = decrypt(&self.key, &r.encrypted_value)?;
-                Ok(Some(String::from_utf8(plain).context("Credential is not valid UTF-8")?))
+                Ok(Some(
+                    String::from_utf8(plain).context("Credential is not valid UTF-8")?,
+                ))
             }
         }
     }
@@ -168,7 +183,9 @@ impl CredentialStore {
         sqlx::query!(
             "DELETE FROM user_credentials
              WHERE user_id = ? AND capability_id = ? AND credential_name = ?",
-            user_id, capability_id, credential_name
+            user_id,
+            capability_id,
+            credential_name
         )
         .execute(&self.db)
         .await?;
@@ -176,16 +193,13 @@ impl CredentialStore {
     }
 
     /// List all credential names stored for (user, capability).
-    pub async fn list_user(
-        &self,
-        user_id: &str,
-        capability_id: &str,
-    ) -> Result<Vec<String>> {
+    pub async fn list_user(&self, user_id: &str, capability_id: &str) -> Result<Vec<String>> {
         let rows = sqlx::query!(
             "SELECT credential_name FROM user_credentials
              WHERE user_id = ? AND capability_id = ?
                AND (expires_at IS NULL OR expires_at > datetime('now'))",
-            user_id, capability_id
+            user_id,
+            capability_id
         )
         .fetch_all(&self.db)
         .await?;
@@ -211,7 +225,10 @@ impl CredentialStore {
                ON CONFLICT(capability_id, credential_name)
                DO UPDATE SET encrypted_value = excluded.encrypted_value,
                              created_at = datetime('now')"#,
-            id, capability_id, credential_name, encrypted
+            id,
+            capability_id,
+            credential_name,
+            encrypted
         )
         .execute(&self.db)
         .await
@@ -229,7 +246,8 @@ impl CredentialStore {
         let row = sqlx::query!(
             "SELECT encrypted_value FROM system_credentials
              WHERE capability_id = ? AND credential_name = ?",
-            capability_id, credential_name
+            capability_id,
+            credential_name
         )
         .fetch_optional(&self.db)
         .await
@@ -239,21 +257,20 @@ impl CredentialStore {
             None => Ok(None),
             Some(r) => {
                 let plain = decrypt(&self.key, &r.encrypted_value)?;
-                Ok(Some(String::from_utf8(plain).context("Credential is not valid UTF-8")?))
+                Ok(Some(
+                    String::from_utf8(plain).context("Credential is not valid UTF-8")?,
+                ))
             }
         }
     }
 
     /// Delete a system credential.
-    pub async fn delete_system(
-        &self,
-        capability_id: &str,
-        credential_name: &str,
-    ) -> Result<()> {
+    pub async fn delete_system(&self, capability_id: &str, credential_name: &str) -> Result<()> {
         sqlx::query!(
             "DELETE FROM system_credentials
              WHERE capability_id = ? AND credential_name = ?",
-            capability_id, credential_name
+            capability_id,
+            credential_name
         )
         .execute(&self.db)
         .await?;

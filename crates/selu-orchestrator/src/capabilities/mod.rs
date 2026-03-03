@@ -3,7 +3,7 @@ pub mod grpc;
 pub mod manifest;
 pub mod runner;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use grpc::CapabilityGrpcClient;
 use manifest::CapabilityManifest;
 use runner::{CapabilityRunner, RunningCapability};
 
-use crate::permissions::{resolve_credentials, CredentialStore, PermissionError};
+use crate::permissions::{CredentialStore, PermissionError, resolve_credentials};
 use crate::state::AppState;
 
 /// Per-session state for a running capability: the Docker container +
@@ -80,7 +80,9 @@ impl CapabilityEngine {
             .map_err(|e: PermissionError| anyhow!("{}", e))?;
 
         let client = self.get_or_start(manifests, &cap_id, session_id).await?;
-        client.invoke(&actual_tool, args, credentials, session_id, thread_id).await
+        client
+            .invoke(&actual_tool, args, credentials, session_id, thread_id)
+            .await
     }
 
     /// Shut down all containers that belong to a specific session.
@@ -169,7 +171,13 @@ impl CapabilityEngine {
             return Ok(existing.client.clone());
         }
 
-        active.insert(key, ActiveCapability { running, client: client.clone() });
+        active.insert(
+            key,
+            ActiveCapability {
+                running,
+                client: client.clone(),
+            },
+        );
         Ok(client)
     }
 }
@@ -192,7 +200,10 @@ fn resolve_tool(
         }
     }
 
-    Err(anyhow!("No capability found that provides tool '{}'", tool_name))
+    Err(anyhow!(
+        "No capability found that provides tool '{}'",
+        tool_name
+    ))
 }
 
 /// Build `ToolSpec` objects from all capability manifests, with tool names

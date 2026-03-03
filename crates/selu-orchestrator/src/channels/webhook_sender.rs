@@ -20,11 +20,7 @@ pub struct WebhookSender {
 }
 
 impl WebhookSender {
-    pub fn new(
-        outbound_url: String,
-        outbound_auth: Option<String>,
-        recipient_ref: String,
-    ) -> Self {
+    pub fn new(outbound_url: String, outbound_auth: Option<String>, recipient_ref: String) -> Self {
         Self {
             outbound_url,
             outbound_auth,
@@ -57,9 +53,7 @@ impl ChannelSender for WebhookSender {
             "Sending approval prompt via webhook"
         );
 
-        let mut req = self.http
-            .post(&self.outbound_url)
-            .json(&envelope);
+        let mut req = self.http.post(&self.outbound_url).json(&envelope);
 
         if let Some(ref auth) = self.outbound_auth {
             req = req.header("Authorization", auth);

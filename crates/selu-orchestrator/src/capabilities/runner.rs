@@ -10,16 +10,14 @@
 ///   - resource limits from the capability manifest
 ///   - connected to isolated internal bridge networks (no default route to internet)
 ///   - HTTP_PROXY / HTTPS_PROXY pointing at the orchestrator's egress proxy
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
+use bollard::Docker;
 use bollard::container::{
     Config, CreateContainerOptions, ListContainersOptions, LogsOptions, RemoveContainerOptions,
     StartContainerOptions,
 };
-use bollard::models::{
-    ContainerInspectResponse, HostConfig, PortBinding, ResourcesUlimits,
-};
+use bollard::models::{ContainerInspectResponse, HostConfig, PortBinding, ResourcesUlimits};
 use bollard::network::CreateNetworkOptions;
-use bollard::Docker;
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -68,9 +66,12 @@ pub struct CapabilityRunner {
 }
 
 impl CapabilityRunner {
-    pub fn new(egress_registry: EgressRegistry, egress_proxy_addr: impl Into<String>) -> Result<Self> {
-        let docker = Docker::connect_with_local_defaults()
-            .context("Failed to connect to Docker daemon")?;
+    pub fn new(
+        egress_registry: EgressRegistry,
+        egress_proxy_addr: impl Into<String>,
+    ) -> Result<Self> {
+        let docker =
+            Docker::connect_with_local_defaults().context("Failed to connect to Docker daemon")?;
         let addr_str = egress_proxy_addr.into();
         let port = addr_str
             .rsplit_once(':')
@@ -154,7 +155,9 @@ impl CapabilityRunner {
         // This is the most reliable method because it works regardless of
         // cgroup version or runtime quirks.
         if container_id.is_none() {
-            debug!("Filesystem-based container detection did not find a container ID, trying Docker API");
+            debug!(
+                "Filesystem-based container detection did not find a container ID, trying Docker API"
+            );
             container_id = self.detect_via_docker_api().await;
         }
 
@@ -181,7 +184,10 @@ impl CapabilityRunner {
         }
 
         let mut options: HashMap<String, String> = HashMap::new();
-        options.insert("com.docker.network.bridge.enable_ip_masquerade".into(), "false".into());
+        options.insert(
+            "com.docker.network.bridge.enable_ip_masquerade".into(),
+            "false".into(),
+        );
 
         self.docker
             .create_network(CreateNetworkOptions {
@@ -200,14 +206,21 @@ impl CapabilityRunner {
 
     /// Connect the Selu container to a capability bridge network (idempotent).
     async fn join_network_if_needed(&self, container_id: &str, network: &str) -> Result<()> {
-        use bollard::network::ConnectNetworkOptions;
         use bollard::models::EndpointSettings;
+        use bollard::network::ConnectNetworkOptions;
 
         // Check if already connected by inspecting our container
         if let Ok(inspect) = self.docker.inspect_container(container_id, None).await {
-            if let Some(nets) = inspect.network_settings.as_ref().and_then(|n| n.networks.as_ref()) {
+            if let Some(nets) = inspect
+                .network_settings
+                .as_ref()
+                .and_then(|n| n.networks.as_ref())
+            {
                 if nets.contains_key(network) {
-                    debug!(network = network, "Selu container already connected to network");
+                    debug!(
+                        network = network,
+                        "Selu container already connected to network"
+                    );
                     return Ok(());
                 }
             }
@@ -222,9 +235,14 @@ impl CapabilityRunner {
                 },
             )
             .await
-            .with_context(|| format!("Failed to connect Selu container to network '{}'", network))?;
+            .with_context(|| {
+                format!("Failed to connect Selu container to network '{}'", network)
+            })?;
 
-        info!(network = network, "Connected Selu container to capability network");
+        info!(
+            network = network,
+            "Connected Selu container to capability network"
+        );
         Ok(())
     }
 
@@ -268,11 +286,7 @@ impl CapabilityRunner {
         manifest: &CapabilityManifest,
         session_id: &str,
     ) -> Result<RunningCapability> {
-        let container_name = format!(
-            "selu-cap-{}-{}",
-            manifest.id,
-            Uuid::new_v4().as_simple()
-        );
+        let container_name = format!("selu-cap-{}-{}", manifest.id, Uuid::new_v4().as_simple());
 
         // ── Choose network ────────────────────────────────────────────────────
         let network_name = match manifest.class {
@@ -301,7 +315,10 @@ impl CapabilityRunner {
         // host.docker.internal, which may be unreachable without IP masquerading).
         let self_id = self.self_container_id.read().await;
         let proxy_host = if let Some(ref id) = *self_id {
-            let self_inspect = self.docker.inspect_container(id, None).await
+            let self_inspect = self
+                .docker
+                .inspect_container(id, None)
+                .await
                 .context("Failed to inspect Selu container for egress proxy IP")?;
             extract_container_ip(&self_inspect, network_name)
                 .unwrap_or_else(|| "host.docker.internal".to_string())
@@ -390,10 +407,16 @@ impl CapabilityRunner {
             platform: None,
         };
 
-        let container = self.docker
+        let container = self
+            .docker
             .create_container(Some(create_opts), config)
             .await
-            .with_context(|| format!("Failed to create container for capability '{}'", manifest.id))?;
+            .with_context(|| {
+                format!(
+                    "Failed to create container for capability '{}'",
+                    manifest.id
+                )
+            })?;
 
         let container_id = container.id.clone();
 
@@ -409,18 +432,21 @@ impl CapabilityRunner {
         );
 
         // ── Inspect to get connection details ───────────────────────────────────
-        let inspect = self.docker
+        let inspect = self
+            .docker
             .inspect_container(&container_id, None)
             .await
             .with_context(|| format!("Failed to inspect container '{}'", container_id))?;
 
         let grpc_addr = if self.self_container_id.read().await.is_some() {
             // Running inside Docker — connect via the container's IP on the shared network
-            let container_ip = extract_container_ip(&inspect, network_name)
-                .ok_or_else(|| anyhow!(
+            let container_ip = extract_container_ip(&inspect, network_name).ok_or_else(|| {
+                anyhow!(
                     "No container IP found for '{}' on network '{}'",
-                    container_id, network_name
-                ))?;
+                    container_id,
+                    network_name
+                )
+            })?;
             format!("http://{}:{}", container_ip, CAPABILITY_GRPC_PORT)
         } else {
             // Running on the host — connect via the mapped host port on 127.0.0.1
@@ -435,11 +461,19 @@ impl CapabilityRunner {
             mode: manifest.network.mode.clone(),
             allowed_hosts: manifest.network.hosts.clone(),
         };
-        crate::capabilities::egress_proxy::register(&self.egress_registry, egress_token.clone(), policy).await;
+        crate::capabilities::egress_proxy::register(
+            &self.egress_registry,
+            egress_token.clone(),
+            policy,
+        )
+        .await;
 
         // ── Wait for gRPC healthcheck ─────────────────────────────────────────
-        wait_for_grpc_ready(&self.docker, &container_id, &grpc_addr, 30).await
-            .with_context(|| format!("Capability '{}' did not become ready in time", manifest.id))?;
+        wait_for_grpc_ready(&self.docker, &container_id, &grpc_addr, 30)
+            .await
+            .with_context(|| {
+                format!("Capability '{}' did not become ready in time", manifest.id)
+            })?;
 
         Ok(RunningCapability {
             container_id,
@@ -452,10 +486,12 @@ impl CapabilityRunner {
     /// Stop and remove a running capability container
     pub async fn stop(&self, running: &RunningCapability) {
         // Deregister egress policy by token
-        crate::capabilities::egress_proxy::deregister(&self.egress_registry, &running.egress_token).await;
+        crate::capabilities::egress_proxy::deregister(&self.egress_registry, &running.egress_token)
+            .await;
 
         // Force-remove the container (auto_remove handles normal exit, but stop in case it's still running)
-        if let Err(e) = self.docker
+        if let Err(e) = self
+            .docker
             .remove_container(
                 &running.container_id,
                 Some(RemoveContainerOptions {
@@ -479,11 +515,7 @@ impl CapabilityRunner {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn extract_host_port(inspect: &ContainerInspectResponse, container_port: u16) -> Option<u16> {
-    let ports = inspect
-        .network_settings
-        .as_ref()?
-        .ports
-        .as_ref()?;
+    let ports = inspect.network_settings.as_ref()?.ports.as_ref()?;
 
     let key = format!("{}/tcp", container_port);
     let bindings = ports.get(&key)?.as_ref()?;
@@ -493,11 +525,7 @@ fn extract_host_port(inspect: &ContainerInspectResponse, container_port: u16) ->
 
 /// Extract the container's IP address on a specific Docker network.
 fn extract_container_ip(inspect: &ContainerInspectResponse, network_name: &str) -> Option<String> {
-    let networks = inspect
-        .network_settings
-        .as_ref()?
-        .networks
-        .as_ref()?;
+    let networks = inspect.network_settings.as_ref()?.networks.as_ref()?;
 
     let endpoint = networks.get(network_name)?;
     let ip = endpoint.ip_address.as_ref()?;
@@ -594,9 +622,9 @@ async fn wait_for_grpc_ready(
     grpc_addr: &str,
     timeout_secs: u64,
 ) -> Result<()> {
-    use tonic::transport::Channel;
-    use crate::capabilities::grpc::selu_capability::capability_client::CapabilityClient;
     use crate::capabilities::grpc::selu_capability::HealthRequest;
+    use crate::capabilities::grpc::selu_capability::capability_client::CapabilityClient;
+    use tonic::transport::Channel;
 
     let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
 
@@ -618,7 +646,8 @@ async fn wait_for_grpc_ready(
 
             return Err(anyhow!(
                 "gRPC healthcheck timed out after {}s (container state: {})",
-                timeout_secs, state,
+                timeout_secs,
+                state,
             ));
         }
 
@@ -659,7 +688,8 @@ async fn wait_for_grpc_ready(
 
                     return Err(anyhow!(
                         "Container exited (status={}, exit_code={}) before gRPC became ready",
-                        status, exit_code,
+                        status,
+                        exit_code,
                     ));
                 }
             }
@@ -741,10 +771,7 @@ async fn fetch_container_state(docker: &Docker, container_id: &str) -> String {
                 .and_then(|s| s.status.as_ref())
                 .map(|s| format!("{:?}", s))
                 .unwrap_or_else(|| "unknown".to_string());
-            let exit_code = inspect
-                .state
-                .as_ref()
-                .and_then(|s| s.exit_code);
+            let exit_code = inspect.state.as_ref().and_then(|s| s.exit_code);
             match exit_code {
                 Some(code) => format!("{}, exit_code={}", status, code),
                 None => status,
@@ -759,7 +786,10 @@ mod tests {
     use super::*;
     use bollard::models::{EndpointSettings, NetworkSettings};
 
-    fn make_inspect(networks: HashMap<String, EndpointSettings>, port_map: HashMap<String, Option<Vec<PortBinding>>>) -> ContainerInspectResponse {
+    fn make_inspect(
+        networks: HashMap<String, EndpointSettings>,
+        port_map: HashMap<String, Option<Vec<PortBinding>>>,
+    ) -> ContainerInspectResponse {
         ContainerInspectResponse {
             network_settings: Some(NetworkSettings {
                 networks: Some(networks),

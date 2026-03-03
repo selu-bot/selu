@@ -1,9 +1,9 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Json, Redirect, Response},
-    Form,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -186,7 +186,8 @@ pub async fn bb_proxy_chats(
         "sort": "lastmessage",
     });
 
-    let resp = match http.post(&url)
+    let resp = match http
+        .post(&url)
         .query(&[("password", req.server_password.as_str())])
         .json(&body)
         .send()
@@ -198,11 +199,19 @@ pub async fn bb_proxy_chats(
             let msg = if e.is_timeout() {
                 "Connection timed out. Is the BlueBubbles server running?".to_string()
             } else if e.is_connect() {
-                format!("Cannot reach {}. Is the server URL correct and the server running? If Selu runs in Docker, use http://host.docker.internal:PORT instead of localhost.", server_url)
+                format!(
+                    "Cannot reach {}. Is the server URL correct and the server running? If Selu runs in Docker, use http://host.docker.internal:PORT instead of localhost.",
+                    server_url
+                )
             } else {
                 format!("Connection failed: {}", e)
             };
-            return Json(BbProxyResponse { ok: false, error: Some(msg), chats: None }).into_response();
+            return Json(BbProxyResponse {
+                ok: false,
+                error: Some(msg),
+                chats: None,
+            })
+            .into_response();
         }
     };
 
@@ -217,7 +226,12 @@ pub async fn bb_proxy_chats(
         } else {
             format!("BlueBubbles returned error {}.", status)
         };
-        return Json(BbProxyResponse { ok: false, error: Some(msg), chats: None }).into_response();
+        return Json(BbProxyResponse {
+            ok: false,
+            error: Some(msg),
+            chats: None,
+        })
+        .into_response();
     }
 
     let raw_body = match resp.text().await {
@@ -228,7 +242,8 @@ pub async fn bb_proxy_chats(
                 ok: false,
                 error: Some("Failed to read response from BlueBubbles.".to_string()),
                 chats: None,
-            }).into_response();
+            })
+            .into_response();
         }
     };
 
@@ -237,40 +252,47 @@ pub async fn bb_proxy_chats(
         Err(e) => {
             error!("BB proxy: failed to parse response: {e}");
             // Log a truncated version of the body for debugging
-            let preview = if raw_body.len() > 500 { &raw_body[..500] } else { &raw_body };
+            let preview = if raw_body.len() > 500 {
+                &raw_body[..500]
+            } else {
+                &raw_body
+            };
             error!("BB proxy: response body preview: {preview}");
             return Json(BbProxyResponse {
                 ok: false,
-                error: Some("Got an unexpected response from BlueBubbles. Check the Selu logs for details.".to_string()),
+                error: Some(
+                    "Got an unexpected response from BlueBubbles. Check the Selu logs for details."
+                        .to_string(),
+                ),
                 chats: None,
-            }).into_response();
+            })
+            .into_response();
         }
     };
 
-    let chats: Vec<BbChatInfo> = bb_resp.data.into_iter()
+    let chats: Vec<BbChatInfo> = bb_resp
+        .data
+        .into_iter()
         .filter_map(|c| {
             let guid = c.guid?;
-            let participants: Vec<String> = c.participants
+            let participants: Vec<String> = c
+                .participants
                 .unwrap_or_default()
                 .into_iter()
                 .filter_map(|p| p.address)
                 .collect();
 
-            let display_name = c.display_name
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| {
-                    if participants.is_empty() {
-                        "Unknown".to_string()
-                    } else {
-                        participants.join(", ")
-                    }
-                });
+            let display_name = c.display_name.filter(|s| !s.is_empty()).unwrap_or_else(|| {
+                if participants.is_empty() {
+                    "Unknown".to_string()
+                } else {
+                    participants.join(", ")
+                }
+            });
 
             let is_group = c.group_id.is_some() || participants.len() > 1;
 
-            let last_message = c.last_message
-                .and_then(|m| m.text)
-                .unwrap_or_default();
+            let last_message = c.last_message.and_then(|m| m.text).unwrap_or_default();
 
             // Truncate long last messages
             let last_message = if last_message.len() > 80 {
@@ -289,7 +311,12 @@ pub async fn bb_proxy_chats(
         })
         .collect();
 
-    Json(BbProxyResponse { ok: true, error: None, chats: Some(chats) }).into_response()
+    Json(BbProxyResponse {
+        ok: true,
+        error: None,
+        chats: Some(chats),
+    })
+    .into_response()
 }
 
 // ── Handlers: iMessage Setup Wizard ───────────────────────────────────────────
@@ -311,7 +338,9 @@ pub async fn imessage_setup_page(
         base_path,
         users,
         error: q.error,
-    }).render() {
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -336,7 +365,11 @@ pub async fn imessage_setup_submit(
         || form.server_password.is_empty()
         || form.chat_guid.trim().is_empty()
     {
-        return Redirect::to(&format!("{}/pipes/imessage/setup?error=Please+fill+in+all+required+fields", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/pipes/imessage/setup?error=Please+fill+in+all+required+fields",
+            base_path
+        ))
+        .into_response();
     }
 
     // 1. Find a user to own the pipe (first user, or from people list)
@@ -379,27 +412,34 @@ pub async fn imessage_setup_submit(
     .await
     {
         error!("Failed to create BB config: {e}");
-        return Redirect::to(&format!("{}/pipes/imessage/setup?error=Failed+to+create+adapter+config", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/pipes/imessage/setup?error=Failed+to+create+adapter+config",
+            base_path
+        ))
+        .into_response();
     }
 
     // 4. Create sender ref mappings from the people list
     if let Some(ref people_str) = form.people {
         for entry in people_str.split(',') {
             let entry = entry.trim();
-            if entry.is_empty() { continue; }
+            if entry.is_empty() {
+                continue;
+            }
             let parts: Vec<&str> = entry.splitn(2, ':').collect();
             if parts.len() == 2 {
                 let sender_ref = parts[0].trim();
                 let user_id = parts[1].trim();
                 if !sender_ref.is_empty() && !user_id.is_empty() {
                     let ref_id = Uuid::new_v4().to_string();
-                    let _ = sqlx::query!(
+                    let _ =
+                        sqlx::query!(
                         "INSERT OR IGNORE INTO user_sender_refs (id, user_id, pipe_id, sender_ref)
                          VALUES (?, ?, ?, ?)",
                         ref_id, user_id, pipe_id, sender_ref,
                     )
-                    .execute(&state.db)
-                    .await;
+                        .execute(&state.db)
+                        .await;
                 }
             }
         }
@@ -415,7 +455,8 @@ pub async fn imessage_setup_submit(
     Redirect::to(&format!(
         "{}/pipes/imessage/{}?msg=iMessage+pipe+set+up+successfully!",
         bp, bb_config_id
-    )).into_response()
+    ))
+    .into_response()
 }
 
 // ── Handlers: iMessage Detail ─────────────────────────────────────────────────
@@ -447,7 +488,9 @@ pub async fn imessage_detail(
         users,
         flash: q.msg,
         error: q.error,
-    }).render() {
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -468,16 +511,21 @@ pub async fn imessage_add_person(
     }
     if form.user_id.is_empty() || form.sender_ref.trim().is_empty() {
         return Redirect::to(&format!(
-            "{}/pipes/imessage/{}?error=Please+fill+in+both+fields", base_path, config_id
-        )).into_response();
+            "{}/pipes/imessage/{}?error=Please+fill+in+both+fields",
+            base_path, config_id
+        ))
+        .into_response();
     }
 
     // Get pipe_id from config
-    let pipe_id = match sqlx::query!("SELECT pipe_id FROM bluebubbles_configs WHERE id = ?", config_id)
-        .fetch_optional(&state.db)
-        .await
-        .ok()
-        .flatten()
+    let pipe_id = match sqlx::query!(
+        "SELECT pipe_id FROM bluebubbles_configs WHERE id = ?",
+        config_id
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
     {
         Some(r) => r.pipe_id,
         None => return prefixed_redirect(&base_path, "/pipes").into_response(),
@@ -486,22 +534,31 @@ pub async fn imessage_add_person(
     let ref_id = Uuid::new_v4().to_string();
     match sqlx::query!(
         "INSERT INTO user_sender_refs (id, user_id, pipe_id, sender_ref) VALUES (?, ?, ?, ?)",
-        ref_id, form.user_id, pipe_id, form.sender_ref,
+        ref_id,
+        form.user_id,
+        pipe_id,
+        form.sender_ref,
     )
     .execute(&state.db)
     .await
     {
         Ok(_) => Redirect::to(&format!(
-            "{}/pipes/imessage/{}?msg=Person+added", base_path, config_id
-        )).into_response(),
+            "{}/pipes/imessage/{}?msg=Person+added",
+            base_path, config_id
+        ))
+        .into_response(),
         Err(e) if e.to_string().contains("UNIQUE") => Redirect::to(&format!(
-            "{}/pipes/imessage/{}?error=This+phone+number+is+already+added", base_path, config_id
-        )).into_response(),
+            "{}/pipes/imessage/{}?error=This+phone+number+is+already+added",
+            base_path, config_id
+        ))
+        .into_response(),
         Err(e) => {
             error!("Failed to add person: {e}");
             Redirect::to(&format!(
-                "{}/pipes/imessage/{}?error=Failed+to+add+person.+Please+try+again.", base_path, config_id
-            )).into_response()
+                "{}/pipes/imessage/{}?error=Failed+to+add+person.+Please+try+again.",
+                base_path, config_id
+            ))
+            .into_response()
         }
     }
 }
@@ -544,7 +601,9 @@ pub async fn imessage_delete(
                 &row.server_url,
                 &row.server_password,
                 &webhook_id,
-            ).await {
+            )
+            .await
+            {
                 warn!("Failed to deregister BB webhook: {e}");
                 // Non-fatal: continue with deactivation
             }
@@ -552,9 +611,12 @@ pub async fn imessage_delete(
     }
 
     // Deactivate the BB config and its pipe
-    let _ = sqlx::query!("UPDATE bluebubbles_configs SET active = 0 WHERE id = ?", config_id)
-        .execute(&state.db)
-        .await;
+    let _ = sqlx::query!(
+        "UPDATE bluebubbles_configs SET active = 0 WHERE id = ?",
+        config_id
+    )
+    .execute(&state.db)
+    .await;
     // Also deactivate the associated pipe
     let _ = sqlx::query!(
         "UPDATE pipes SET active = 0 WHERE id IN (SELECT pipe_id FROM bluebubbles_configs WHERE id = ?)",
@@ -630,7 +692,9 @@ async fn load_allowed_people(db: &sqlx::SqlitePool, pipe_id: &str) -> Vec<Allowe
     .unwrap_or_default()
     .into_iter()
     .map(|r| {
-        let initials = r.display_name.chars()
+        let initials = r
+            .display_name
+            .chars()
             .filter(|c| c.is_alphabetic())
             .take(2)
             .collect::<String>()
@@ -640,7 +704,11 @@ async fn load_allowed_people(db: &sqlx::SqlitePool, pipe_id: &str) -> Vec<Allowe
             display_name: r.display_name,
             username: r.username,
             sender_ref: r.sender_ref,
-            initials: if initials.is_empty() { "?".to_string() } else { initials },
+            initials: if initials.is_empty() {
+                "?".to_string()
+            } else {
+                initials
+            },
         }
     })
     .collect()

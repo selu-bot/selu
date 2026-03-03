@@ -5,6 +5,7 @@
 /// Docker images are pulled from a container registry (e.g. GHCR).
 use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
+use bollard::models::CreateImageInfo;
 use ring::digest;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -48,6 +49,13 @@ pub struct MarketplaceEntry {
     /// Number of ratings the average is based on.
     #[serde(default)]
     pub rating_count: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PullProgress {
+    pub image: String,
+    /// Overall pull progress across all images as a 0.0..=1.0 fraction.
+    pub overall_fraction: f32,
 }
 
 // ── Catalogue fetching ────────────────────────────────────────────────────────
@@ -175,8 +183,9 @@ async fn install_agent_inner(
     docker: &bollard::Docker,
 ) -> Result<AgentDefinition> {
     // 4. Pull Docker images
-    for image in &entry.capability_images {
-        pull_image(docker, image).await?;
+    let image_count = entry.capability_images.len().max(1);
+    for (idx, image) in entry.capability_images.iter().enumerate() {
+        pull_image(docker, image, idx, image_count, None).await?;
     }
 
     // 5. Insert DB row (setup_complete = 0 if the agent has install steps)
@@ -313,6 +322,18 @@ pub async fn update_agent(
     docker: &bollard::Docker,
     capabilities: &CapabilityEngine,
 ) -> Result<AgentDefinition> {
+    update_agent_with_progress(entry, installed_dir, db, agents, docker, capabilities, None).await
+}
+
+pub async fn update_agent_with_progress(
+    entry: &MarketplaceEntry,
+    installed_dir: &str,
+    db: &SqlitePool,
+    agents: &Arc<ArcSwap<AgentMap>>,
+    docker: &bollard::Docker,
+    capabilities: &CapabilityEngine,
+    progress_tx: Option<tokio::sync::mpsc::UnboundedSender<PullProgress>>,
+) -> Result<AgentDefinition> {
     let agent_dir = Path::new(installed_dir).join(&entry.id);
 
     // Verify the agent is actually installed
@@ -373,7 +394,7 @@ pub async fn update_agent(
     extract_archive(&archive_bytes, installed_dir, &entry.id)?;
 
     // 7. Pull Docker images + update DB + reload into memory
-    match update_agent_inner(entry, &agent_dir, db, agents, docker).await {
+    match update_agent_inner(entry, &agent_dir, db, agents, docker, progress_tx).await {
         Ok(agent_def) => Ok(agent_def),
         Err(e) => {
             warn!(agent = %entry.id, "Update failed after extraction: {e}");
@@ -393,10 +414,12 @@ async fn update_agent_inner(
     db: &SqlitePool,
     agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
+    progress_tx: Option<tokio::sync::mpsc::UnboundedSender<PullProgress>>,
 ) -> Result<AgentDefinition> {
     // Pull Docker images
-    for image in &entry.capability_images {
-        pull_image(docker, image).await?;
+    let image_count = entry.capability_images.len().max(1);
+    for (idx, image) in entry.capability_images.iter().enumerate() {
+        pull_image(docker, image, idx, image_count, progress_tx.as_ref()).await?;
     }
 
     // Load the new agent definition
@@ -757,9 +780,16 @@ fn extract_archive(data: &[u8], installed_dir: &str, agent_id: &str) -> Result<(
 }
 
 /// Pull a Docker image.
-async fn pull_image(docker: &bollard::Docker, image: &str) -> Result<()> {
+async fn pull_image(
+    docker: &bollard::Docker,
+    image: &str,
+    image_index: usize,
+    image_count: usize,
+    progress_tx: Option<&tokio::sync::mpsc::UnboundedSender<PullProgress>>,
+) -> Result<()> {
     use bollard::image::CreateImageOptions;
     use futures::StreamExt;
+    use std::collections::{HashMap, HashSet};
 
     info!(image, "Pulling capability Docker image");
 
@@ -769,12 +799,25 @@ async fn pull_image(docker: &bollard::Docker, image: &str) -> Result<()> {
     };
 
     let mut stream = docker.create_image(Some(opts), None, None);
+    let mut layers: HashMap<String, (u64, u64)> = HashMap::new();
+    let mut complete_layers: HashSet<String> = HashSet::new();
 
     while let Some(result) = stream.next().await {
         match result {
             Ok(info) => {
-                if let Some(status) = info.status {
+                if let Some(status) = &info.status {
                     tracing::debug!(image, status, "Docker pull progress");
+                }
+                if let Some(tx) = progress_tx {
+                    let image_fraction =
+                        update_image_progress_state(&mut layers, &mut complete_layers, &info);
+                    let base = image_index as f32 / image_count as f32;
+                    let span = 1.0f32 / image_count as f32;
+                    let overall_fraction = (base + span * image_fraction).clamp(0.0, 1.0);
+                    let _ = tx.send(PullProgress {
+                        image: image.to_string(),
+                        overall_fraction,
+                    });
                 }
             }
             Err(e) => {
@@ -784,7 +827,70 @@ async fn pull_image(docker: &bollard::Docker, image: &str) -> Result<()> {
     }
 
     info!(image, "Docker image pulled");
+    if let Some(tx) = progress_tx {
+        let base = image_index as f32 / image_count as f32;
+        let span = 1.0f32 / image_count as f32;
+        let _ = tx.send(PullProgress {
+            image: image.to_string(),
+            overall_fraction: (base + span).clamp(0.0, 1.0),
+        });
+    }
     Ok(())
+}
+
+fn update_image_progress_state(
+    layers: &mut std::collections::HashMap<String, (u64, u64)>,
+    complete_layers: &mut std::collections::HashSet<String>,
+    info: &CreateImageInfo,
+) -> f32 {
+    if let Some(id) = info.id.clone() {
+        if let Some(detail) = &info.progress_detail {
+            let total = detail.total.unwrap_or(0).max(0) as u64;
+            let current = detail.current.unwrap_or(0).max(0) as u64;
+            if total > 0 {
+                let entry = layers.entry(id.clone()).or_insert((0, total));
+                entry.1 = entry.1.max(total);
+                entry.0 = entry.0.max(current.min(entry.1));
+            }
+        }
+
+        if let Some(status) = info.status.as_deref() {
+            let lower = status.to_ascii_lowercase();
+            if lower.contains("already exists")
+                || lower.contains("pull complete")
+                || lower.contains("download complete")
+            {
+                complete_layers.insert(id.clone());
+                let entry = layers.entry(id).or_insert((1, 1));
+                if entry.1 == 0 {
+                    entry.0 = 1;
+                    entry.1 = 1;
+                } else {
+                    entry.0 = entry.1;
+                }
+            }
+        }
+    }
+
+    let mut total_sum: u64 = 0;
+    let mut current_sum: u64 = 0;
+    for (layer_id, (current, total)) in layers.iter() {
+        if *total > 0 {
+            total_sum = total_sum.saturating_add(*total);
+            current_sum = current_sum.saturating_add((*current).min(*total));
+        } else if complete_layers.contains(layer_id) {
+            total_sum = total_sum.saturating_add(1);
+            current_sum = current_sum.saturating_add(1);
+        }
+    }
+
+    if total_sum > 0 {
+        (current_sum as f32 / total_sum as f32).clamp(0.0, 1.0)
+    } else if !complete_layers.is_empty() {
+        0.98
+    } else {
+        0.02
+    }
 }
 
 #[cfg(test)]

@@ -31,11 +31,18 @@ pub async fn list_models(
 ) -> Vec<ModelInfo> {
     match fetch_live(db, cred_store, provider_id).await {
         Ok(models) if !models.is_empty() => {
-            debug!(provider = provider_id, count = models.len(), "Fetched models from live API");
+            debug!(
+                provider = provider_id,
+                count = models.len(),
+                "Fetched models from live API"
+            );
             models
         }
         Ok(_) => {
-            warn!(provider = provider_id, "Live API returned no models, using static fallback");
+            warn!(
+                provider = provider_id,
+                "Live API returned no models, using static fallback"
+            );
             static_models(provider_id)
         }
         Err(e) => {
@@ -111,7 +118,9 @@ async fn fetch_openai(api_key: &str, base_url: &str) -> Result<Vec<ModelInfo>> {
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!("OpenAI /v1/models returned HTTP {status}: {body}"));
+        return Err(anyhow::anyhow!(
+            "OpenAI /v1/models returned HTTP {status}: {body}"
+        ));
     }
 
     #[derive(Deserialize)]
@@ -270,9 +279,7 @@ async fn fetch_bedrock(api_key: &str, region: &str) -> Result<Vec<ModelInfo>> {
     let mut models: Vec<ModelInfo> = Vec::new();
 
     // 1. Fetch inference profiles (cross-region model IDs like us.anthropic.claude-...)
-    let profiles_url = format!(
-        "https://bedrock.{region}.amazonaws.com/inference-profiles"
-    );
+    let profiles_url = format!("https://bedrock.{region}.amazonaws.com/inference-profiles");
 
     match client.get(&profiles_url).bearer_auth(api_key).send().await {
         Ok(resp) if resp.status().is_success() => {
@@ -294,8 +301,7 @@ async fn fetch_bedrock(api_key: &str, region: &str) -> Result<Vec<ModelInfo>> {
             if let Ok(body) = resp.json::<ProfilesResp>().await {
                 for p in body.summaries {
                     // Only include active system-defined profiles
-                    let is_active = p.status.as_deref() == Some("ACTIVE")
-                        || p.status.is_none();
+                    let is_active = p.status.as_deref() == Some("ACTIVE") || p.status.is_none();
                     if !is_active {
                         continue;
                     }
@@ -314,9 +320,7 @@ async fn fetch_bedrock(api_key: &str, region: &str) -> Result<Vec<ModelInfo>> {
     }
 
     // 2. Fetch foundation models as a fallback / supplement
-    let fm_url = format!(
-        "https://bedrock.{region}.amazonaws.com/foundation-models"
-    );
+    let fm_url = format!("https://bedrock.{region}.amazonaws.com/foundation-models");
 
     match client.get(&fm_url).bearer_auth(api_key).send().await {
         Ok(resp) if resp.status().is_success() => {
@@ -383,7 +387,9 @@ async fn fetch_bedrock(api_key: &str, region: &str) -> Result<Vec<ModelInfo>> {
     }
 
     if models.is_empty() {
-        return Err(anyhow::anyhow!("Both Bedrock endpoints returned no usable models"));
+        return Err(anyhow::anyhow!(
+            "Both Bedrock endpoints returned no usable models"
+        ));
     }
 
     models.sort_by(|a, b| a.name.cmp(&b.name));
@@ -395,21 +401,54 @@ async fn fetch_bedrock(api_key: &str, region: &str) -> Result<Vec<ModelInfo>> {
 fn static_models(provider_id: &str) -> Vec<ModelInfo> {
     match provider_id {
         "anthropic" => vec![
-            ModelInfo { id: "claude-opus-4-20250514".into(), name: "Claude Opus 4".into() },
-            ModelInfo { id: "claude-sonnet-4-20250514".into(), name: "Claude Sonnet 4".into() },
-            ModelInfo { id: "claude-haiku-3-5-20241022".into(), name: "Claude 3.5 Haiku".into() },
+            ModelInfo {
+                id: "claude-opus-4-20250514".into(),
+                name: "Claude Opus 4".into(),
+            },
+            ModelInfo {
+                id: "claude-sonnet-4-20250514".into(),
+                name: "Claude Sonnet 4".into(),
+            },
+            ModelInfo {
+                id: "claude-haiku-3-5-20241022".into(),
+                name: "Claude 3.5 Haiku".into(),
+            },
         ],
         "openai" => vec![
-            ModelInfo { id: "gpt-4o".into(), name: "GPT-4o".into() },
-            ModelInfo { id: "gpt-4o-mini".into(), name: "GPT-4o Mini".into() },
-            ModelInfo { id: "o3".into(), name: "o3".into() },
-            ModelInfo { id: "o3-mini".into(), name: "o3 Mini".into() },
-            ModelInfo { id: "o4-mini".into(), name: "o4 Mini".into() },
+            ModelInfo {
+                id: "gpt-4o".into(),
+                name: "GPT-4o".into(),
+            },
+            ModelInfo {
+                id: "gpt-4o-mini".into(),
+                name: "GPT-4o Mini".into(),
+            },
+            ModelInfo {
+                id: "o3".into(),
+                name: "o3".into(),
+            },
+            ModelInfo {
+                id: "o3-mini".into(),
+                name: "o3 Mini".into(),
+            },
+            ModelInfo {
+                id: "o4-mini".into(),
+                name: "o4 Mini".into(),
+            },
         ],
         "bedrock" => vec![
-            ModelInfo { id: "us.anthropic.claude-opus-4-20250514-v1:0".into(), name: "Claude Opus 4".into() },
-            ModelInfo { id: "us.anthropic.claude-sonnet-4-20250514-v1:0".into(), name: "Claude Sonnet 4".into() },
-            ModelInfo { id: "us.anthropic.claude-haiku-3-5-20241022-v1:0".into(), name: "Claude 3.5 Haiku".into() },
+            ModelInfo {
+                id: "us.anthropic.claude-opus-4-20250514-v1:0".into(),
+                name: "Claude Opus 4".into(),
+            },
+            ModelInfo {
+                id: "us.anthropic.claude-sonnet-4-20250514-v1:0".into(),
+                name: "Claude Sonnet 4".into(),
+            },
+            ModelInfo {
+                id: "us.anthropic.claude-haiku-3-5-20241022-v1:0".into(),
+                name: "Claude 3.5 Haiku".into(),
+            },
         ],
         _ => vec![],
     }
@@ -427,9 +466,7 @@ fn humanize_openai_id(id: &str) -> String {
     let base = strip_date_suffix(id);
 
     // Known mappings for clean names
-    let name = base
-        .replace("gpt-", "GPT-")
-        .replace("chatgpt-", "ChatGPT-");
+    let name = base.replace("gpt-", "GPT-").replace("chatgpt-", "ChatGPT-");
 
     // If it starts with "o" followed by a digit, capitalize (o3 → O3)
     if name.starts_with('o') && name.chars().nth(1).map_or(false, |c| c.is_ascii_digit()) {

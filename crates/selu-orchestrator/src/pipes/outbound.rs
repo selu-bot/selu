@@ -29,10 +29,7 @@ impl OutboundSender {
             "Sending outbound message"
         );
 
-        let mut req = self
-            .client
-            .post(outbound_url)
-            .json(envelope);
+        let mut req = self.client.post(outbound_url).json(envelope);
 
         if let Some(auth) = outbound_auth {
             req = req.header("Authorization", auth);

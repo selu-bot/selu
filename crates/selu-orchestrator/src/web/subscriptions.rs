@@ -1,9 +1,9 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
-    Form,
 };
 use serde::Deserialize;
 use tracing::error;
@@ -69,7 +69,12 @@ pub struct CreateSubForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn subscriptions_index(user: AuthUser, Query(q): Query<SubsQuery>, State(state): State<AppState>, BasePath(base_path): BasePath) -> Response {
+pub async fn subscriptions_index(
+    user: AuthUser,
+    Query(q): Query<SubsQuery>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
     if !user.is_admin {
         return prefixed_redirect(&base_path, "/chat").into_response();
     }
@@ -116,7 +121,17 @@ pub async fn subscriptions_index(user: AuthUser, Query(q): Query<SubsQuery>, Sta
         })
         .collect();
 
-    match (SubscriptionsTemplate { active_nav: "subscriptions", is_admin: user.is_admin, base_path, subs, users, error: q.error, success: q.success }).render() {
+    match (SubscriptionsTemplate {
+        active_nav: "subscriptions",
+        is_admin: user.is_admin,
+        base_path,
+        subs,
+        users,
+        error: q.error,
+        success: q.success,
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -134,21 +149,33 @@ pub async fn subscriptions_create(
     if !user.is_admin {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if form.user_id.is_empty()
-        || form.event_type.trim().is_empty()
-        || form.reaction_type.is_empty()
+    if form.user_id.is_empty() || form.event_type.trim().is_empty() || form.reaction_type.is_empty()
     {
-        return Redirect::to(&format!("{}/subscriptions?error=User%2C+event+type%2C+and+reaction+type+are+required.", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/subscriptions?error=User%2C+event+type%2C+and+reaction+type+are+required.",
+            base_path
+        ))
+        .into_response();
     }
 
     if form.reaction_type != "pipe_notification" && form.reaction_type != "agent_invocation" {
-        return Redirect::to(&format!("{}/subscriptions?error=Invalid+reaction+type.", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/subscriptions?error=Invalid+reaction+type.",
+            base_path
+        ))
+        .into_response();
     }
 
     // Validate and re-serialize reaction_config JSON
     let config_val: serde_json::Value = match serde_json::from_str(&form.reaction_config) {
         Ok(v) => v,
-        Err(_) => return Redirect::to(&format!("{}/subscriptions?error=Reaction+config+must+be+valid+JSON.", base_path)).into_response(),
+        Err(_) => {
+            return Redirect::to(&format!(
+                "{}/subscriptions?error=Reaction+config+must+be+valid+JSON.",
+                base_path
+            ))
+            .into_response();
+        }
     };
     let config_json = config_val.to_string();
 
@@ -166,17 +193,23 @@ pub async fn subscriptions_create(
             match crate::agents::model::resolve_model(&state.db, "default").await {
                 Ok(resolved) => {
                     match crate::llm::registry::load_provider(
-                        &state.db, &resolved.provider_id, &resolved.model_id, &state.credentials,
-                    ).await {
+                        &state.db,
+                        &resolved.provider_id,
+                        &resolved.model_id,
+                        &state.credentials,
+                    )
+                    .await
+                    {
                         Ok(provider) => {
                             let msgs = vec![
                                 crate::llm::provider::ChatMessage::system(
                                     "You are a CEL (Common Expression Language) expert. Translate the user's filter description into a valid CEL expression. \
-                                     Available variables: event_type (string), event (map). Return ONLY the CEL expression, nothing else."
+                                     Available variables: event_type (string), event (map). Return ONLY the CEL expression, nothing else.",
                                 ),
-                                crate::llm::provider::ChatMessage::user(
-                                    format!("Translate this to a CEL expression: {}", desc)
-                                ),
+                                crate::llm::provider::ChatMessage::user(format!(
+                                    "Translate this to a CEL expression: {}",
+                                    desc
+                                )),
                             ];
                             match provider.chat(&msgs, &[], 0.0).await {
                                 Ok(crate::llm::provider::LlmResponse::Text(cel)) => {
@@ -216,10 +249,18 @@ pub async fn subscriptions_create(
     .await;
 
     match result {
-        Ok(_) => Redirect::to(&format!("{}/subscriptions?success=Subscription+created.", base_path)).into_response(),
+        Ok(_) => Redirect::to(&format!(
+            "{}/subscriptions?success=Subscription+created.",
+            base_path
+        ))
+        .into_response(),
         Err(e) => {
             error!("Failed to create subscription: {e}");
-            Redirect::to(&format!("{}/subscriptions?error=Failed+to+create+subscription.+Please+try+again.", base_path)).into_response()
+            Redirect::to(&format!(
+                "{}/subscriptions?error=Failed+to+create+subscription.+Please+try+again.",
+                base_path
+            ))
+            .into_response()
         }
     }
 }

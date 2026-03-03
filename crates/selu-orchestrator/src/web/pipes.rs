@@ -1,9 +1,9 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
-    Form,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -194,10 +194,8 @@ pub async fn pipes_index(
 
     // Load iMessage configs, filter to active only
     let imessage_configs = super::integrations::load_imessage_configs(&state.db).await;
-    let bb_pipe_ids: std::collections::HashSet<String> = imessage_configs
-        .iter()
-        .map(|c| c.pipe_id.clone())
-        .collect();
+    let bb_pipe_ids: std::collections::HashSet<String> =
+        imessage_configs.iter().map(|c| c.pipe_id.clone()).collect();
 
     let imessage_pipes: Vec<ImessagePipeView> = imessage_configs
         .into_iter()
@@ -215,10 +213,8 @@ pub async fn pipes_index(
 
     // Load Telegram configs, filter to active only
     let telegram_configs = super::telegram::load_telegram_configs(&state.db).await;
-    let tg_pipe_ids: std::collections::HashSet<String> = telegram_configs
-        .iter()
-        .map(|c| c.pipe_id.clone())
-        .collect();
+    let tg_pipe_ids: std::collections::HashSet<String> =
+        telegram_configs.iter().map(|c| c.pipe_id.clone()).collect();
 
     let telegram_pipes: Vec<TelegramPipeView> = telegram_configs
         .into_iter()
@@ -279,7 +275,9 @@ pub async fn pipes_index(
         msg: q.msg,
         error: q.error,
         https_available,
-    }).render() {
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -307,7 +305,9 @@ pub async fn pipes_webhook_new(
         base_path,
         users,
         error: q.error,
-    }).render() {
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -326,11 +326,13 @@ pub async fn pipes_webhook_create(
     if !user.is_admin {
         return prefixed_redirect(&base_path, "/chat").into_response();
     }
-    if form.name.trim().is_empty()
-        || form.user_id.is_empty()
-        || form.outbound_url.trim().is_empty()
+    if form.name.trim().is_empty() || form.user_id.is_empty() || form.outbound_url.trim().is_empty()
     {
-        return Redirect::to(&format!("{}/pipes/webhook/new?error=Name%2C+owner%2C+and+outbound+URL+are+required.", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/pipes/webhook/new?error=Name%2C+owner%2C+and+outbound+URL+are+required.",
+            base_path
+        ))
+        .into_response();
     }
 
     let id = Uuid::new_v4().to_string();
@@ -364,7 +366,11 @@ pub async fn pipes_webhook_create(
         .into_response(),
         Err(e) => {
             error!("Failed to create pipe: {e}");
-            Redirect::to(&format!("{}/pipes/webhook/new?error=Failed+to+create+pipe.+Please+try+again.", base_path)).into_response()
+            Redirect::to(&format!(
+                "{}/pipes/webhook/new?error=Failed+to+create+pipe.+Please+try+again.",
+                base_path
+            ))
+            .into_response()
         }
     }
 }
@@ -388,7 +394,9 @@ pub async fn pipes_web_new(
         base_path,
         users,
         error: q.error,
-    }).render() {
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -408,7 +416,11 @@ pub async fn pipes_web_create(
         return prefixed_redirect(&base_path, "/chat").into_response();
     }
     if form.name.trim().is_empty() || form.user_id.is_empty() {
-        return Redirect::to(&format!("{}/pipes/web/new?error=Name+and+owner+are+required.", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/pipes/web/new?error=Name+and+owner+are+required.",
+            base_path
+        ))
+        .into_response();
     }
 
     let id = Uuid::new_v4().to_string();
@@ -442,7 +454,11 @@ pub async fn pipes_web_create(
         .into_response(),
         Err(e) => {
             error!("Failed to create web pipe: {e}");
-            Redirect::to(&format!("{}/pipes/web/new?error=Failed+to+create+pipe.+Please+try+again.", base_path)).into_response()
+            Redirect::to(&format!(
+                "{}/pipes/web/new?error=Failed+to+create+pipe.+Please+try+again.",
+                base_path
+            ))
+            .into_response()
         }
     }
 }

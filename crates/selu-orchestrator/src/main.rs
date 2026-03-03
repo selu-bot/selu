@@ -2,31 +2,27 @@ use anyhow::Result;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod config;
-mod state;
-mod persistence;
-mod pipes;
 mod agents;
+mod api;
 mod bluebubbles;
 mod capabilities;
 mod channels;
+mod config;
 mod events;
 mod i18n;
 mod llm;
 mod permissions;
+mod persistence;
+mod pipes;
+mod state;
 mod telegram;
 mod web;
-mod api;
 
-use state::AppState;
-use capabilities::{
-    egress_proxy,
-    runner::CapabilityRunner,
-    CapabilityEngine,
-};
+use capabilities::{CapabilityEngine, egress_proxy, runner::CapabilityRunner};
 use channels::ChannelRegistry;
-use permissions::{store::parse_key, CredentialStore};
 use events::{EventBus, fanout};
+use permissions::{CredentialStore, store::parse_key};
+use state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -39,7 +35,10 @@ async fn main() -> Result<()> {
         .init();
 
     let cfg = config::AppConfig::load()?;
-    info!("Starting Selu orchestrator on {}:{}", cfg.server.host, cfg.server.port);
+    info!(
+        "Starting Selu orchestrator on {}:{}",
+        cfg.server.host, cfg.server.port
+    );
 
     let db = persistence::db::connect(&cfg.database.url).await?;
 
@@ -57,7 +56,10 @@ async fn main() -> Result<()> {
     let default_agent = agents::bundled::default_agent();
     agent_defs.insert("default".to_string(), default_agent);
 
-    info!("Loaded {} agent(s) (including bundled default)", agent_defs.len());
+    info!(
+        "Loaded {} agent(s) (including bundled default)",
+        agent_defs.len()
+    );
 
     // ── Credential store ──────────────────────────────────────────────────────
     let enc_key = parse_key(&cfg.encryption_key)?;
@@ -65,7 +67,9 @@ async fn main() -> Result<()> {
 
     // ── Capability subsystem ──────────────────────────────────────────────────
     let egress_registry = egress_proxy::new_registry();
-    let egress_addr: std::net::SocketAddr = cfg.egress_proxy_addr.parse()
+    let egress_addr: std::net::SocketAddr = cfg
+        .egress_proxy_addr
+        .parse()
         .unwrap_or_else(|_| "0.0.0.0:8888".parse().unwrap());
     let proxy_registry = egress_registry.clone();
 
@@ -90,7 +94,15 @@ async fn main() -> Result<()> {
 
     // ── Build shared state ────────────────────────────────────────────────────
     let channel_registry = ChannelRegistry::new();
-    let state = AppState::new(db, cfg.clone(), agent_defs, cap_engine, channel_registry, cred_store, event_bus);
+    let state = AppState::new(
+        db,
+        cfg.clone(),
+        agent_defs,
+        cap_engine,
+        channel_registry,
+        cred_store,
+        event_bus,
+    );
 
     // Start fanout after state is built (needs AppState)
     fanout::start(state.clone(), fanout_rx, cfg.max_chain_depth);
@@ -113,7 +125,8 @@ async fn main() -> Result<()> {
             interval.tick().await;
             // Get the minimum idle timeout across all agents (or use 30 as default)
             let agents = cleanup_state.agents.load();
-            let min_idle = agents.values()
+            let min_idle = agents
+                .values()
                 .map(|a| a.session.idle_timeout_minutes)
                 .min()
                 .unwrap_or(30);
@@ -121,7 +134,11 @@ async fn main() -> Result<()> {
 
             match agents::session::close_idle_sessions(&cleanup_state.db, min_idle).await {
                 Ok(ref idled) if !idled.is_empty() => {
-                    info!("Closed {} idle session(s) (threshold: {} min)", idled.len(), min_idle);
+                    info!(
+                        "Closed {} idle session(s) (threshold: {} min)",
+                        idled.len(),
+                        min_idle
+                    );
                     // Stop capability containers for each session that was just idled
                     for session_id in idled {
                         cleanup_state.capabilities.close_session(session_id).await;

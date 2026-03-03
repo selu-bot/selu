@@ -267,7 +267,8 @@ CI will block the PR if docs-relevant files changed but neither `DOCS_IMPACT.yam
 2. Are all new user-visible strings in both `en` and `de` translations?
 3. Are all new web handlers protected with `AuthUser` (unless they're public)?
 4. Are secrets handled safely (encrypted at rest, never logged, never in error messages)?
-5. Does `cargo test --workspace` pass?
-6. If you changed any `sqlx::query!` / `sqlx::query_as!` call or migration, did you run `cargo sqlx prepare --workspace` and verify the `.sqlx/` directory is staged? (The pre-commit hook does this automatically, but always run it explicitly too — do not rely on the hook alone.)
-7. If there are compile warnings -> fix them! We want to have a clean as debt free as possible codebase.
-8. Does this change affect user-facing behavior or developer-facing APIs? If yes, add an entry to `DOCS_IMPACT.yaml`. If not, add the `docs-impact: none` label to the PR. CI enforces this — PRs that touch docs-relevant paths without either will fail.
+5. Format the code using `cargo fmt --all`
+6. Does `cargo test --workspace` pass?
+7. If you changed any `sqlx::query!` / `sqlx::query_as!` call or migration, did you run `cargo sqlx prepare --workspace` and verify the `.sqlx/` directory is staged? (The pre-commit hook does this automatically, but always run it explicitly too — do not rely on the hook alone.)
+8. If there are compile warnings -> fix them! We want to have a clean as debt free as possible codebase.
+9. Does this change affect user-facing behavior or developer-facing APIs? If yes, add an entry to `DOCS_IMPACT.yaml`. If not, add the `docs-impact: none` label to the PR. CI enforces this — PRs that touch docs-relevant paths without either will fail.

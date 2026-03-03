@@ -1,13 +1,11 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use super::{
-    anthropic::AnthropicProvider,
-    bedrock::BedrockProvider,
-    openai::OpenAiProvider,
+    anthropic::AnthropicProvider, bedrock::BedrockProvider, openai::OpenAiProvider,
     provider::LlmProvider,
 };
 use crate::permissions::store::CredentialStore;

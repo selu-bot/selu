@@ -1,15 +1,15 @@
 use argon2::{
-    password_hash::{PasswordHasher, SaltString},
     Argon2,
+    password_hash::{PasswordHasher, SaltString},
 };
-use ring::rand::{SecureRandom, SystemRandom};
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
-    Form,
 };
+use ring::rand::{SecureRandom, SystemRandom};
 use serde::Deserialize;
 use tracing::error;
 use uuid::Uuid;
@@ -97,7 +97,16 @@ pub async fn users_index(
         _ => "An unexpected error occurred.".to_string(),
     });
 
-    match (UsersTemplate { active_nav: "users", is_admin: user.is_admin, base_path, current_user_id: user.user_id, users, error }).render() {
+    match (UsersTemplate {
+        active_nav: "users",
+        is_admin: user.is_admin,
+        base_path,
+        current_user_id: user.user_id,
+        users,
+        error,
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -117,7 +126,8 @@ pub async fn users_create(
     }
 
     if form.username.trim().is_empty() || form.password.is_empty() {
-        return Redirect::to(&format!("{}/users?error=username_required", base_path)).into_response();
+        return Redirect::to(&format!("{}/users?error=username_required", base_path))
+            .into_response();
     }
 
     let display_name = if form.display_name.trim().is_empty() {
@@ -126,7 +136,11 @@ pub async fn users_create(
         form.display_name.trim().to_string()
     };
 
-    let is_admin: i32 = if form.is_admin.as_deref() == Some("on") { 1 } else { 0 };
+    let is_admin: i32 = if form.is_admin.as_deref() == Some("on") {
+        1
+    } else {
+        0
+    };
 
     // Hash password with Argon2id
     let sys_rng = SystemRandom::new();
@@ -196,8 +210,9 @@ pub async fn users_delete(
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    if let Err(e) =
-        sqlx::query!("DELETE FROM users WHERE id = ?", user_id).execute(&state.db).await
+    if let Err(e) = sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
+        .execute(&state.db)
+        .await
     {
         error!("Failed to delete user {user_id}: {e}");
     }
@@ -228,7 +243,13 @@ pub async fn users_toggle_admin(
         .flatten();
 
     let new_val: i32 = match current {
-        Some(r) => if r.is_admin != 0 { 0 } else { 1 },
+        Some(r) => {
+            if r.is_admin != 0 {
+                0
+            } else {
+                1
+            }
+        }
         None => return StatusCode::NOT_FOUND.into_response(),
     };
 

@@ -1,14 +1,14 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::debug;
 
 use super::provider::{
-    ChunkStream, ChatMessage, LlmProvider, LlmResponse, MessageContent, StreamChunk, ToolCall,
+    ChatMessage, ChunkStream, LlmProvider, LlmResponse, MessageContent, StreamChunk, ToolCall,
     ToolSpec,
 };
 
@@ -31,7 +31,11 @@ impl AnthropicProvider {
                 .expect("Failed to build HTTP client"),
             api_key: api_key.into(),
             base_url: "https://api.anthropic.com".into(),
-            model: if model_str.is_empty() { "claude-sonnet-4-20250514".into() } else { model_str },
+            model: if model_str.is_empty() {
+                "claude-sonnet-4-20250514".into()
+            } else {
+                model_str
+            },
         }
     }
 }
@@ -54,10 +58,8 @@ fn build_request(
         .join("\n\n");
 
     let msgs: Vec<Value> = {
-        let non_system: Vec<&ChatMessage> = messages
-            .iter()
-            .filter(|m| m.role != "system")
-            .collect();
+        let non_system: Vec<&ChatMessage> =
+            messages.iter().filter(|m| m.role != "system").collect();
 
         let mut result = Vec::new();
         let mut i = 0;
@@ -289,7 +291,9 @@ impl LlmProvider for AnthropicProvider {
                         None => return std::future::ready(None),
                     };
                     if block_type == "tool_use" {
-                        let name = data["content_block"]["name"].as_str().map(|s| s.to_string());
+                        let name = data["content_block"]["name"]
+                            .as_str()
+                            .map(|s| s.to_string());
                         let id = data["content_block"]["id"].as_str().map(|s| s.to_string());
                         if name.is_some() {
                             let idx = tool_call_index;

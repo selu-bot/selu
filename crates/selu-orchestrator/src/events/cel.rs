@@ -11,7 +11,7 @@
 ///   `event_type == "calendar.reminder"`
 ///   `event_type.startsWith("home.") && event.severity == "high"`
 ///   `event.temperature > 25`
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use cel_interpreter::{Context, Program, Value};
 use std::collections::HashMap;
 use std::sync::Arc;

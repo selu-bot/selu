@@ -9,15 +9,17 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::agents::{engine::{noop_sender, run_turn, ChannelKind, TurnParams}, router as agent_router};
 use crate::agents::thread as thread_mgr;
+use crate::agents::{
+    engine::{ChannelKind, TurnParams, noop_sender, run_turn},
+    router as agent_router,
+};
 use crate::channels::WebhookSender;
 use crate::permissions::approval_queue;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/api/pipes/{pipe_id}/inbound", post(handle_inbound))
+    Router::new().route("/api/pipes/{pipe_id}/inbound", post(handle_inbound))
 }
 
 /// Resolve a sender_ref to a user_id via the user_sender_refs table.
@@ -71,7 +73,9 @@ async fn handle_inbound(
         }
     };
 
-    if pipe.active == 0 { return StatusCode::FORBIDDEN.into_response(); }
+    if pipe.active == 0 {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     if pipe.inbound_token != provided_token {
         warn!(pipe_id = %pipe_id, "Inbound: invalid token");
         return StatusCode::UNAUTHORIZED.into_response();
@@ -82,7 +86,8 @@ async fn handle_inbound(
     // If no mapping exists, check if there are ANY mappings for this pipe.
     // If there are mappings but this sender isn't in them, reject.
     // If there are no mappings at all, fall back to pipe.user_id (backward compat).
-    let resolved_user_id = match resolve_sender(&state.db, &pipe_id_str, &envelope.sender_ref).await {
+    let resolved_user_id = match resolve_sender(&state.db, &pipe_id_str, &envelope.sender_ref).await
+    {
         Ok(Some(uid)) => uid,
         Ok(None) => {
             // Check if there are any sender_ref mappings for this pipe
@@ -127,7 +132,9 @@ async fn handle_inbound(
     // `find_recent_active_thread` fallback from merging concurrent messages
     // into a single thread).
     let origin_message_ref = Some(
-        envelope.metadata.as_ref()
+        envelope
+            .metadata
+            .as_ref()
             .and_then(|m: &serde_json::Value| m.get("message_guid"))
             .and_then(|v: &serde_json::Value| v.as_str())
             .map(|s: &str| s.to_string())
@@ -136,7 +143,9 @@ async fn handle_inbound(
 
     // reply_to_ref: if the adapter provides threading info, use it to
     // continue an existing thread (same as the BB adapter does).
-    let reply_to_ref = envelope.metadata.as_ref()
+    let reply_to_ref = envelope
+        .metadata
+        .as_ref()
         .and_then(|m: &serde_json::Value| m.get("reply_to_ref"))
         .and_then(|v: &serde_json::Value| v.as_str())
         .map(|s: &str| s.to_string());
@@ -175,7 +184,9 @@ async fn handle_inbound(
             &agent_id,
             origin_message_ref.as_deref(),
             reply_to_ref.as_deref(),
-        ).await {
+        )
+        .await
+        {
             Ok(t) => t,
             Err(e) => {
                 error!("Failed to find/create thread: {e}");
@@ -236,7 +247,10 @@ async fn handle_inbound(
                         reply_to_message_ref: thread.origin_message_ref.clone(),
                         metadata: None,
                     };
-                    if let Err(send_err) = sender.send(&outbound_url, outbound_auth.as_deref(), &outbound).await {
+                    if let Err(send_err) = sender
+                        .send(&outbound_url, outbound_auth.as_deref(), &outbound)
+                        .await
+                    {
                         error!("Failed to send fallback message to user: {send_err}");
                     }
                 } else {
@@ -259,7 +273,10 @@ async fn handle_inbound(
                         reply_to_message_ref: thread.origin_message_ref.clone(),
                         metadata: None,
                     };
-                    if let Err(send_err) = sender.send(&outbound_url, outbound_auth.as_deref(), &outbound).await {
+                    if let Err(send_err) = sender
+                        .send(&outbound_url, outbound_auth.as_deref(), &outbound)
+                        .await
+                    {
                         error!("Failed to send error message to user: {send_err}");
                     }
                 }
@@ -276,7 +293,10 @@ async fn handle_inbound(
             reply_to_message_ref: thread.origin_message_ref.clone(),
             metadata: None,
         };
-        if let Err(e) = sender.send(&outbound_url, outbound_auth.as_deref(), &outbound).await {
+        if let Err(e) = sender
+            .send(&outbound_url, outbound_auth.as_deref(), &outbound)
+            .await
+        {
             error!("Outbound send failed: {e}");
         }
 

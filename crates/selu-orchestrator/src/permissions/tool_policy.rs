@@ -13,7 +13,7 @@
 ///   - `Allow`  — invoke immediately, no prompt
 ///   - `Ask`    — require confirmation before dispatch
 ///   - `Block`  — deny the call entirely
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
@@ -96,7 +96,8 @@ pub async fn get_effective_policy(
     tool_name: &str,
 ) -> Result<Option<ToolPolicy>> {
     // 1. Check per-user override
-    if let Some(policy) = get_user_override(db, user_id, agent_id, capability_id, tool_name).await? {
+    if let Some(policy) = get_user_override(db, user_id, agent_id, capability_id, tool_name).await?
+    {
         return Ok(Some(policy));
     }
 
@@ -256,13 +257,11 @@ pub async fn delete_policies_for_agent(
     user_id: &str,
     agent_id: &str,
 ) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM tool_policies WHERE user_id = ? AND agent_id = ?",
-    )
-    .bind(user_id)
-    .bind(agent_id)
-    .execute(db)
-    .await?;
+    sqlx::query("DELETE FROM tool_policies WHERE user_id = ? AND agent_id = ?")
+        .bind(user_id)
+        .bind(agent_id)
+        .execute(db)
+        .await?;
 
     debug!(user_id = %user_id, agent_id = %agent_id, "Deleted per-user tool policies for uninstalled agent");
     Ok(())
@@ -360,16 +359,11 @@ pub async fn set_global_policies(
 ///
 /// Called when an agent is uninstalled.
 #[allow(dead_code)]
-pub async fn delete_global_policies_for_agent(
-    db: &SqlitePool,
-    agent_id: &str,
-) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM global_tool_policies WHERE agent_id = ?",
-    )
-    .bind(agent_id)
-    .execute(db)
-    .await?;
+pub async fn delete_global_policies_for_agent(db: &SqlitePool, agent_id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM global_tool_policies WHERE agent_id = ?")
+        .bind(agent_id)
+        .execute(db)
+        .await?;
 
     debug!(agent_id = %agent_id, "Deleted global tool policies for uninstalled agent");
     Ok(())
@@ -397,8 +391,14 @@ pub async fn has_all_policies(
     }
 
     // Add built-in tools
-    required.push((BUILTIN_CAPABILITY_ID.to_string(), BUILTIN_EMIT_EVENT.to_string()));
-    required.push((BUILTIN_CAPABILITY_ID.to_string(), BUILTIN_DELEGATE.to_string()));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_EMIT_EVENT.to_string(),
+    ));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_DELEGATE.to_string(),
+    ));
 
     if required.is_empty() {
         return Ok(true);

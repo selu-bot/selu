@@ -17,7 +17,7 @@ use tracing::{debug, error, info, warn};
 
 use selu_core::types::AgentEvent;
 
-use crate::agents::engine::{noop_sender, run_turn, ChannelKind, TurnParams};
+use crate::agents::engine::{ChannelKind, TurnParams, noop_sender, run_turn};
 use crate::events::cel;
 use crate::pipes::outbound::OutboundSender;
 use crate::state::AppState;
@@ -28,7 +28,11 @@ const MAX_CHAIN_DEPTH: i32 = 3;
 
 /// Starts the fanout background task. The returned JoinHandle can be dropped --
 /// the task keeps running as long as the broadcast channel has senders.
-pub fn start(state: AppState, mut rx: broadcast::Receiver<AgentEvent>, max_chain_depth: i32) -> tokio::task::JoinHandle<()> {
+pub fn start(
+    state: AppState,
+    mut rx: broadcast::Receiver<AgentEvent>,
+    max_chain_depth: i32,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
             match rx.recv().await {
@@ -54,13 +58,10 @@ async fn process_event(state: &AppState, event: AgentEvent, max_chain_depth: i32
 
     // Determine which user this event belongs to via the source session
     let session_id_str = event.source_session_id.to_string();
-    let session_row = sqlx::query!(
-        "SELECT user_id FROM sessions WHERE id = ?",
-        session_id_str
-    )
-    .fetch_optional(&state.db)
-    .await
-    .context("DB error looking up session for event")?;
+    let session_row = sqlx::query!("SELECT user_id FROM sessions WHERE id = ?", session_id_str)
+        .fetch_optional(&state.db)
+        .await
+        .context("DB error looking up session for event")?;
 
     let user_id = match session_row {
         Some(r) => r.user_id,
@@ -144,10 +145,11 @@ async fn dispatch_notification(
     config_json: &str,
     event: &AgentEvent,
 ) -> Result<()> {
-    let config: NotificationConfig = serde_json::from_str(config_json)
-        .context("Invalid pipe_notification reaction config")?;
+    let config: NotificationConfig =
+        serde_json::from_str(config_json).context("Invalid pipe_notification reaction config")?;
 
-    let message = config.message_template
+    let message = config
+        .message_template
         .replace("{event_type}", &event.event_type)
         .replace("{payload}", &event.payload.to_string());
 
@@ -201,10 +203,11 @@ async fn dispatch_agent_invocation(
     event: &AgentEvent,
     user_id: &str,
 ) -> Result<()> {
-    let config: AgentInvocationConfig = serde_json::from_str(config_json)
-        .context("Invalid agent_invocation reaction config")?;
+    let config: AgentInvocationConfig =
+        serde_json::from_str(config_json).context("Invalid agent_invocation reaction config")?;
 
-    let message = config.message_template
+    let message = config
+        .message_template
         .replace("{event_type}", &event.event_type)
         .replace("{payload}", &event.payload.to_string());
 

@@ -290,7 +290,12 @@ async fn find_recent_active_thread(
 /// Updates the `last_reply_guid` convenience column AND inserts into the
 /// `thread_reply_guids` lookup table so that ALL outbound GUIDs are
 /// searchable (not just the most recent one).
-pub async fn update_reply_guid(db: &SqlitePool, thread_id: &str, pipe_id: &str, reply_guid: &str) -> Result<()> {
+pub async fn update_reply_guid(
+    db: &SqlitePool,
+    thread_id: &str,
+    pipe_id: &str,
+    reply_guid: &str,
+) -> Result<()> {
     debug!(
         thread_id = %thread_id,
         pipe_id = %pipe_id,
@@ -385,17 +390,18 @@ pub async fn close_idle_threads(db: &SqlitePool, idle_hours: u32) -> Result<u64>
 
     let count = result.rows_affected();
     if count > 0 {
-        info!(count = count, idle_hours = idle_hours, "Closed idle threads");
+        info!(
+            count = count,
+            idle_hours = idle_hours,
+            "Closed idle threads"
+        );
     }
     Ok(count)
 }
 
 /// Count active (in-flight) threads for a given session.
 #[allow(dead_code)]
-pub async fn count_active_threads(
-    db: &SqlitePool,
-    session_id: &str,
-) -> Result<i64> {
+pub async fn count_active_threads(db: &SqlitePool, session_id: &str) -> Result<i64> {
     let row = sqlx::query!(
         "SELECT COUNT(*) as cnt FROM threads WHERE session_id = ? AND status = 'active'",
         session_id,

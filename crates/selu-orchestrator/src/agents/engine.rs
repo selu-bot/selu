@@ -4,8 +4,8 @@
 /// inbound webhooks, web-chat, and event-fanout reactions all behave
 /// identically without duplicating code.
 use anyhow::Result;
-use futures::future::BoxFuture;
 use futures::FutureExt;
+use futures::future::BoxFuture;
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,15 +16,19 @@ use uuid::Uuid;
 
 use selu_core::types::Role;
 
-use crate::agents::{context, delegation, router as agent_router, session as session_mgr, thread as thread_mgr};
 use crate::agents::loader::{AgentDefinition, RoutingMode};
+use crate::agents::{
+    context, delegation, router as agent_router, session as session_mgr, thread as thread_mgr,
+};
 use crate::capabilities::build_tool_specs;
 use crate::capabilities::manifest::CapabilityManifest;
-use crate::llm::registry::load_provider;
-use crate::llm::tool_loop::{run_loop, LoopEvent, LoopSender, ToolDispatchResult};
 use crate::llm::provider::{ChatMessage, LlmResponse};
-use crate::permissions::tool_policy::{self, ToolPolicy, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT};
+use crate::llm::registry::load_provider;
+use crate::llm::tool_loop::{LoopEvent, LoopSender, ToolDispatchResult, run_loop};
 use crate::permissions::approval_queue;
+use crate::permissions::tool_policy::{
+    self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, ToolPolicy,
+};
 use crate::state::AppState;
 
 // ── Channel kind ──────────────────────────────────────────────────────────────
@@ -42,10 +46,7 @@ pub enum ChannelKind {
     Interactive,
     /// iMessage, webhook, etc. — there is a thread and a registered
     /// `ChannelSender`, but the user is not watching a live stream.
-    ThreadedNonInteractive {
-        pipe_id: String,
-        thread_id: String,
-    },
+    ThreadedNonInteractive { pipe_id: String, thread_id: String },
     /// Event fanout, delegation, or other machine-to-machine paths.
     /// No user interaction possible; "ask" is treated as "block".
     NonInteractive,
@@ -85,7 +86,15 @@ pub struct TurnParams {
 /// Returns the assistant reply text.
 pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> Result<String> {
     let turn_start = Instant::now();
-    let TurnParams { pipe_id, user_id, agent_id, message, thread_id, chain_depth, channel_kind } = params;
+    let TurnParams {
+        pipe_id,
+        user_id,
+        agent_id,
+        message,
+        thread_id,
+        chain_depth,
+        channel_kind,
+    } = params;
 
     // ── Route to agent ────────────────────────────────────────────────────────
     let route_start = Instant::now();
@@ -105,7 +114,12 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     {
         Some(a) => a,
         None => {
-            let _ = tx.send(LoopEvent::Error(format!("Agent '{}' not found", resolved_agent_id))).await;
+            let _ = tx
+                .send(LoopEvent::Error(format!(
+                    "Agent '{}' not found",
+                    resolved_agent_id
+                )))
+                .await;
             return Err(anyhow::anyhow!("Agent '{}' not found", resolved_agent_id));
         }
     };
@@ -180,9 +194,15 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
 
     let provider_fut = async {
         let resolved = crate::agents::model::resolve_model(&state.db, &agent.id).await?;
-        let provider = state.provider_cache.get_or_load(
-            &state.db, &resolved.provider_id, &resolved.model_id, &state.credentials,
-        ).await?;
+        let provider = state
+            .provider_cache
+            .get_or_load(
+                &state.db,
+                &resolved.provider_id,
+                &resolved.model_id,
+                &state.credentials,
+            )
+            .await?;
         Ok::<_, anyhow::Error>((provider, resolved.temperature))
     };
 
@@ -280,11 +300,17 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                             let chain_depth = chain_depth;
                             Box::pin(async move {
                                 crate::events::dispatch_emit_event(
-                                    &bus, &session, &agent_id, &args, chain_depth,
-                                ).await
+                                    &bus,
+                                    &session,
+                                    &agent_id,
+                                    &args,
+                                    chain_depth,
+                                )
+                                .await
                             })
                         },
-                    ).await;
+                    )
+                    .await;
                     return result;
                 }
 
@@ -312,12 +338,19 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                             let del_tx = del_tx.clone();
                             Box::pin(async move {
                                 dispatch_delegation(
-                                    del_state, del_pipe, user, args, chain_depth,
-                                    del_channel, del_tx,
-                                ).await
+                                    del_state,
+                                    del_pipe,
+                                    user,
+                                    args,
+                                    chain_depth,
+                                    del_channel,
+                                    del_tx,
+                                )
+                                .await
                             })
                         },
-                    ).await;
+                    )
+                    .await;
                     return result;
                 }
 
@@ -332,8 +365,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
 
                 // For inlined tools, resolve the policy against the agent
                 // that owns the capability, not the host agent.
-                let policy_agent = owners.get(&cap_id)
-                    .unwrap_or(&agent_id_copy);
+                let policy_agent = owners.get(&cap_id).unwrap_or(&agent_id_copy);
 
                 let result = check_policy_and_dispatch(
                     &state,
@@ -357,10 +389,13 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         let user = user.clone();
                         let store = store.clone();
                         Box::pin(async move {
-                            engine.invoke(&manifests, &name, args, &session, &thread, &user, &store).await
+                            engine
+                                .invoke(&manifests, &name, args, &session, &thread, &user, &store)
+                                .await
                         })
                     },
-                ).await;
+                )
+                .await;
 
                 result
             })
@@ -397,8 +432,15 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             let conv_reply = reply.clone();
             tokio::spawn(async move {
                 if let Err(e) = crate::agents::personality::extract_from_conversation(
-                    &db, &creds, &uid, &agent_id, &conv_msg, &conv_reply,
-                ).await {
+                    &db,
+                    &creds,
+                    &uid,
+                    &agent_id,
+                    &conv_msg,
+                    &conv_reply,
+                )
+                .await
+                {
                     debug!("Personality extraction failed (non-fatal): {e}");
                 }
             });
@@ -406,16 +448,19 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
 
         // ── Auto-generate thread title (first reply only) ────────────────────
         if let Some(ref tid) = thread_id {
-            let title_needed = sqlx::query(
-                "SELECT title FROM threads WHERE id = ?",
-            )
-            .bind(tid.as_str())
-            .fetch_optional(&state.db)
-            .await
-            .ok()
-            .flatten()
-            .map(|r| r.try_get::<Option<String>, _>("title").ok().flatten().is_none())
-            .unwrap_or(false);
+            let title_needed = sqlx::query("SELECT title FROM threads WHERE id = ?")
+                .bind(tid.as_str())
+                .fetch_optional(&state.db)
+                .await
+                .ok()
+                .flatten()
+                .map(|r| {
+                    r.try_get::<Option<String>, _>("title")
+                        .ok()
+                        .flatten()
+                        .is_none()
+                })
+                .unwrap_or(false);
 
             if title_needed {
                 let db = state.db.clone();
@@ -424,7 +469,8 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                 let msg = effective_text.clone();
                 let agent_id = agent.id.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = generate_thread_title(&db, &creds, &tid, &msg, &agent_id).await {
+                    if let Err(e) = generate_thread_title(&db, &creds, &tid, &msg, &agent_id).await
+                    {
                         debug!("Failed to generate thread title: {e}");
                     }
                 });
@@ -472,11 +518,10 @@ where
 {
     // If the user already approved this call, skip policy lookup and invoke.
     if approved {
-        let result = invoke_fn().await
-            .unwrap_or_else(|e| {
-                warn!(tool = %namespaced_name, "Pre-approved tool invocation failed: {e}");
-                format!("Tool error: {}", e)
-            });
+        let result = invoke_fn().await.unwrap_or_else(|e| {
+            warn!(tool = %namespaced_name, "Pre-approved tool invocation failed: {e}");
+            format!("Tool error: {}", e)
+        });
         return Ok(ToolDispatchResult::Done(result));
     }
 
@@ -489,11 +534,10 @@ where
 
     match policy {
         Some(ToolPolicy::Allow) => {
-            let result = invoke_fn().await
-                .unwrap_or_else(|e| {
-                    warn!(tool = %namespaced_name, "Tool invocation failed: {e}");
-                    format!("Tool error: {}", e)
-                });
+            let result = invoke_fn().await.unwrap_or_else(|e| {
+                warn!(tool = %namespaced_name, "Tool invocation failed: {e}");
+                format!("Tool error: {}", e)
+            });
             Ok(ToolDispatchResult::Done(result))
         }
 
@@ -523,7 +567,10 @@ where
                     Ok(ToolDispatchResult::NeedsConfirmation)
                 }
 
-                ChannelKind::ThreadedNonInteractive { pipe_id: chan_pipe, thread_id: chan_thread } => {
+                ChannelKind::ThreadedNonInteractive {
+                    pipe_id: chan_pipe,
+                    thread_id: chan_thread,
+                } => {
                     // Queue an async approval
                     let args_json = serde_json::to_string(args).unwrap_or_default();
                     let tool_call_id = Uuid::new_v4().to_string();
@@ -539,7 +586,8 @@ where
                         tool_name,
                         &args_json,
                         &tool_call_id,
-                    ).await?;
+                    )
+                    .await?;
 
                     // Look up user language for the approval prompt
                     let lang = crate::i18n::user_language(&state.db, user_id).await;
@@ -558,24 +606,28 @@ where
                     .ok()
                     .flatten()
                     .and_then(|r| {
-                        let last_reply: Option<String> = r.try_get("last_reply_guid").ok().flatten();
+                        let last_reply: Option<String> =
+                            r.try_get("last_reply_guid").ok().flatten();
                         let origin: Option<String> = r.try_get("origin_message_ref").ok().flatten();
                         last_reply.or(origin)
                     });
 
-                    match state.channel_registry.send(
-                        chan_pipe,
-                        chan_thread,
-                        &prompt_text,
-                        reply_to.as_deref(),
-                    ).await {
+                    match state
+                        .channel_registry
+                        .send(chan_pipe, chan_thread, &prompt_text, reply_to.as_deref())
+                        .await
+                    {
                         Ok(sent_guid) => {
                             // Update thread's last_reply_guid so the user's
                             // inline reply routes back to this thread
                             if let Some(ref guid) = sent_guid {
                                 let _ = thread_mgr::update_reply_guid(
-                                    &state.db, chan_thread, chan_pipe, guid,
-                                ).await;
+                                    &state.db,
+                                    chan_thread,
+                                    chan_pipe,
+                                    guid,
+                                )
+                                .await;
                             }
                         }
                         Err(e) => {
@@ -625,10 +677,7 @@ where
 /// Uses the server-side i18n module to translate the prompt into the
 /// user's preferred language.
 fn build_approval_prompt(lang: &str, tool_name: &str, args: &serde_json::Value) -> String {
-    let display_name = tool_name
-        .split("__")
-        .last()
-        .unwrap_or(tool_name);
+    let display_name = tool_name.split("__").last().unwrap_or(tool_name);
 
     let mut prompt = crate::i18n::t_with_tool(lang, "approval.would_like_to_use", display_name);
 
@@ -687,7 +736,7 @@ async fn generate_thread_title(
     let messages = vec![
         ChatMessage::system(
             "Generate a very short title (3-5 words) for a conversation that starts with the following message. \
-             Return ONLY the title, nothing else. No quotes, no punctuation at the end."
+             Return ONLY the title, nothing else. No quotes, no punctuation at the end.",
         ),
         ChatMessage::user(first_message),
     ];
@@ -793,7 +842,8 @@ fn dispatch_delegation(
         let reply = run_turn(&state, params, tx).await?;
 
         Ok(reply)
-    }.boxed()
+    }
+    .boxed()
 }
 
 /// Create a throwaway channel for callers that don't stream tokens.

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use sqlx::SqlitePool;
-use uuid::Uuid;
 use tracing::info;
+use uuid::Uuid;
 
 use selu_core::types::{Session, SessionStatus};
 
@@ -48,7 +48,10 @@ pub async fn open_session(
             user_id: Uuid::parse_str(&row.user_id)?,
             agent_id: row.agent_id,
             status: SessionStatus::Active,
-            workspace_id: row.workspace_id.as_deref().and_then(|s| Uuid::parse_str(s).ok()),
+            workspace_id: row
+                .workspace_id
+                .as_deref()
+                .and_then(|s| Uuid::parse_str(s).ok()),
             created_at: row.created_at.parse().unwrap_or_default(),
             last_active_at: row.last_active_at.parse().unwrap_or_default(),
         });
@@ -114,10 +117,7 @@ pub async fn close_idle_sessions(db: &SqlitePool, idle_minutes: u32) -> Result<V
     .fetch_all(db)
     .await?;
 
-    let ids: Vec<String> = rows
-        .into_iter()
-        .filter_map(|r| r.id)
-        .collect();
+    let ids: Vec<String> = rows.into_iter().filter_map(|r| r.id).collect();
 
     if ids.is_empty() {
         return Ok(ids);

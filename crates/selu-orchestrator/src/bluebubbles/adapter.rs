@@ -13,11 +13,11 @@
 /// from the old polling approach).
 use anyhow::{Context as _, Result};
 use axum::{
+    Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::post,
-    Router,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -28,9 +28,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use crate::agents::{
-    engine::{noop_sender, run_turn, ChannelKind, TurnParams},
-    router as agent_router,
-    thread as thread_mgr,
+    engine::{ChannelKind, TurnParams, noop_sender, run_turn},
+    router as agent_router, thread as thread_mgr,
 };
 use crate::permissions::approval_queue;
 use crate::state::AppState;
@@ -175,8 +174,7 @@ struct BbConfig {
 /// Returns the Axum router that serves the BB webhook inbound endpoint.
 /// Merged into the main app in main.rs.
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/api/bb/webhook/{config_id}", post(webhook_handler))
+    Router::new().route("/api/bb/webhook/{config_id}", post(webhook_handler))
 }
 
 // ---------------------------------------------------------------------------
@@ -219,13 +217,16 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
     // Store in module-level registry for the webhook handler
     {
         let mut reg = registry().write().await;
-        reg.insert(cfg.id.clone(), AdapterState {
-            server_url: cfg.server_url.clone(),
-            server_password: cfg.server_password.clone(),
-            chat_guid: cfg.chat_guid.clone(),
-            pipe_id: cfg.pipe_id.clone(),
-            sent_guids: sent_guids.clone(),
-        });
+        reg.insert(
+            cfg.id.clone(),
+            AdapterState {
+                server_url: cfg.server_url.clone(),
+                server_password: cfg.server_password.clone(),
+                chat_guid: cfg.chat_guid.clone(),
+                pipe_id: cfg.pipe_id.clone(),
+                sent_guids: sent_guids.clone(),
+            },
+        );
     }
 
     // Register ChannelSender for approval queue / outbound
@@ -252,8 +253,12 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
     if let Some(ref old_id) = cfg.bb_webhook_id {
         debug!(config_id = %cfg.id, old_webhook_id = %old_id, "Deregistering old webhook before re-registration");
         match deregister_webhook_from_bb(&cfg.server_url, &cfg.server_password, old_id).await {
-            Ok(()) => debug!(config_id = %cfg.id, old_webhook_id = %old_id, "Old webhook deregistered"),
-            Err(e) => warn!(config_id = %cfg.id, old_webhook_id = %old_id, error = %e, "Failed to deregister old webhook (continuing anyway)"),
+            Ok(()) => {
+                debug!(config_id = %cfg.id, old_webhook_id = %old_id, "Old webhook deregistered")
+            }
+            Err(e) => {
+                warn!(config_id = %cfg.id, old_webhook_id = %old_id, error = %e, "Failed to deregister old webhook (continuing anyway)")
+            }
         }
     } else {
         debug!(config_id = %cfg.id, "No previous webhook ID stored — registering fresh");
@@ -270,7 +275,8 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
             let wh_id_str = webhook_id.to_string();
             if let Err(e) = sqlx::query!(
                 "UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?",
-                wh_id_str, cfg.id,
+                wh_id_str,
+                cfg.id,
             )
             .execute(&state.db)
             .await
@@ -444,9 +450,7 @@ async fn webhook_handler(
     };
 
     // 8. BB sends all events to all registered webhooks. Filter by chat_guid.
-    let msg_chat_guids: Vec<String> = msg.chats.iter()
-        .filter_map(|c| c.guid.clone())
-        .collect();
+    let msg_chat_guids: Vec<String> = msg.chats.iter().filter_map(|c| c.guid.clone()).collect();
     let msg_belongs_to_chat = msg_chat_guids.iter().any(|g| g == &adapter.chat_guid);
 
     debug!(
@@ -557,7 +561,8 @@ async fn webhook_handler(
             server_password,
             sent_guids,
             Client::new(),
-        ).await;
+        )
+        .await;
     });
 
     StatusCode::OK
@@ -599,8 +604,8 @@ pub async fn register_webhook_with_bb(
     let resp_text = resp.text().await.unwrap_or_default();
     debug!(response = %resp_text, "BB webhook registration response");
 
-    let bb_resp: BbWebhookResponse = serde_json::from_str(&resp_text)
-        .context("Failed to parse BlueBubbles webhook response")?;
+    let bb_resp: BbWebhookResponse =
+        serde_json::from_str(&resp_text).context("Failed to parse BlueBubbles webhook response")?;
 
     let webhook_id = bb_resp
         .data
@@ -721,20 +726,15 @@ async fn dispatch_message(
 ) {
     // Route to agent
     let agents_snapshot = state.agents.load();
-    let default_agent_id = sqlx::query!(
-        "SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id
-    )
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .and_then(|r| r.default_agent_id);
+    let default_agent_id = sqlx::query!("SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|r| r.default_agent_id);
 
-    let (agent_id, effective_text) = agent_router::route(
-        &text,
-        default_agent_id.as_deref(),
-        &agents_snapshot,
-    );
+    let (agent_id, effective_text) =
+        agent_router::route(&text, default_agent_id.as_deref(), &agents_snapshot);
 
     // ── Thread resolution ─────────────────────────────────────────────────
     // For matching, we try multiple GUIDs in priority order:
@@ -761,7 +761,9 @@ async fn dispatch_message(
         &agent_id,
         message_guid.as_deref(),
         reply_to_ref,
-    ).await {
+    )
+    .await
+    {
         Ok(t) => t,
         Err(e) => {
             error!("Failed to find/create thread: {e}");
@@ -796,7 +798,8 @@ async fn dispatch_message(
             ack_text,
             message_guid.as_deref(),
             &sent_guids,
-        ).await;
+        )
+        .await;
         return;
     }
 
@@ -836,7 +839,8 @@ async fn dispatch_message(
                 error_text,
                 message_guid.as_deref(),
                 &sent_guids,
-            ).await;
+            )
+            .await;
             return;
         }
         Err(e) => {
@@ -854,7 +858,8 @@ async fn dispatch_message(
                 error_text,
                 message_guid.as_deref(),
                 &sent_guids,
-            ).await;
+            )
+            .await;
             return;
         }
     };
@@ -874,7 +879,8 @@ async fn dispatch_message(
         &clean_text,
         message_guid.as_deref(), // reply to the original message
         &sent_guids,
-    ).await;
+    )
+    .await;
 
     // Store Selu's reply GUID so future incoming replies can be matched
     // back to this thread.
@@ -920,7 +926,8 @@ async fn send_bb_reply(
         selected_message_guid: reply_to_guid.map(|s| s.to_string()),
     };
 
-    let resp = http.post(&url)
+    let resp = http
+        .post(&url)
         .query(&[("password", server_password)])
         .json(&body)
         .send()
@@ -1051,7 +1058,8 @@ impl crate::channels::ChannelSender for BlueBubblesSender {
             &clean_text,
             reply_to_guid,
             &self.sent_guids,
-        ).await;
+        )
+        .await;
         Ok(guid)
     }
 }
@@ -1101,7 +1109,8 @@ pub async fn send_outbound(
         &clean_text,
         envelope.reply_to_message_ref.as_deref(),
         &sent_guids,
-    ).await;
+    )
+    .await;
 
     Ok(())
 }
@@ -1122,16 +1131,19 @@ async fn load_active_configs(state: &AppState) -> Result<Vec<BbConfig>> {
     .await
     .context("Failed to load bluebubbles_configs")?;
 
-    Ok(rows.into_iter().map(|r| BbConfig {
-        id: r.id.unwrap_or_default(),
-        name: r.name,
-        server_url: r.server_url,
-        server_password: r.server_password,
-        chat_guid: r.chat_guid,
-        pipe_id: r.pipe_id,
-        bb_webhook_id: r.bb_webhook_id,
-        inbound_token: r.inbound_token,
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| BbConfig {
+            id: r.id.unwrap_or_default(),
+            name: r.name,
+            server_url: r.server_url,
+            server_password: r.server_password,
+            chat_guid: r.chat_guid,
+            pipe_id: r.pipe_id,
+            bb_webhook_id: r.bb_webhook_id,
+            inbound_token: r.inbound_token,
+        })
+        .collect())
 }
 
 async fn load_config_by_id(state: &AppState, config_id: &str) -> Result<BbConfig> {
@@ -1147,7 +1159,8 @@ async fn load_config_by_id(state: &AppState, config_id: &str) -> Result<BbConfig
     .await
     .context("Failed to load BlueBubbles config")?;
 
-    let row = row.ok_or_else(|| anyhow::anyhow!("BlueBubbles config not found or inactive: {config_id}"))?;
+    let row = row
+        .ok_or_else(|| anyhow::anyhow!("BlueBubbles config not found or inactive: {config_id}"))?;
 
     Ok(BbConfig {
         id: row.id.unwrap_or_default(),
@@ -1181,7 +1194,10 @@ fn strip_markdown(s: &str) -> String {
         }
 
         // Bullet lists
-        if let Some(rest) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+        if let Some(rest) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        {
             out.push_str("• ");
             out.push_str(rest);
             out.push('\n');

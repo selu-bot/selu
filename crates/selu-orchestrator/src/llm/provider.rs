@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
@@ -22,13 +22,28 @@ pub struct ChatMessage {
 
 impl ChatMessage {
     pub fn system(content: impl Into<String>) -> Self {
-        Self { role: "system".into(), content: MessageContent::Text(content.into()), tool_call_id: None, tool_calls: vec![] }
+        Self {
+            role: "system".into(),
+            content: MessageContent::Text(content.into()),
+            tool_call_id: None,
+            tool_calls: vec![],
+        }
     }
     pub fn user(content: impl Into<String>) -> Self {
-        Self { role: "user".into(), content: MessageContent::Text(content.into()), tool_call_id: None, tool_calls: vec![] }
+        Self {
+            role: "user".into(),
+            content: MessageContent::Text(content.into()),
+            tool_call_id: None,
+            tool_calls: vec![],
+        }
     }
     pub fn assistant(content: impl Into<String>) -> Self {
-        Self { role: "assistant".into(), content: MessageContent::Text(content.into()), tool_call_id: None, tool_calls: vec![] }
+        Self {
+            role: "assistant".into(),
+            content: MessageContent::Text(content.into()),
+            tool_call_id: None,
+            tool_calls: vec![],
+        }
     }
     /// An assistant message that contains one or more tool calls.
     /// `text` may be empty if the assistant only emitted tool calls with no prose.

@@ -14,7 +14,7 @@ use crate::state::AppState;
 use axum::{
     Router,
     extract::FromRequestParts,
-    http::{request::Parts, Uri},
+    http::{Uri, request::Parts},
     response::Redirect,
     routing::{delete, get, post},
 };
@@ -304,6 +304,11 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/agents", get(agents::agents_index))
         .route("/agents/install", post(agents::install_agent))
         .route("/agents/update", post(agents::update_agent))
+        .route("/agents/update/start", post(agents::start_agent_update))
+        .route(
+            "/agents/update/status/{job_id}",
+            get(agents::agent_update_status),
+        )
         .route("/agents/default-model", post(agents::set_default_model))
         .route("/agents/{agent_id}", get(agents::agent_detail))
         .route(

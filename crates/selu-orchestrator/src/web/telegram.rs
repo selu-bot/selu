@@ -1,9 +1,9 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Json, Redirect, Response},
-    Form,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -140,7 +140,8 @@ pub async fn tg_proxy_chats(
                 error: Some(format!("{e}")),
                 bot_username: None,
                 chats: None,
-            }).into_response();
+            })
+            .into_response();
         }
     };
 
@@ -154,19 +155,23 @@ pub async fn tg_proxy_chats(
         }
     };
 
-    let chat_infos: Vec<TgChatInfo> = chats.into_iter().map(|c| TgChatInfo {
-        chat_id: c.chat_id,
-        display_name: c.display_name,
-        chat_type: c.chat_type,
-        last_message: c.last_message,
-    }).collect();
+    let chat_infos: Vec<TgChatInfo> = chats
+        .into_iter()
+        .map(|c| TgChatInfo {
+            chat_id: c.chat_id,
+            display_name: c.display_name,
+            chat_type: c.chat_type,
+            last_message: c.last_message,
+        })
+        .collect();
 
     Json(TgProxyResponse {
         ok: true,
         error: None,
         bot_username: Some(bot_username),
         chats: Some(chat_infos),
-    }).into_response()
+    })
+    .into_response()
 }
 
 // ── Handlers: Telegram Setup Wizard ──────────────────────────────────────────
@@ -198,7 +203,9 @@ pub async fn telegram_setup_page(
         base_path,
         users,
         error: q.error,
-    }).render() {
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -235,7 +242,8 @@ pub async fn telegram_setup_submit(
         return Redirect::to(&format!(
             "{}/pipes/telegram/setup?error=Please+fill+in+all+required+fields",
             base_path
-        )).into_response();
+        ))
+        .into_response();
     }
 
     // Find a user to own the pipe
@@ -278,7 +286,11 @@ pub async fn telegram_setup_submit(
     if let Err(e) = sqlx::query!(
         "INSERT INTO telegram_configs (id, name, bot_token, chat_id, pipe_id)
          VALUES (?, ?, ?, ?, ?)",
-        tg_config_id, name, bot_token, chat_id, pipe_id,
+        tg_config_id,
+        name,
+        bot_token,
+        chat_id,
+        pipe_id,
     )
     .execute(&state.db)
     .await
@@ -287,27 +299,31 @@ pub async fn telegram_setup_submit(
         return Redirect::to(&format!(
             "{}/pipes/telegram/setup?error=Failed+to+create+adapter+config",
             base_path
-        )).into_response();
+        ))
+        .into_response();
     }
 
     // Create sender ref mappings
     if let Some(ref people_str) = form.people {
         for entry in people_str.split(',') {
             let entry = entry.trim();
-            if entry.is_empty() { continue; }
+            if entry.is_empty() {
+                continue;
+            }
             let parts: Vec<&str> = entry.splitn(2, ':').collect();
             if parts.len() == 2 {
                 let sender_ref = parts[0].trim();
                 let user_id = parts[1].trim();
                 if !sender_ref.is_empty() && !user_id.is_empty() {
                     let ref_id = Uuid::new_v4().to_string();
-                    let _ = sqlx::query!(
+                    let _ =
+                        sqlx::query!(
                         "INSERT OR IGNORE INTO user_sender_refs (id, user_id, pipe_id, sender_ref)
                          VALUES (?, ?, ?, ?)",
                         ref_id, user_id, pipe_id, sender_ref,
                     )
-                    .execute(&state.db)
-                    .await;
+                        .execute(&state.db)
+                        .await;
                 }
             }
         }
@@ -315,14 +331,17 @@ pub async fn telegram_setup_submit(
 
     // Start the adapter immediately
     let bp = base_path;
-    if let Err(e) = crate::telegram::adapter::start_one(state, &tg_config_id, Some(&external_origin)).await {
+    if let Err(e) =
+        crate::telegram::adapter::start_one(state, &tg_config_id, Some(&external_origin)).await
+    {
         error!("Failed to start Telegram adapter: {e}");
     }
 
     Redirect::to(&format!(
         "{}/pipes/telegram/{}?msg=Telegram+pipe+set+up+successfully!",
         bp, tg_config_id
-    )).into_response()
+    ))
+    .into_response()
 }
 
 // ── Handlers: Telegram Detail ────────────────────────────────────────────────
@@ -357,7 +376,9 @@ pub async fn telegram_detail(
         flash: q.msg,
         error: q.error,
         is_https,
-    }).render() {
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -380,14 +401,18 @@ pub async fn telegram_add_person(
         return Redirect::to(&format!(
             "{}/pipes/telegram/{}?error=Please+fill+in+both+fields",
             base_path, config_id
-        )).into_response();
+        ))
+        .into_response();
     }
 
-    let pipe_id = match sqlx::query!("SELECT pipe_id FROM telegram_configs WHERE id = ?", config_id)
-        .fetch_optional(&state.db)
-        .await
-        .ok()
-        .flatten()
+    let pipe_id = match sqlx::query!(
+        "SELECT pipe_id FROM telegram_configs WHERE id = ?",
+        config_id
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
     {
         Some(r) => r.pipe_id,
         None => return prefixed_redirect(&base_path, "/pipes").into_response(),
@@ -396,7 +421,10 @@ pub async fn telegram_add_person(
     let ref_id = Uuid::new_v4().to_string();
     match sqlx::query!(
         "INSERT INTO user_sender_refs (id, user_id, pipe_id, sender_ref) VALUES (?, ?, ?, ?)",
-        ref_id, form.user_id, pipe_id, form.sender_ref,
+        ref_id,
+        form.user_id,
+        pipe_id,
+        form.sender_ref,
     )
     .execute(&state.db)
     .await
@@ -404,17 +432,20 @@ pub async fn telegram_add_person(
         Ok(_) => Redirect::to(&format!(
             "{}/pipes/telegram/{}?msg=Person+added",
             base_path, config_id
-        )).into_response(),
+        ))
+        .into_response(),
         Err(e) if e.to_string().contains("UNIQUE") => Redirect::to(&format!(
             "{}/pipes/telegram/{}?error=This+Telegram+user+is+already+added",
             base_path, config_id
-        )).into_response(),
+        ))
+        .into_response(),
         Err(e) => {
             error!("Failed to add person: {e}");
             Redirect::to(&format!(
                 "{}/pipes/telegram/{}?error=Failed+to+add+person.+Please+try+again.",
                 base_path, config_id
-            )).into_response()
+            ))
+            .into_response()
         }
     }
 }
@@ -457,9 +488,12 @@ pub async fn telegram_delete(
     }
 
     // Deactivate config and pipe
-    let _ = sqlx::query!("UPDATE telegram_configs SET active = 0 WHERE id = ?", config_id)
-        .execute(&state.db)
-        .await;
+    let _ = sqlx::query!(
+        "UPDATE telegram_configs SET active = 0 WHERE id = ?",
+        config_id
+    )
+    .execute(&state.db)
+    .await;
     let _ = sqlx::query!(
         "UPDATE pipes SET active = 0 WHERE id IN (SELECT pipe_id FROM telegram_configs WHERE id = ?)",
         config_id
@@ -501,7 +535,10 @@ pub async fn telegram_check_webhook(
             let url_display = if info.url.is_empty() {
                 "<span class=\"text-amber-400\" data-i18n=\"tg.troubleshoot.nourl\">No webhook URL set</span>".to_string()
             } else {
-                format!("<code class=\"font-mono text-xs bg-surface-alt px-2 py-1 rounded break-all\">{}</code>", info.url)
+                format!(
+                    "<code class=\"font-mono text-xs bg-surface-alt px-2 py-1 rounded break-all\">{}</code>",
+                    info.url
+                )
             };
 
             let error_html = if let Some(ref msg) = info.last_error_message {
@@ -537,7 +574,8 @@ pub async fn telegram_check_webhook(
             Html(format!(
                 r#"<div class="text-sm text-rosie animate-fadein">{}</div>"#,
                 "Could not reach Telegram. Please try again."
-            )).into_response()
+            ))
+            .into_response()
         }
     }
 }
@@ -640,7 +678,9 @@ async fn load_allowed_people(db: &sqlx::SqlitePool, pipe_id: &str) -> Vec<Allowe
     .unwrap_or_default()
     .into_iter()
     .map(|r| {
-        let initials = r.display_name.chars()
+        let initials = r
+            .display_name
+            .chars()
             .filter(|c| c.is_alphabetic())
             .take(2)
             .collect::<String>()
@@ -649,7 +689,11 @@ async fn load_allowed_people(db: &sqlx::SqlitePool, pipe_id: &str) -> Vec<Allowe
             ref_id: r.id.unwrap_or_default(),
             display_name: r.display_name,
             sender_ref: r.sender_ref,
-            initials: if initials.is_empty() { "?".to_string() } else { initials },
+            initials: if initials.is_empty() {
+                "?".to_string()
+            } else {
+                initials
+            },
         }
     })
     .collect()

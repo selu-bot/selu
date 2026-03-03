@@ -37,6 +37,22 @@
     </div>
     {% endif %}
 
+    <div id="agent-update-live" class="hidden px-4 py-3 rounded-xl border text-sm bg-surface-raised border-edge">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-xs text-txt-muted" data-i18n="agents.update.progress.title">Updating agent</div>
+          <div id="agent-update-live-title" class="text-sm font-medium text-txt-heading truncate"></div>
+          <div id="agent-update-live-msg" class="text-xs text-txt-muted mt-0.5"></div>
+        </div>
+        <button type="button" id="agent-update-live-refresh"
+                class="hidden text-xs font-medium text-coral hover:text-amber border border-coral/30 hover:border-coral/60 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                data-i18n="agents.update.refresh">Refresh</button>
+      </div>
+      <div class="mt-3 h-2 w-full rounded-full bg-surface-input overflow-hidden">
+        <div id="agent-update-live-bar" class="h-full bg-gradient-to-r from-coral to-amber transition-all duration-500" style="width:0%"></div>
+      </div>
+    </div>
+
     <!-- Global Default Model -->
     <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
       <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
@@ -128,7 +144,7 @@
                 <td class="px-5 py-3.5">
                   <span class="text-txt-muted text-xs">v{{ agent.version }}</span>
                   {% if agent.update_available %}
-                  <span class="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber/10 text-amber border border-amber/20">
+                  <span class="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber/10 text-amber border border-amber/20" data-update-chip="{{ agent.id }}">
                     <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
                     <span>v{{ agent.marketplace_version }}</span>
                   </span>
@@ -155,10 +171,12 @@
                 <td class="px-5 py-3.5 text-right">
                   <div class="flex items-center justify-end gap-2">
                     {% if agent.update_available %}
-                    <form method="POST" action="{{ base_path }}/agents/update" class="inline"
-                          onsubmit="return confirm(t('agents.update.confirm').replace('{name}', '{{ agent.name }}').replace('{version}', '{{ agent.marketplace_version }}'))">
+                    <form method="POST" action="{{ base_path }}/agents/update" class="inline js-agent-update-form"
+                          data-agent-id="{{ agent.id }}"
+                          data-agent-name="{{ agent.name }}"
+                          data-agent-version="{{ agent.marketplace_version }}">
                       <input type="hidden" name="entry_json" id="update-entry-{{ agent.id }}" value="" />
-                      <button type="submit"
+                      <button type="submit" data-agent-update-id="{{ agent.id }}"
                               class="text-xs font-medium text-amber hover:text-amber/80 bg-amber/10 border border-amber/20 hover:border-amber/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                               data-i18n="agents.update">Update</button>
                     </form>
@@ -298,9 +316,12 @@
             {% endif %}
             <div class="mt-4 flex items-center gap-2">
               {% if agent.update_available %}
-              <form method="POST" action="{{ base_path }}/agents/update">
+              <form method="POST" action="{{ base_path }}/agents/update" class="js-agent-update-form"
+                    data-agent-id="{{ agent.id }}"
+                    data-agent-name="{{ agent.name }}"
+                    data-agent-version="{{ agent.version }}">
                 <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
-                <button type="submit"
+                <button type="submit" data-agent-update-id="{{ agent.id }}"
                         class="bg-gradient-to-r from-amber to-coral text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-amber/20"
                         data-i18n="agents.update">Update</button>
               </form>
@@ -330,7 +351,28 @@
   </div>
 </div>
 
+<div id="agent-update-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/60" id="agent-update-modal-backdrop"></div>
+  <div class="relative w-full max-w-md rounded-2xl border border-edge bg-surface-raised p-5 shadow-2xl shadow-black/50">
+    <h2 class="text-base font-semibold text-txt-heading" data-i18n="agents.update.modal.title">Update agent?</h2>
+    <p id="agent-update-modal-body" class="text-sm text-txt-muted mt-2"></p>
+    <div class="mt-4 flex items-center justify-end gap-2">
+      <button type="button" id="agent-update-modal-cancel"
+              class="px-3 py-1.5 text-xs font-medium border border-edge hover:border-muted text-txt-muted hover:text-txt rounded-lg transition-colors cursor-pointer"
+              data-i18n="common.cancel">Cancel</button>
+      <button type="button" id="agent-update-modal-confirm"
+              class="px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-amber to-coral text-white rounded-lg shadow-lg shadow-amber/20 cursor-pointer"
+              data-i18n="agents.update.confirm_action">Start update</button>
+    </div>
+  </div>
+</div>
+
 <script>
+var pendingAgentUpdate = null;
+var currentAgentUpdateJobId = null;
+var currentAgentUpdateAgentId = null;
+var updatePollInterval = null;
+
 function showTab(tab) {
   document.getElementById('panel-installed').classList.toggle('hidden', tab !== 'installed');
   document.getElementById('panel-marketplace').classList.toggle('hidden', tab !== 'marketplace');
@@ -419,6 +461,151 @@ function fetchModels(providerId, target) {
     .catch(function() { sel.innerHTML = '<option value="">' + t('agents.loadmodelsfailed') + '</option>'; });
 }
 
+function templateText(key, vars) {
+  var text = t(key);
+  if (!vars) return text;
+  Object.keys(vars).forEach(function(k) {
+    text = text.replace('{' + k + '}', vars[k] || '');
+  });
+  return text;
+}
+
+function openUpdateModal(payload) {
+  pendingAgentUpdate = payload;
+  var modal = document.getElementById('agent-update-modal');
+  var body = document.getElementById('agent-update-modal-body');
+  body.textContent = templateText('agents.update.confirm', {
+    name: payload.agentName,
+    version: payload.targetVersion
+  });
+  modal.classList.remove('hidden');
+}
+
+function closeUpdateModal() {
+  document.getElementById('agent-update-modal').classList.add('hidden');
+  pendingAgentUpdate = null;
+}
+
+function setLiveUpdateState(job) {
+  var card = document.getElementById('agent-update-live');
+  var title = document.getElementById('agent-update-live-title');
+  var msg = document.getElementById('agent-update-live-msg');
+  var bar = document.getElementById('agent-update-live-bar');
+  var refreshBtn = document.getElementById('agent-update-live-refresh');
+
+  card.classList.remove('hidden');
+  title.textContent = job.agent_name + ' v' + job.target_version;
+  msg.textContent = t(job.message_key || 'agents.update.phase.preparing');
+  bar.style.width = Math.max(0, Math.min(100, job.progress || 0)) + '%';
+
+  if (job.done && job.success) {
+    card.classList.remove('border-edge');
+    card.classList.add('border-emerald-500/30', 'bg-emerald-500/10');
+    msg.classList.remove('text-rosie');
+    msg.classList.add('text-emerald-400');
+    if (job.redirect_to) {
+      refreshBtn.classList.remove('hidden');
+      refreshBtn.onclick = function() { window.location.href = job.redirect_to; };
+      refreshBtn.textContent = t('agents.update.open_setup');
+    } else {
+      refreshBtn.classList.remove('hidden');
+      refreshBtn.onclick = function() { window.location.reload(); };
+      refreshBtn.textContent = t('agents.update.refresh');
+      document.querySelectorAll('[data-agent-update-id="' + job.agent_id + '"]').forEach(function(btn) {
+        btn.closest('form').remove();
+      });
+      document.querySelectorAll('[data-update-chip="' + job.agent_id + '"]').forEach(function(chip) {
+        chip.remove();
+      });
+    }
+  } else if (job.done) {
+    card.classList.remove('border-edge');
+    card.classList.add('border-rosie/40', 'bg-rosie/10');
+    msg.classList.remove('text-emerald-400');
+    msg.classList.add('text-rosie');
+    refreshBtn.classList.add('hidden');
+  } else {
+    card.classList.remove('border-emerald-500/30', 'bg-emerald-500/10', 'border-rosie/40', 'bg-rosie/10');
+    card.classList.add('border-edge');
+    msg.classList.remove('text-emerald-400', 'text-rosie');
+    msg.classList.add('text-txt-muted');
+    refreshBtn.classList.add('hidden');
+  }
+}
+
+function pollUpdateStatus() {
+  if (!currentAgentUpdateJobId) return;
+  fetch(BASE_PATH + '/agents/update/status/' + currentAgentUpdateJobId, { credentials: 'same-origin' })
+    .then(function(r) {
+      if (!r.ok) throw new Error('status');
+      return r.json();
+    })
+    .then(function(job) {
+      setLiveUpdateState(job);
+      if (job.done && updatePollInterval) {
+        clearInterval(updatePollInterval);
+        updatePollInterval = null;
+        currentAgentUpdateJobId = null;
+        currentAgentUpdateAgentId = null;
+      }
+    })
+    .catch(function() {
+      if (updatePollInterval) {
+        clearInterval(updatePollInterval);
+        updatePollInterval = null;
+      }
+      currentAgentUpdateJobId = null;
+      currentAgentUpdateAgentId = null;
+      setLiveUpdateState({
+        agent_name: '',
+        target_version: '',
+        progress: 100,
+        done: true,
+        success: false,
+        message_key: 'agents.update.error.status'
+      });
+    });
+}
+
+function startAgentUpdate(payload) {
+  var body = new URLSearchParams(new FormData(payload.form));
+  fetch(BASE_PATH + '/agents/update/start', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString()
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error('start');
+      return r.json();
+    })
+    .then(function(data) {
+      currentAgentUpdateJobId = data.job_id;
+      currentAgentUpdateAgentId = payload.agentId;
+      setLiveUpdateState({
+        agent_name: payload.agentName,
+        target_version: payload.targetVersion,
+        progress: 8,
+        done: false,
+        success: false,
+        message_key: 'agents.update.phase.preparing'
+      });
+      pollUpdateStatus();
+      if (updatePollInterval) clearInterval(updatePollInterval);
+      updatePollInterval = setInterval(pollUpdateStatus, 1200);
+    })
+    .catch(function() {
+      setLiveUpdateState({
+        agent_name: payload.agentName,
+        target_version: payload.targetVersion,
+        progress: 100,
+        done: true,
+        success: false,
+        message_key: 'agents.update.error.start'
+      });
+    });
+}
+
 /* Inject marketplace entry_json into the installed table update forms */
 document.addEventListener('DOMContentLoaded', function() {
   var gp = document.getElementById('global-provider-select');
@@ -435,6 +622,28 @@ document.addEventListener('DOMContentLoaded', function() {
       var target = document.getElementById('update-entry-' + entry.id);
       if (target) target.value = json;
     } catch(e) {}
+  });
+
+  document.querySelectorAll('.js-agent-update-form').forEach(function(form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var payload = {
+        form: form,
+        agentId: form.dataset.agentId || '',
+        agentName: form.dataset.agentName || '',
+        targetVersion: form.dataset.agentVersion || ''
+      };
+      openUpdateModal(payload);
+    });
+  });
+
+  document.getElementById('agent-update-modal-cancel').addEventListener('click', closeUpdateModal);
+  document.getElementById('agent-update-modal-backdrop').addEventListener('click', closeUpdateModal);
+  document.getElementById('agent-update-modal-confirm').addEventListener('click', function() {
+    if (!pendingAgentUpdate) return;
+    var payload = pendingAgentUpdate;
+    closeUpdateModal();
+    startAgentUpdate(payload);
   });
 });
 </script>

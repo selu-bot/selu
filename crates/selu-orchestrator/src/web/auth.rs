@@ -1,13 +1,13 @@
 use argon2::{
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
 use askama::Template;
 use axum::{
-    extract::{FromRequestParts, State},
-    http::{request::Parts, StatusCode},
-    response::{Html, IntoResponse, Redirect, Response},
     Form,
+    extract::{FromRequestParts, State},
+    http::{StatusCode, request::Parts},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
 use chrono::{Duration, Utc};
@@ -189,7 +189,11 @@ pub async fn login_submit(
     }
 
     // Set session cookie
-    let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
+    let cookie_path = if bp.is_empty() {
+        "/".to_string()
+    } else {
+        format!("{}/", bp)
+    };
     let secure = origin.starts_with("https://");
     let cookie = Cookie::build((SESSION_COOKIE, session_id))
         .path(cookie_path)
@@ -202,7 +206,12 @@ pub async fn login_submit(
     (jar.add(cookie), prefixed_redirect(&base_path, "/chat")).into_response()
 }
 
-pub async fn logout(State(state): State<AppState>, BasePath(base_path): BasePath, ExternalOrigin(origin): ExternalOrigin, jar: CookieJar) -> Response {
+pub async fn logout(
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+    ExternalOrigin(origin): ExternalOrigin,
+    jar: CookieJar,
+) -> Response {
     // Delete session from DB
     if let Some(cookie) = jar.get(SESSION_COOKIE) {
         let session_id = cookie.value().to_string();
@@ -213,7 +222,11 @@ pub async fn logout(State(state): State<AppState>, BasePath(base_path): BasePath
 
     // Remove cookie
     let bp = &base_path;
-    let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
+    let cookie_path = if bp.is_empty() {
+        "/".to_string()
+    } else {
+        format!("{}/", bp)
+    };
     let secure = origin.starts_with("https://");
     let cookie = Cookie::build((SESSION_COOKIE, ""))
         .path(cookie_path)
@@ -268,7 +281,10 @@ pub async fn setup_page(State(state): State<AppState>, BasePath(base_path): Base
         return prefixed_redirect(&base_path, "/login").into_response();
     }
 
-    let tmpl = SetupTemplate { error: None, base_path };
+    let tmpl = SetupTemplate {
+        error: None,
+        base_path,
+    };
     match tmpl.render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
@@ -392,7 +408,11 @@ pub async fn setup_submit(
     .await;
 
     let bp = &base_path;
-    let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
+    let cookie_path = if bp.is_empty() {
+        "/".to_string()
+    } else {
+        format!("{}/", bp)
+    };
     let secure = origin.starts_with("https://");
     let cookie = Cookie::build((SESSION_COOKIE, session_id))
         .path(cookie_path)

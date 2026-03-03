@@ -10,7 +10,7 @@
 ///   - System prompts go in a separate `system` array
 ///
 /// Streaming uses /converse-stream and returns AWS Event Stream binary frames.
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
 use aws_smithy_types::event_stream::HeaderValue;
@@ -18,11 +18,11 @@ use bytes::BytesMut;
 use futures::StreamExt;
 use reqwest::Client;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::{debug, trace, warn};
 
 use super::provider::{
-    ChunkStream, ChatMessage, LlmProvider, LlmResponse, MessageContent, StreamChunk, ToolCall,
+    ChatMessage, ChunkStream, LlmProvider, LlmResponse, MessageContent, StreamChunk, ToolCall,
     ToolSpec,
 };
 
@@ -73,11 +73,7 @@ impl BedrockProvider {
 }
 
 /// Build the Bedrock Converse request body from our internal message types.
-fn build_converse_body(
-    messages: &[ChatMessage],
-    tools: &[ToolSpec],
-    temperature: f32,
-) -> Value {
+fn build_converse_body(messages: &[ChatMessage], tools: &[ToolSpec], temperature: f32) -> Value {
     // Extract system prompts
     let system: Vec<Value> = messages
         .iter()
@@ -88,10 +84,7 @@ fn build_converse_body(
     // Convert messages to Bedrock format, merging consecutive tool-result
     // messages into a single "user" message (Bedrock requires all toolResult
     // blocks for one turn to live in one message).
-    let non_system: Vec<&ChatMessage> = messages
-        .iter()
-        .filter(|m| m.role != "system")
-        .collect();
+    let non_system: Vec<&ChatMessage> = messages.iter().filter(|m| m.role != "system").collect();
 
     let mut bedrock_messages: Vec<Value> = Vec::new();
     let mut i = 0;
@@ -360,13 +353,17 @@ impl LlmProvider for BedrockProvider {
                                     ))));
                                 }
                                 // Tool-use input delta (JSON fragment)
-                                if let Some(input_frag) = payload["delta"]["toolUse"]["input"].as_str() {
-                                    return std::future::ready(Some(Ok(StreamChunk::ToolCallDelta {
-                                        index: tool_call_index.saturating_sub(1),
-                                        id: None,
-                                        name: None,
-                                        arguments_delta: input_frag.to_string(),
-                                    })));
+                                if let Some(input_frag) =
+                                    payload["delta"]["toolUse"]["input"].as_str()
+                                {
+                                    return std::future::ready(Some(Ok(
+                                        StreamChunk::ToolCallDelta {
+                                            index: tool_call_index.saturating_sub(1),
+                                            id: None,
+                                            name: None,
+                                            arguments_delta: input_frag.to_string(),
+                                        },
+                                    )));
                                 }
                                 continue;
                             }
@@ -377,12 +374,14 @@ impl LlmProvider for BedrockProvider {
                                     if name.is_some() {
                                         let idx = tool_call_index;
                                         tool_call_index += 1;
-                                        return std::future::ready(Some(Ok(StreamChunk::ToolCallDelta {
-                                            index: idx,
-                                            id,
-                                            name,
-                                            arguments_delta: String::new(),
-                                        })));
+                                        return std::future::ready(Some(Ok(
+                                            StreamChunk::ToolCallDelta {
+                                                index: idx,
+                                                id,
+                                                name,
+                                                arguments_delta: String::new(),
+                                            },
+                                        )));
                                     }
                                 }
                                 continue;

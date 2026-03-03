@@ -14,8 +14,8 @@ use tokio::sync::broadcast;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use selu_core::types::AgentEvent;
 use crate::llm::provider::ToolSpec;
+use selu_core::types::AgentEvent;
 
 /// Channel capacity -- how many unprocessed events can queue before senders see lag.
 const BUS_CAPACITY: usize = 256;
@@ -41,8 +41,8 @@ impl EventBus {
         // Persist first so the event survives even if fanout is down
         let id = event.id.to_string();
         let session_id = event.source_session_id.to_string();
-        let payload_json = serde_json::to_string(&event.payload)
-            .context("Failed to serialise event payload")?;
+        let payload_json =
+            serde_json::to_string(&event.payload).context("Failed to serialise event payload")?;
         let chain_depth = event.chain_depth;
 
         sqlx::query!(
@@ -82,10 +82,9 @@ impl EventBus {
 pub fn emit_event_tool_spec() -> ToolSpec {
     ToolSpec {
         name: "emit_event".to_string(),
-        description:
-            "Emit a named event that can trigger subscriptions and invoke other agents. \
+        description: "Emit a named event that can trigger subscriptions and invoke other agents. \
              Use this to notify the user, start workflows, or chain agent actions."
-                .to_string(),
+            .to_string(),
         parameters: serde_json::json!({
             "type": "object",
             "properties": {
@@ -116,17 +115,21 @@ pub async fn dispatch_emit_event(
         .context("emit_event: missing 'event_type' string")?
         .to_string();
 
-    let payload = args.get("payload").cloned().unwrap_or(Value::Object(Default::default()));
+    let payload = args
+        .get("payload")
+        .cloned()
+        .unwrap_or(Value::Object(Default::default()));
 
     if chain_depth >= DEFAULT_MAX_CHAIN_DEPTH {
         warn!(session = %session_id, event_type = %event_type, "Dropping emit_event: chain depth limit reached");
-        return Ok(serde_json::json!({"ok": false, "reason": "chain depth limit reached"}).to_string());
+        return Ok(
+            serde_json::json!({"ok": false, "reason": "chain depth limit reached"}).to_string(),
+        );
     }
 
     let event = AgentEvent {
         id: Uuid::new_v4(),
-        source_session_id: Uuid::parse_str(session_id)
-            .unwrap_or_else(|_| Uuid::new_v4()),
+        source_session_id: Uuid::parse_str(session_id).unwrap_or_else(|_| Uuid::new_v4()),
         source_agent_id: agent_id.to_string(),
         event_type: event_type.clone(),
         payload,

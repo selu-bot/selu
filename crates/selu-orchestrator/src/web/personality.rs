@@ -1,17 +1,17 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
-    Form,
 };
 use serde::Deserialize;
 use tracing::error;
 
 use crate::agents::personality;
 use crate::state::AppState;
-use crate::web::auth::AuthUser;
 use crate::web::BasePath;
+use crate::web::auth::AuthUser;
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -170,8 +170,14 @@ pub async fn personality_add(
         "other".to_string()
     };
 
-    match personality::add_fact(&state.db, &user.user_id, &category, form.fact.trim(), "manual")
-        .await
+    match personality::add_fact(
+        &state.db,
+        &user.user_id,
+        &category,
+        form.fact.trim(),
+        "manual",
+    )
+    .await
     {
         Ok(_) => Redirect::to(&format!("{}/personality?success=added", base_path)).into_response(),
         Err(e) => {
@@ -216,7 +222,12 @@ pub async fn personality_edit_form(
                 source,
                 created_at,
             };
-            match (EditRowFragment { fact: row, base_path }).render() {
+            match (EditRowFragment {
+                fact: row,
+                base_path,
+            })
+            .render()
+            {
                 Ok(html) => Html(html).into_response(),
                 Err(e) => {
                     error!("Template render error: {e}");
@@ -250,16 +261,14 @@ pub async fn personality_update(
     }
 
     // Return the updated row fragment
-    let source = sqlx::query_as::<_, (String,)>(
-        "SELECT source FROM user_personality WHERE id = ?",
-    )
-    .bind(&fact_id)
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .map(|(s,)| s)
-    .unwrap_or_else(|| "manual".to_string());
+    let source = sqlx::query_as::<_, (String,)>("SELECT source FROM user_personality WHERE id = ?")
+        .bind(&fact_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .map(|(s,)| s)
+        .unwrap_or_else(|| "manual".to_string());
 
     let row = FactRow {
         id: fact_id,
@@ -268,7 +277,12 @@ pub async fn personality_update(
         source,
         created_at: String::new(),
     };
-    match (FactRowFragment { fact: row, base_path }).render() {
+    match (FactRowFragment {
+        fact: row,
+        base_path,
+    })
+    .render()
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -300,7 +314,12 @@ pub async fn personality_row(
                 source,
                 created_at,
             };
-            match (FactRowFragment { fact: row, base_path }).render() {
+            match (FactRowFragment {
+                fact: row,
+                base_path,
+            })
+            .render()
+            {
                 Ok(html) => Html(html).into_response(),
                 Err(e) => {
                     error!("Template render error: {e}");

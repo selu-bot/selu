@@ -5,7 +5,7 @@
 /// directory.
 use crate::agents::loader::AgentDefinition;
 use crate::permissions::tool_policy::{
-    self, ToolPolicy, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT,
+    self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, ToolPolicy,
 };
 
 const DEFAULT_AGENT_YAML: &str = include_str!("../../../../agents/default/agent.yaml");

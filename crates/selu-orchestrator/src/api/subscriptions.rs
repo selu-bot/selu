@@ -4,10 +4,10 @@
 /// POST   /api/subscriptions
 /// DELETE /api/subscriptions/{id}
 use axum::{
+    Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

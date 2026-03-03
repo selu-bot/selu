@@ -26,7 +26,9 @@ use crate::permissions::store::CredentialStore;
 pub enum PermissionError {
     /// A required user-scoped credential is not yet set.
     /// The message is human-readable and should be forwarded to the user.
-    #[error("I need your {credential_name} for {capability_id} before I can do this. Please set it with: /set-credential {capability_id} {credential_name} <value>")]
+    #[error(
+        "I need your {credential_name} for {capability_id} before I can do this. Please set it with: /set-credential {capability_id} {credential_name} <value>"
+    )]
     MissingUserCredential {
         capability_id: String,
         credential_name: String,
@@ -34,14 +36,18 @@ pub enum PermissionError {
 
     /// A required system-scoped credential is not set.
     /// This is an admin/deployment error.
-    #[error("System credential '{credential_name}' for capability '{capability_id}' is not configured. An administrator must set it via the credentials API.")]
+    #[error(
+        "System credential '{credential_name}' for capability '{capability_id}' is not configured. An administrator must set it via the credentials API."
+    )]
     MissingSystemCredential {
         capability_id: String,
         credential_name: String,
     },
 
     /// A database error occurred while resolving credentials.
-    #[error("Database error resolving credential '{credential_name}' for '{capability_id}': {source}")]
+    #[error(
+        "Database error resolving credential '{credential_name}' for '{capability_id}': {source}"
+    )]
     DatabaseError {
         capability_id: String,
         credential_name: String,
@@ -66,28 +72,25 @@ pub async fn resolve_credentials(
     let mut map = Map::new();
 
     for decl in &manifest.credentials {
-        let value = match decl.scope {
-            CredentialScope::User => {
-                store
+        let value =
+            match decl.scope {
+                CredentialScope::User => store
                     .get_user(user_id, &manifest.id, &decl.name)
                     .await
                     .map_err(|e| PermissionError::DatabaseError {
                         capability_id: manifest.id.clone(),
                         credential_name: decl.name.clone(),
                         source: e,
-                    })?
-            }
-            CredentialScope::System => {
-                store
+                    })?,
+                CredentialScope::System => store
                     .get_system(&manifest.id, &decl.name)
                     .await
                     .map_err(|e| PermissionError::DatabaseError {
                         capability_id: manifest.id.clone(),
                         credential_name: decl.name.clone(),
                         source: e,
-                    })?
-            }
-        };
+                    })?,
+            };
 
         match value {
             Some(v) => {

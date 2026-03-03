@@ -93,7 +93,10 @@ pub async fn build(
     // agent knows about the user from the very first message.
     match personality::get_facts(db, user_id).await {
         Ok(facts) if !facts.is_empty() => {
-            debug!(count = facts.len(), "Injecting personality facts into context");
+            debug!(
+                count = facts.len(),
+                "Injecting personality facts into context"
+            );
             let mut ctx = String::from("## What you know about this user\n\n");
             ctx.push_str("The following facts have been learned about the user over time. ");
             ctx.push_str("Use this information naturally in your responses. ");
@@ -145,7 +148,7 @@ pub async fn build(
 
         for row in history.into_iter().rev() {
             match row.role.as_str() {
-                "user"      => messages.push(ChatMessage::user(&row.content)),
+                "user" => messages.push(ChatMessage::user(&row.content)),
                 "assistant" => messages.push(ChatMessage::assistant(&row.content)),
                 _ => {}
             }
@@ -165,7 +168,7 @@ pub async fn build(
 
         for row in history.into_iter().rev() {
             match row.role.as_str() {
-                "user"      => messages.push(ChatMessage::user(&row.content)),
+                "user" => messages.push(ChatMessage::user(&row.content)),
                 "assistant" => messages.push(ChatMessage::assistant(&row.content)),
                 _ => {}
             }

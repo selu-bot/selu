@@ -9,7 +9,7 @@ pub mod selu_capability {
     tonic::include_proto!("selu.capability.v1");
 }
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use futures::StreamExt;
 use serde_json::Value;
 use std::time::Duration;
@@ -17,7 +17,7 @@ use tonic::transport::Channel;
 use tracing::{debug, warn};
 
 use selu_capability::capability_client::CapabilityClient;
-use selu_capability::{InvokeRequest, InvokeChunk};
+use selu_capability::{InvokeChunk, InvokeRequest};
 
 /// A connected gRPC client to one running capability container.
 /// Cheap to clone — the underlying channel uses connection pooling internally.
@@ -107,7 +107,12 @@ impl CapabilityGrpcClient {
                 tool = %tool_name,
                 "Capability returned error: {}", response.error
             );
-            return Err(anyhow!("Capability '{}' tool '{}' returned error: {}", self.capability_id, tool_name, response.error));
+            return Err(anyhow!(
+                "Capability '{}' tool '{}' returned error: {}",
+                self.capability_id,
+                tool_name,
+                response.error
+            ));
         }
 
         let result = String::from_utf8(response.result_json.to_vec())
@@ -158,18 +163,17 @@ impl CapabilityGrpcClient {
             .map_err(|e| anyhow!("gRPC stream_invoke failed: {}", e))?
             .into_inner();
 
-        let mapped = stream.map(|result: std::result::Result<InvokeChunk, tonic::Status>| {
-            match result {
-                Err(e) => Err(anyhow!("gRPC stream error: {}", e)),
-                Ok(chunk) if !chunk.error.is_empty() => {
-                    Err(anyhow!("Capability stream error: {}", chunk.error))
-                }
-                Ok(chunk) => {
-                    String::from_utf8(chunk.data.to_vec())
-                        .map_err(|_| anyhow!("Non-UTF8 data in stream chunk"))
-                }
-            }
-        });
+        let mapped =
+            stream.map(
+                |result: std::result::Result<InvokeChunk, tonic::Status>| match result {
+                    Err(e) => Err(anyhow!("gRPC stream error: {}", e)),
+                    Ok(chunk) if !chunk.error.is_empty() => {
+                        Err(anyhow!("Capability stream error: {}", chunk.error))
+                    }
+                    Ok(chunk) => String::from_utf8(chunk.data.to_vec())
+                        .map_err(|_| anyhow!("Non-UTF8 data in stream chunk")),
+                },
+            );
 
         Ok(mapped)
     }

@@ -1,9 +1,9 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
-    Form,
 };
 use serde::Deserialize;
 use tracing::error;
@@ -56,7 +56,12 @@ pub struct SetRegionForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn providers_index(user: AuthUser, Query(q): Query<ProvidersQuery>, State(state): State<AppState>, BasePath(base_path): BasePath) -> Response {
+pub async fn providers_index(
+    user: AuthUser,
+    Query(q): Query<ProvidersQuery>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
     if !user.is_admin {
         return prefixed_redirect(&base_path, "/chat").into_response();
     }
@@ -72,7 +77,10 @@ pub async fn providers_index(user: AuthUser, Query(q): Query<ProvidersQuery>, St
     .map(|r| ProviderView {
         id: r.id.unwrap_or_default(),
         display_name: r.display_name,
-        has_key: r.api_key_encrypted.as_ref().map_or(false, |k| !k.is_empty()),
+        has_key: r
+            .api_key_encrypted
+            .as_ref()
+            .map_or(false, |k| !k.is_empty()),
         base_url: r.base_url.unwrap_or_default(),
         active: r.active != 0,
     })
@@ -111,11 +119,18 @@ pub async fn providers_set_key(
     }
 
     // Encrypt the API key using the credential store
-    let encrypted = match state.credentials.encrypt_raw(form.api_key.trim().as_bytes()) {
+    let encrypted = match state
+        .credentials
+        .encrypt_raw(form.api_key.trim().as_bytes())
+    {
         Ok(e) => e,
         Err(e) => {
             error!("Failed to encrypt API key: {e}");
-            return Redirect::to(&format!("{}/providers?error=Failed+to+encrypt+API+key.+Please+try+again.", base_path)).into_response();
+            return Redirect::to(&format!(
+                "{}/providers?error=Failed+to+encrypt+API+key.+Please+try+again.",
+                base_path
+            ))
+            .into_response();
         }
     };
 
@@ -128,13 +143,21 @@ pub async fn providers_set_key(
     .await
     {
         error!("Failed to update provider key: {e}");
-        return Redirect::to(&format!("{}/providers?error=Failed+to+save+API+key.+Please+try+again.", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/providers?error=Failed+to+save+API+key.+Please+try+again.",
+            base_path
+        ))
+        .into_response();
     }
 
     // Invalidate cached provider so the new key is picked up
     state.provider_cache.invalidate().await;
 
-    Redirect::to(&format!("{}/providers?success=API+key+updated+successfully.", base_path)).into_response()
+    Redirect::to(&format!(
+        "{}/providers?success=API+key+updated+successfully.",
+        base_path
+    ))
+    .into_response()
 }
 
 pub async fn providers_delete_key(
@@ -184,7 +207,11 @@ pub async fn providers_set_region(
     .await
     {
         error!("Failed to update provider region: {e}");
-        return Redirect::to(&format!("{}/providers?error=Failed+to+save+settings.+Please+try+again.", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/providers?error=Failed+to+save+settings.+Please+try+again.",
+            base_path
+        ))
+        .into_response();
     }
 
     // Invalidate cached provider since region/URL changed

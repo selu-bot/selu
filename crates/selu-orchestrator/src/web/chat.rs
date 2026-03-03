@@ -1,27 +1,27 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response, Sse},
-    Form,
 };
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::{Notify, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use crate::agents::engine::{run_turn, ChannelKind, TurnParams};
+use crate::agents::engine::{ChannelKind, TurnParams, run_turn};
 use crate::agents::router as agent_router;
 use crate::agents::thread as thread_mgr;
 use crate::llm::tool_loop::LoopEvent;
 use crate::state::AppState;
-use crate::web::auth::AuthUser;
 use crate::web::BasePath;
+use crate::web::auth::AuthUser;
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -142,12 +142,17 @@ fn render_template(tmpl: ChatTemplate) -> Response {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 /// GET /chat — chat index (no pipe selected)
-pub async fn chat_index(user: AuthUser, State(state): State<AppState>, BasePath(base_path): BasePath) -> Response {
+pub async fn chat_index(
+    user: AuthUser,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
     let pipes = fetch_pipes(&state.db, &user.user_id).await;
 
     // If the user has exactly one web pipe, redirect directly to it
     if pipes.len() == 1 {
-        return axum::response::Redirect::to(&format!("{}/chat/{}", base_path, pipes[0].id)).into_response();
+        return axum::response::Redirect::to(&format!("{}/chat/{}", base_path, pipes[0].id))
+            .into_response();
     }
 
     render_template(ChatTemplate {
@@ -226,7 +231,8 @@ pub async fn chat_new_thread(
 
     // Determine the agent for this pipe
     let default_agent_id = sqlx::query!(
-        "SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id_str
+        "SELECT default_agent_id FROM pipes WHERE id = ?",
+        pipe_id_str
     )
     .fetch_optional(&state.db)
     .await
@@ -241,7 +247,9 @@ pub async fn chat_new_thread(
         &user.user_id,
         &default_agent_id,
         None,
-    ).await {
+    )
+    .await
+    {
         Ok(thread) => {
             let url = format!("{}/chat/{}/t/{}", base_path, pipe_id_str, thread.id);
             Redirect::to(&url).into_response()
@@ -261,7 +269,11 @@ pub async fn chat_send(
     BasePath(base_path): BasePath,
     Form(form): Form<HashMap<String, String>>,
 ) -> Response {
-    let text = match form.get("text").map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+    let text = match form
+        .get("text")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
         Some(t) => t,
         None => return StatusCode::BAD_REQUEST.into_response(),
     };
@@ -507,22 +519,17 @@ async fn process_message(
     }
 
     // Fetch pipe's default agent for routing
-    let default_agent_id = sqlx::query!(
-        "SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id
-    )
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .and_then(|r| r.default_agent_id);
+    let default_agent_id = sqlx::query!("SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|r| r.default_agent_id);
 
     // Resolve @mention routing (same as webhook/iMessage adapters)
     let agents_snapshot = state.agents.load();
-    let (agent_id, effective_text) = agent_router::route(
-        &text,
-        default_agent_id.as_deref(),
-        &agents_snapshot,
-    );
+    let (agent_id, effective_text) =
+        agent_router::route(&text, default_agent_id.as_deref(), &agents_snapshot);
 
     // Retrieve the SSE sender registered by chat_stream
     let tx = match state.active_streams.lock().await.get(&stream_id).cloned() {
@@ -561,7 +568,13 @@ async fn process_message(
     state.active_streams.lock().await.remove(&stream_id);
 }
 
-fn build_confirmation_html(sid: &str, cid: &str, tool: &str, args: &str, base_path: &str) -> String {
+fn build_confirmation_html(
+    sid: &str,
+    cid: &str,
+    tool: &str,
+    args: &str,
+    base_path: &str,
+) -> String {
     let bp = base_path;
     let tool_esc = html_escape(tool);
     let args_esc = html_escape(args).replace('\n', "\\n").replace('\r', "");
@@ -599,7 +612,9 @@ fn build_confirmation_html(sid: &str, cid: &str, tool: &str, args: &str, base_pa
     s.push_str(cid);
     s.push_str("?approved=false\" hx-target=\"#confirm-");
     s.push_str(cid);
-    s.push_str("\" hx-swap=\"outerHTML\" class=\"btn-deny\">' + t('chat.confirm.deny') + '</button>';\n");
+    s.push_str(
+        "\" hx-swap=\"outerHTML\" class=\"btn-deny\">' + t('chat.confirm.deny') + '</button>';\n",
+    );
     s.push_str("  h += '</div></div>';\n");
     s.push_str("  cardWrap.innerHTML = h;\n");
     s.push_str("  msgs.appendChild(cardWrap);\n");
@@ -611,7 +626,7 @@ fn build_confirmation_html(sid: &str, cid: &str, tool: &str, args: &str, base_pa
 
 pub fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
-     .replace('<', "&lt;")
-     .replace('>', "&gt;")
-     .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }

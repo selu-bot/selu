@@ -1,9 +1,9 @@
 /// REST API for tool policies and pending approvals.
 use axum::{
+    Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -137,7 +137,8 @@ pub async fn bulk_set_policies(
     State(state): State<AppState>,
     Json(req): Json<BulkPolicyRequest>,
 ) -> impl IntoResponse {
-    let policies: Vec<(String, String, ToolPolicy)> = req.policies
+    let policies: Vec<(String, String, ToolPolicy)> = req
+        .policies
         .iter()
         .filter_map(|p| {
             ToolPolicy::from_str(&p.policy)
@@ -150,9 +151,7 @@ pub async fn bulk_set_policies(
         Some(ref user_id) => {
             tool_policy::set_policies(&state.db, user_id, &req.agent_id, &policies).await
         }
-        None => {
-            tool_policy::set_global_policies(&state.db, &req.agent_id, &policies).await
-        }
+        None => tool_policy::set_global_policies(&state.db, &req.agent_id, &policies).await,
     };
 
     match result {

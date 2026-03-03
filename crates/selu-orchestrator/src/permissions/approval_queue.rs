@@ -72,10 +72,7 @@ pub async fn create_pending(
 ///
 /// Returns `true` if the message was consumed as an approval response
 /// (caller should NOT proceed to `run_turn`).
-pub async fn try_resolve_pending(
-    state: &AppState,
-    thread_id: &str,
-) -> bool {
+pub async fn try_resolve_pending(state: &AppState, thread_id: &str) -> bool {
     // Check DB for a pending approval on this thread
     let pending = sqlx::query(
         "SELECT id FROM pending_tool_approvals
@@ -95,12 +92,10 @@ pub async fn try_resolve_pending(
     };
 
     // Mark as approved in DB
-    let _ = sqlx::query(
-        "UPDATE pending_tool_approvals SET status = 'approved' WHERE id = ?",
-    )
-    .bind(&approval_id)
-    .execute(&state.db)
-    .await;
+    let _ = sqlx::query("UPDATE pending_tool_approvals SET status = 'approved' WHERE id = ?")
+        .bind(&approval_id)
+        .execute(&state.db)
+        .await;
 
     // Signal the in-memory oneshot
     let sender = {
@@ -129,7 +124,7 @@ pub async fn try_resolve_pending(
 pub async fn expire_pending(state: &AppState) -> Result<()> {
     let expired = sqlx::query(
         "SELECT id FROM pending_tool_approvals
-         WHERE status = 'pending' AND expires_at <= datetime('now')"
+         WHERE status = 'pending' AND expires_at <= datetime('now')",
     )
     .fetch_all(&state.db)
     .await?;
@@ -147,12 +142,10 @@ pub async fn expire_pending(state: &AppState) -> Result<()> {
         };
 
         // Mark expired in DB
-        let _ = sqlx::query(
-            "UPDATE pending_tool_approvals SET status = 'expired' WHERE id = ?",
-        )
-        .bind(&id)
-        .execute(&state.db)
-        .await;
+        let _ = sqlx::query("UPDATE pending_tool_approvals SET status = 'expired' WHERE id = ?")
+            .bind(&id)
+            .execute(&state.db)
+            .await;
 
         // Signal the oneshot as denied
         let sender = {

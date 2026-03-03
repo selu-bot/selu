@@ -4,10 +4,10 @@
 /// PUT  /api/providers/{id}/key    - set (encrypted) API key
 /// PUT  /api/providers/{id}/region - set region/base_url
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 
@@ -46,7 +46,10 @@ pub async fn list_providers(State(state): State<AppState>) -> impl IntoResponse 
                 .map(|r| ProviderResponse {
                     id: r.id.unwrap_or_default(),
                     display_name: r.display_name,
-                    has_api_key: r.api_key_encrypted.as_ref().map_or(false, |k| !k.is_empty()),
+                    has_api_key: r
+                        .api_key_encrypted
+                        .as_ref()
+                        .map_or(false, |k| !k.is_empty()),
                     base_url: r.base_url,
                     active: r.active != 0,
                 })
@@ -67,7 +70,11 @@ pub async fn set_api_key(
     Json(req): Json<SetKeyRequest>,
 ) -> impl IntoResponse {
     if req.api_key.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "api_key is required"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "api_key is required"})),
+        )
+            .into_response();
     }
 
     // Encrypt the API key

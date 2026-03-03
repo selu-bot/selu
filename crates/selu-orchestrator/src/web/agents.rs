@@ -1,12 +1,13 @@
 use askama::Template;
 use axum::{
-    Form,
+    Form, Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
 };
 use serde::{Deserialize, Serialize};
 use tracing::error;
+use uuid::Uuid;
 
 use crate::agents::{
     loader::StepType,
@@ -264,6 +265,25 @@ pub struct InstallForm {
     pub entry_json: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct StartAgentUpdateResponse {
+    pub job_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentUpdateStatusResponse {
+    pub job_id: String,
+    pub agent_id: String,
+    pub agent_name: String,
+    pub target_version: String,
+    pub progress: u8,
+    pub message_key: String,
+    pub done: bool,
+    pub success: bool,
+    pub redirect_to: Option<String>,
+    pub error_key: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ToggleAutoUpdateForm {
     pub auto_update: Option<String>,
@@ -514,8 +534,7 @@ pub async fn install_agent(
             if agent_def.install_steps.is_empty() && !has_tools {
                 prefixed_redirect(&base_path, "/agents").into_response()
             } else {
-                Redirect::to(&format!("{}/agents/{}/setup", base_path, entry.id))
-                    .into_response()
+                Redirect::to(&format!("{}/agents/{}/setup", base_path, entry.id)).into_response()
             }
         }
         Err(e) => {
@@ -650,8 +669,7 @@ pub async fn setup_submit(
             error!("Failed to load agent for setup: {e}");
             let text = format!("Failed to load agent: {e}");
             let msg = urlencoding::encode(&text);
-            return Redirect::to(&format!("{}/agents?error={msg}", base_path))
-                .into_response();
+            return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
         }
     };
 
@@ -672,8 +690,7 @@ pub async fn setup_submit(
                 Ok(e) => e,
                 Err(e) => {
                     error!("Failed to encrypt credential: {e}");
-                    let msg =
-                        urlencoding::encode("encrypt_failed");
+                    let msg = urlencoding::encode("encrypt_failed");
                     return Redirect::to(&format!(
                         "{}/agents/{agent_id}/setup?error={msg}",
                         base_path
@@ -1357,13 +1374,215 @@ pub async fn reset_tool_policy_handler(
     // Tell HTMX to reload the page so the UI reflects the reset state
     (
         StatusCode::OK,
-        [(
-            "HX-Redirect",
-            format!("{}/agents/{agent_id}", base_path),
-        )],
+        [("HX-Redirect", format!("{}/agents/{agent_id}", base_path))],
         "",
     )
         .into_response()
+}
+
+/// Update an already-installed agent to a newer marketplace version
+pub async fn start_agent_update(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Form(form): Form<InstallForm>,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let entry: MarketplaceEntry = match serde_json::from_str(&form.entry_json) {
+        Ok(e) => e,
+        Err(e) => {
+            error!("Invalid entry JSON: {e}");
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error_key": "agents.update.error.invalid_payload"
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    {
+        let jobs = state.agent_update_jobs.lock().await;
+        if let Some((existing_job_id, _)) = jobs
+            .iter()
+            .find(|(_, j)| j.owner_user_id == user.user_id && j.agent_id == entry.id && !j.done)
+        {
+            return Json(StartAgentUpdateResponse {
+                job_id: existing_job_id.clone(),
+            })
+            .into_response();
+        }
+    }
+
+    let job_id = Uuid::new_v4().to_string();
+    {
+        let mut jobs = state.agent_update_jobs.lock().await;
+        jobs.insert(
+            job_id.clone(),
+            crate::state::AgentUpdateJob {
+                owner_user_id: user.user_id.clone(),
+                agent_id: entry.id.clone(),
+                agent_name: entry.name.clone(),
+                target_version: entry.version.clone(),
+                progress: 5,
+                message_key: "agents.update.phase.preparing".to_string(),
+                done: false,
+                success: false,
+                redirect_to: None,
+                error_key: None,
+                updated_at: std::time::Instant::now(),
+            },
+        );
+    }
+
+    let state_clone = state.clone();
+    let job_id_clone = job_id.clone();
+    tokio::spawn(async move {
+        run_agent_update_job(state_clone, entry, job_id_clone).await;
+    });
+
+    Json(StartAgentUpdateResponse { job_id }).into_response()
+}
+
+async fn set_update_job_progress(state: &AppState, job_id: &str, progress: u8, message_key: &str) {
+    let mut jobs = state.agent_update_jobs.lock().await;
+    if let Some(job) = jobs.get_mut(job_id) {
+        if job.done {
+            return;
+        }
+        job.progress = progress;
+        job.message_key = message_key.to_string();
+        job.updated_at = std::time::Instant::now();
+    }
+}
+
+async fn run_agent_update_job(state: AppState, entry: MarketplaceEntry, job_id: String) {
+    set_update_job_progress(&state, &job_id, 10, "agents.update.phase.preparing").await;
+    let docker = match bollard::Docker::connect_with_local_defaults() {
+        Ok(d) => d,
+        Err(e) => {
+            error!("Failed to connect to Docker: {e}");
+            let mut jobs = state.agent_update_jobs.lock().await;
+            if let Some(job) = jobs.get_mut(&job_id) {
+                job.progress = 100;
+                job.message_key = "agents.update.error.docker".to_string();
+                job.done = true;
+                job.success = false;
+                job.error_key = Some("agents.update.error.docker".to_string());
+                job.updated_at = std::time::Instant::now();
+            }
+            return;
+        }
+    };
+
+    let (progress_tx, mut progress_rx) =
+        tokio::sync::mpsc::unbounded_channel::<marketplace::PullProgress>();
+    let progress_state = state.clone();
+    let progress_job_id = job_id.clone();
+    let progress_task = tokio::spawn(async move {
+        while let Some(progress) = progress_rx.recv().await {
+            let pct = (20.0 + (progress.overall_fraction.clamp(0.0, 1.0) * 70.0)).round() as u8;
+            let mut jobs = progress_state.agent_update_jobs.lock().await;
+            let Some(job) = jobs.get_mut(&progress_job_id) else {
+                break;
+            };
+            if job.done {
+                break;
+            }
+            if pct > job.progress {
+                job.progress = pct.min(90);
+            }
+            job.message_key = "agents.update.phase.downloading".to_string();
+            job.updated_at = std::time::Instant::now();
+            let _ = &progress.image;
+        }
+    });
+
+    let result = marketplace::update_agent_with_progress(
+        &entry,
+        &state.config.installed_agents_dir,
+        &state.db,
+        &state.agents,
+        &docker,
+        &state.capabilities,
+        Some(progress_tx),
+    )
+    .await;
+
+    progress_task.abort();
+
+    let mut jobs = state.agent_update_jobs.lock().await;
+    let Some(job) = jobs.get_mut(&job_id) else {
+        return;
+    };
+
+    match result {
+        Ok(agent_def) => {
+            let has_tools = agent_def
+                .capability_manifests
+                .values()
+                .any(|m| !m.tools.is_empty());
+            let setup_required = !agent_def.install_steps.is_empty() || has_tools;
+            job.progress = 100;
+            job.message_key = if setup_required {
+                "agents.update.success.setup_required".to_string()
+            } else {
+                "agents.update.success.updated".to_string()
+            };
+            job.done = true;
+            job.success = true;
+            job.redirect_to = if setup_required {
+                Some(format!("{}/agents/{}/setup", state.base_path, entry.id))
+            } else {
+                None
+            };
+            job.updated_at = std::time::Instant::now();
+        }
+        Err(e) => {
+            error!("Agent update failed: {e}");
+            job.progress = 100;
+            job.message_key = "agents.update.error.failed".to_string();
+            job.done = true;
+            job.success = false;
+            job.error_key = Some("agents.update.error.failed".to_string());
+            job.updated_at = std::time::Instant::now();
+        }
+    }
+}
+
+pub async fn agent_update_status(
+    user: AuthUser,
+    Path(job_id): Path<String>,
+    State(state): State<AppState>,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let jobs = state.agent_update_jobs.lock().await;
+    let Some(job) = jobs.get(&job_id) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if job.owner_user_id != user.user_id {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    Json(AgentUpdateStatusResponse {
+        job_id,
+        agent_id: job.agent_id.clone(),
+        agent_name: job.agent_name.clone(),
+        target_version: job.target_version.clone(),
+        progress: job.progress,
+        message_key: job.message_key.clone(),
+        done: job.done,
+        success: job.success,
+        redirect_to: job.redirect_to.clone(),
+        error_key: job.error_key.clone(),
+    })
+    .into_response()
 }
 
 /// Update an already-installed agent to a newer marketplace version
@@ -1417,20 +1636,17 @@ pub async fn update_agent(
                 .values()
                 .any(|m| !m.tools.is_empty());
             if !agent_def.install_steps.is_empty() || has_tools {
-                Redirect::to(&format!("{}/agents/{}/setup", base_path, entry.id))
-                    .into_response()
+                Redirect::to(&format!("{}/agents/{}/setup", base_path, entry.id)).into_response()
             } else {
                 let msg = urlencoding::encode("updated");
-                Redirect::to(&format!("{}/agents?success={msg}", base_path))
-                    .into_response()
+                Redirect::to(&format!("{}/agents?success={msg}", base_path)).into_response()
             }
         }
         Err(e) => {
             error!("Agent update failed: {e}");
             let text = format!("Agent update failed: {e}");
             let msg = urlencoding::encode(&text);
-            Redirect::to(&format!("{}/agents?error={msg}", base_path))
-                .into_response()
+            Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response()
         }
     }
 }
@@ -1505,8 +1721,7 @@ pub async fn rate_agent(
         Err(e) => {
             error!("Failed to load instance ID: {e}");
             let msg = urlencoding::encode("rating_submit_failed");
-            return Redirect::to(&format!("{}/agents?error={msg}", base_path))
-                .into_response();
+            return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
         }
     };
 
@@ -1515,8 +1730,7 @@ pub async fn rate_agent(
         None => {
             error!("Invalid marketplace URL: {}", state.config.marketplace_url);
             let msg = urlencoding::encode("rating_unavailable");
-            return Redirect::to(&format!("{}/agents?error={msg}", base_path))
-                .into_response();
+            return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
         }
     };
 
@@ -1533,8 +1747,7 @@ pub async fn rate_agent(
         Err(e) => {
             error!("Failed to build HTTP client for rating submit: {e}");
             let msg = urlencoding::encode("rating_unavailable");
-            return Redirect::to(&format!("{}/agents?error={msg}", base_path))
-                .into_response();
+            return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
         }
     };
 

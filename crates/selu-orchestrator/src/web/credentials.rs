@@ -1,9 +1,9 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
-    Form,
 };
 use serde::Deserialize;
 use tracing::error;
@@ -76,7 +76,12 @@ pub struct SetUserCredForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn credentials_index(user: AuthUser, Query(q): Query<CredentialsQuery>, State(state): State<AppState>, BasePath(base_path): BasePath) -> Response {
+pub async fn credentials_index(
+    user: AuthUser,
+    Query(q): Query<CredentialsQuery>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
     if !user.is_admin {
         return prefixed_redirect(&base_path, "/chat").into_response();
     }
@@ -125,8 +130,17 @@ pub async fn credentials_index(user: AuthUser, Query(q): Query<CredentialsQuery>
         })
         .collect();
 
-    match (CredentialsTemplate { active_nav: "credentials", is_admin: user.is_admin, base_path, sys_creds, user_creds, users, error: q.error, success: q.success })
-        .render()
+    match (CredentialsTemplate {
+        active_nav: "credentials",
+        is_admin: user.is_admin,
+        base_path,
+        sys_creds,
+        user_creds,
+        users,
+        error: q.error,
+        success: q.success,
+    })
+    .render()
     {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
@@ -149,17 +163,29 @@ pub async fn credentials_set_system(
         || form.credential_name.trim().is_empty()
         || form.value.is_empty()
     {
-        return Redirect::to(&format!("{}/credentials?error=All+fields+are+required.", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/credentials?error=All+fields+are+required.",
+            base_path
+        ))
+        .into_response();
     }
     match state
         .credentials
         .set_system(&form.capability_id, &form.credential_name, &form.value)
         .await
     {
-        Ok(_) => Redirect::to(&format!("{}/credentials?success=System+credential+saved.", base_path)).into_response(),
+        Ok(_) => Redirect::to(&format!(
+            "{}/credentials?success=System+credential+saved.",
+            base_path
+        ))
+        .into_response(),
         Err(e) => {
             error!("Failed to set system credential: {e}");
-            Redirect::to(&format!("{}/credentials?error=Failed+to+save+credential.+Please+try+again.", base_path)).into_response()
+            Redirect::to(&format!(
+                "{}/credentials?error=Failed+to+save+credential.+Please+try+again.",
+                base_path
+            ))
+            .into_response()
         }
     }
 }
@@ -192,17 +218,34 @@ pub async fn credentials_set_user(
         || form.credential_name.trim().is_empty()
         || form.value.is_empty()
     {
-        return Redirect::to(&format!("{}/credentials?error=All+fields+are+required.", base_path)).into_response();
+        return Redirect::to(&format!(
+            "{}/credentials?error=All+fields+are+required.",
+            base_path
+        ))
+        .into_response();
     }
     match state
         .credentials
-        .set_user(&form.user_id, &form.capability_id, &form.credential_name, &form.value)
+        .set_user(
+            &form.user_id,
+            &form.capability_id,
+            &form.credential_name,
+            &form.value,
+        )
         .await
     {
-        Ok(_) => Redirect::to(&format!("{}/credentials?success=User+credential+saved.", base_path)).into_response(),
+        Ok(_) => Redirect::to(&format!(
+            "{}/credentials?success=User+credential+saved.",
+            base_path
+        ))
+        .into_response(),
         Err(e) => {
             error!("Failed to set user credential: {e}");
-            Redirect::to(&format!("{}/credentials?error=Failed+to+save+credential.+Please+try+again.", base_path)).into_response()
+            Redirect::to(&format!(
+                "{}/credentials?error=Failed+to+save+credential.+Please+try+again.",
+                base_path
+            ))
+            .into_response()
         }
     }
 }
@@ -215,7 +258,11 @@ pub async fn credentials_delete_user(
     if !user.is_admin {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if let Err(e) = state.credentials.delete_user(&user_id, &cap_id, &name).await {
+    if let Err(e) = state
+        .credentials
+        .delete_user(&user_id, &cap_id, &name)
+        .await
+    {
         error!("Failed to delete user credential: {e}");
     }
     Html("").into_response()

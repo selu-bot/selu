@@ -2,7 +2,7 @@
 ///
 /// Uses an LLM provider to translate a human-readable filter description
 /// into a valid CEL expression for event subscription filtering.
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
@@ -92,23 +92,37 @@ Examples:
 
     let cel_expression = if is_anthropic {
         #[derive(Deserialize)]
-        struct Block { text: Option<String> }
+        struct Block {
+            text: Option<String>,
+        }
         #[derive(Deserialize)]
-        struct Resp { content: Vec<Block> }
+        struct Resp {
+            content: Vec<Block>,
+        }
         let parsed: Resp = resp.json().await?;
-        parsed.content.into_iter()
+        parsed
+            .content
+            .into_iter()
             .filter_map(|b| b.text)
             .collect::<Vec<_>>()
             .join("")
     } else {
         #[derive(Deserialize)]
-        struct Msg { content: Option<String> }
+        struct Msg {
+            content: Option<String>,
+        }
         #[derive(Deserialize)]
-        struct Choice { message: Msg }
+        struct Choice {
+            message: Msg,
+        }
         #[derive(Deserialize)]
-        struct Resp { choices: Vec<Choice> }
+        struct Resp {
+            choices: Vec<Choice>,
+        }
         let parsed: Resp = resp.json().await?;
-        parsed.choices.into_iter()
+        parsed
+            .choices
+            .into_iter()
             .next()
             .and_then(|c| c.message.content)
             .unwrap_or_default()

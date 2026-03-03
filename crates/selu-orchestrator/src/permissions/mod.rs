@@ -3,5 +3,5 @@ pub mod enforcer;
 pub mod store;
 pub mod tool_policy;
 
-pub use enforcer::{resolve_credentials, PermissionError};
+pub use enforcer::{PermissionError, resolve_credentials};
 pub use store::CredentialStore;

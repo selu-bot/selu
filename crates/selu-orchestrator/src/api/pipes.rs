@@ -1,8 +1,8 @@
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -110,12 +110,9 @@ pub async fn delete_pipe(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let pipe_id_str = pipe_id.to_string();
-    let result = sqlx::query!(
-        "UPDATE pipes SET active = 0 WHERE id = ?",
-        pipe_id_str
-    )
-    .execute(&state.db)
-    .await;
+    let result = sqlx::query!("UPDATE pipes SET active = 0 WHERE id = ?", pipe_id_str)
+        .execute(&state.db)
+        .await;
 
     match result {
         Ok(r) if r.rows_affected() > 0 => StatusCode::NO_CONTENT.into_response(),

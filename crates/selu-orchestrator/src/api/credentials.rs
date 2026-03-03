@@ -13,10 +13,10 @@
 ///   DELETE /api/credentials/user/{user_id}/{capability_id}/{name}
 ///   GET  /api/credentials/user/{user_id}/{capability_id}          → [names]
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::Deserialize;
 
@@ -34,7 +34,11 @@ pub async fn set_system(
     State(state): State<AppState>,
     Json(req): Json<SetCredentialRequest>,
 ) -> impl IntoResponse {
-    match state.credentials.set_system(&capability_id, &name, &req.value).await {
+    match state
+        .credentials
+        .set_system(&capability_id, &name, &req.value)
+        .await
+    {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             tracing::error!("Failed to set system credential: {e}");
@@ -76,7 +80,11 @@ pub async fn set_user(
     State(state): State<AppState>,
     Json(req): Json<SetCredentialRequest>,
 ) -> impl IntoResponse {
-    match state.credentials.set_user(&user_id, &capability_id, &name, &req.value).await {
+    match state
+        .credentials
+        .set_user(&user_id, &capability_id, &name, &req.value)
+        .await
+    {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             tracing::error!("Failed to set user credential: {e}");
@@ -89,7 +97,11 @@ pub async fn delete_user(
     Path((user_id, capability_id, name)): Path<(String, String, String)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    match state.credentials.delete_user(&user_id, &capability_id, &name).await {
+    match state
+        .credentials
+        .delete_user(&user_id, &capability_id, &name)
+        .await
+    {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             tracing::error!("Failed to delete user credential: {e}");

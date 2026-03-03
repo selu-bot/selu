@@ -20,16 +20,16 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{self, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info, warn};
 
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use http_body_util::{BodyExt, Full};
-use bytes::Bytes;
 
 use crate::capabilities::manifest::NetworkMode;
 
@@ -271,12 +271,16 @@ async fn handle_connect_hyper(
     policy: Option<ContainerEgressPolicy>,
     log_tx: &EgressLogSender,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
-    let target = req.uri().authority().map(|a| a.to_string())
+    let target = req
+        .uri()
+        .authority()
+        .map(|a| a.to_string())
         .unwrap_or_else(|| req.uri().to_string());
     let (host, port) = parse_host_port(&target, 443);
 
     let allowed = is_allowed(&host, port, ident, &policy);
-    let cap_id = policy.as_ref()
+    let cap_id = policy
+        .as_ref()
         .map(|p| p.capability_id.clone())
         .unwrap_or_else(|| "unknown".to_string());
 
@@ -372,15 +376,23 @@ async fn handle_http_hyper(
     log_tx: &EgressLogSender,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
     // Extract host from the request URI or Host header
-    let host_str = req.uri().host().map(|h| {
-        if let Some(port) = req.uri().port_u16() {
-            format!("{}:{}", h, port)
-        } else {
-            h.to_string()
-        }
-    }).or_else(|| {
-        req.headers().get("host").and_then(|v| v.to_str().ok()).map(|s| s.to_string())
-    }).unwrap_or_default();
+    let host_str = req
+        .uri()
+        .host()
+        .map(|h| {
+            if let Some(port) = req.uri().port_u16() {
+                format!("{}:{}", h, port)
+            } else {
+                h.to_string()
+            }
+        })
+        .or_else(|| {
+            req.headers()
+                .get("host")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_default();
 
     let method = req.method().to_string();
     let (hostname, port) = parse_host_port(&host_str, 80);
@@ -402,7 +414,8 @@ async fn handle_http_hyper(
         }
     };
 
-    let cap_id = policy.as_ref()
+    let cap_id = policy
+        .as_ref()
         .map(|p| p.capability_id.clone())
         .unwrap_or_else(|| "unknown".to_string());
 
@@ -436,7 +449,9 @@ async fn handle_http_hyper(
     // Reconstruct the request to forward to upstream.
     // For proxy requests the URI is absolute (http://host/path), so we
     // need to extract just the path+query for the origin request.
-    let path = req.uri().path_and_query()
+    let path = req
+        .uri()
+        .path_and_query()
         .map(|pq| pq.to_string())
         .unwrap_or_else(|| "/".to_string());
 
@@ -469,7 +484,6 @@ async fn handle_http_hyper(
     // Connect to upstream and forward
     match TcpStream::connect(format!("{}:{}", hostname, port)).await {
         Ok(mut upstream) => {
-
             let _ = upstream.write_all(raw_req.as_bytes()).await;
             if !body_bytes.is_empty() {
                 let _ = upstream.write_all(&body_bytes).await;
@@ -500,7 +514,9 @@ async fn handle_http_hyper(
 /// We expect the credentials to be `selu:<token>`, so we decode and extract the token part.
 fn extract_proxy_auth_token_from_headers(headers: &hyper::HeaderMap) -> Option<String> {
     let value = headers.get("proxy-authorization")?.to_str().ok()?;
-    let encoded = value.strip_prefix("Basic ").or_else(|| value.strip_prefix("basic "))?;
+    let encoded = value
+        .strip_prefix("Basic ")
+        .or_else(|| value.strip_prefix("basic "))?;
     let decoded = String::from_utf8(base64_decode(encoded.trim())?).ok()?;
     // Format is "selu:<token>" — extract the token after the colon
     let token = decoded.splitn(2, ':').nth(1)?;
@@ -553,10 +569,11 @@ fn extract_proxy_auth_token(request: &str) -> Option<String> {
         let lower = line.to_lowercase();
         if lower.starts_with("proxy-authorization:") {
             let value = line.splitn(2, ':').nth(1)?.trim();
-            if let Some(encoded) = value.strip_prefix("Basic ").or_else(|| value.strip_prefix("basic ")) {
-                let decoded = String::from_utf8(
-                    base64_decode(encoded.trim())?
-                ).ok()?;
+            if let Some(encoded) = value
+                .strip_prefix("Basic ")
+                .or_else(|| value.strip_prefix("basic "))
+            {
+                let decoded = String::from_utf8(base64_decode(encoded.trim())?).ok()?;
                 let token = decoded.splitn(2, ':').nth(1)?;
                 return Some(token.to_string());
             }
@@ -608,8 +625,14 @@ mod tests {
 
     #[test]
     fn test_parse_host_port() {
-        assert_eq!(parse_host_port("example.com:443", 80), ("example.com".into(), 443));
-        assert_eq!(parse_host_port("example.com", 80), ("example.com".into(), 80));
+        assert_eq!(
+            parse_host_port("example.com:443", 80),
+            ("example.com".into(), 443)
+        );
+        assert_eq!(
+            parse_host_port("example.com", 80),
+            ("example.com".into(), 80)
+        );
         assert_eq!(parse_host_port("[::1]:8080", 80), ("::1".into(), 8080));
     }
 
@@ -617,7 +640,10 @@ mod tests {
     fn test_extract_proxy_auth_token() {
         // "selu:my-secret-token" in base64 is "c2VsdTpteS1zZWNyZXQtdG9rZW4="
         let request = "CONNECT example.com:443 HTTP/1.1\r\nProxy-Authorization: Basic c2VsdTpteS1zZWNyZXQtdG9rZW4=\r\n\r\n";
-        assert_eq!(extract_proxy_auth_token(request), Some("my-secret-token".into()));
+        assert_eq!(
+            extract_proxy_auth_token(request),
+            Some("my-secret-token".into())
+        );
 
         // No header
         let request = "CONNECT example.com:443 HTTP/1.1\r\n\r\n";

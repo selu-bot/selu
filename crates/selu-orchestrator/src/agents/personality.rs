@@ -45,15 +45,17 @@ pub async fn get_facts(db: &SqlitePool, user_id: &str) -> Result<Vec<Personality
 
     Ok(rows
         .into_iter()
-        .map(|(id, user_id, category, fact, source, created_at, updated_at)| PersonalityFact {
-            id,
-            user_id,
-            category,
-            fact,
-            source,
-            created_at,
-            updated_at,
-        })
+        .map(
+            |(id, user_id, category, fact, source, created_at, updated_at)| PersonalityFact {
+                id,
+                user_id,
+                category,
+                fact,
+                source,
+                created_at,
+                updated_at,
+            },
+        )
         .collect())
 }
 
@@ -83,12 +85,7 @@ pub async fn add_fact(
 }
 
 /// Update an existing personality fact.
-pub async fn update_fact(
-    db: &SqlitePool,
-    fact_id: &str,
-    category: &str,
-    fact: &str,
-) -> Result<()> {
+pub async fn update_fact(db: &SqlitePool, fact_id: &str, category: &str, fact: &str) -> Result<()> {
     sqlx::query(
         "UPDATE user_personality SET category = ?, fact = ?, updated_at = datetime('now') WHERE id = ?",
     )
