@@ -871,15 +871,12 @@ fn partition_agents(
 
 /// Dispatch a `delegate_to_agent` tool call by running a nested agent turn.
 ///
-/// The delegated turn uses a **noop sender** — its tokens are not streamed
-/// directly to the user.  Instead, the delegation result is returned as a
-/// tool result string, which the outer (parent) LLM incorporates into its
-/// own streamed response.  This avoids the duplicate-response problem where
-/// the user would see both the delegated agent's raw stream AND the
-/// orchestrator's summary of the same content.
-///
-/// Tool confirmations (Ask policy) still work because the nested turn's
-/// `check_policy_and_dispatch` uses the approval queue, not the SSE sender.
+/// The delegated turn uses a **confirmation-only sender** — streamed text
+/// tokens are discarded to avoid the duplicate-response problem (where the
+/// user would see both the delegated agent's raw stream AND the
+/// orchestrator's summary).  However, `ConfirmationRequired` events are
+/// forwarded to the parent's real SSE channel so that interactive Ask-policy
+/// approvals still work.
 ///
 /// Returns a `BoxFuture` (rather than being `async fn`) so that the recursive
 /// `run_turn` call satisfies the `Send` bound required by the tool dispatcher.
@@ -890,7 +887,7 @@ fn dispatch_delegation(
     args: serde_json::Value,
     chain_depth: i32,
     channel_kind: ChannelKind,
-    _tx: LoopSender,
+    parent_tx: LoopSender,
 ) -> BoxFuture<'static, Result<String>> {
     async move {
         let (target_agent_id, message) = delegation::parse_args(&args)?;
@@ -912,14 +909,43 @@ fn dispatch_delegation(
             skip_user_persist: false,
         };
 
-        // Use a noop sender so the delegated agent's tokens are collected
-        // but not streamed to the user.  The outer LLM will present the
-        // result in its own response.
-        let reply = run_turn(&state, params, noop_sender()).await?;
+        // Create a filtered sender that forwards only confirmation events
+        // (needed for interactive Ask-policy approval) while discarding
+        // text tokens and Done signals (which would cause duplicate output).
+        let filtered_tx = confirmation_only_sender(parent_tx);
+        let reply = run_turn(&state, params, filtered_tx).await?;
 
         Ok(reply)
     }
     .boxed()
+}
+
+/// Create a sender that forwards only `ConfirmationRequired` and
+/// `ApprovalQueued` events to the parent, discarding tokens and other
+/// streaming events.  This lets delegated agents use Ask-policy tools
+/// without causing duplicate streamed output.
+fn confirmation_only_sender(parent_tx: LoopSender) -> LoopSender {
+    let (tx, mut rx) = mpsc::channel::<LoopEvent>(32);
+
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                // Forward confirmation/approval events — these are essential
+                // for the interactive Ask flow to work.
+                LoopEvent::ConfirmationRequired(_) | LoopEvent::ApprovalQueued { .. } => {
+                    let _ = parent_tx.send(event).await;
+                }
+                // Forward capability status so the user sees "Using pim..."
+                LoopEvent::CapabilityStatus(_) => {
+                    let _ = parent_tx.send(event).await;
+                }
+                // Discard tokens and Done to prevent duplicate streaming.
+                LoopEvent::Token(_) | LoopEvent::Done | LoopEvent::Error(_) => {}
+            }
+        }
+    });
+
+    tx
 }
 
 /// Create a throwaway channel for callers that don't stream tokens.
