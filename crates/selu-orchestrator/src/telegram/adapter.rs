@@ -182,8 +182,12 @@ pub fn router() -> Router<AppState> {
 /// Called from main.rs after AppState is built.
 ///
 /// For each active Telegram config:
-///   1. Registers its `TelegramSender` on the `ChannelRegistry`
-///   2. Sets the webhook URL with Telegram via `setWebhook`
+///   1. Stores adapter state in the module-level registry
+///   2. Registers its `TelegramSender` on the `ChannelRegistry`
+///
+/// Does NOT call `setWebhook` — the webhook is registered once during
+/// initial setup (via `start_one`).  Users can re-register it from
+/// the Telegram detail page if the URL ever becomes stale.
 pub async fn init_all(state: AppState) {
     let configs = match load_active_configs(&state).await {
         Ok(c) => c,
@@ -199,14 +203,14 @@ pub async fn init_all(state: AppState) {
     }
 
     info!("Initialising {} Telegram adapter(s)", configs.len());
-    let base_url = state.config.external_base_url();
 
     for cfg in configs {
-        register_adapter(&state, &cfg, &base_url).await;
+        register_adapter_local(state.clone(), &cfg).await;
     }
 }
 
-async fn register_adapter(state: &AppState, cfg: &TgConfig, base_url: &str) {
+/// Register adapter state and channel sender locally (no Telegram API call).
+async fn register_adapter_local(state: AppState, cfg: &TgConfig) {
     // Store in module-level registry
     {
         let mut reg = registry().write().await;
@@ -224,6 +228,18 @@ async fn register_adapter(state: &AppState, cfg: &TgConfig, base_url: &str) {
         chat_id: cfg.chat_id.clone(),
     });
     state.channel_registry.register(&cfg.pipe_id, sender).await;
+
+    info!(
+        config_id = %cfg.id,
+        name = %cfg.name,
+        "Telegram adapter registered (webhook not re-registered — use troubleshoot if needed)"
+    );
+}
+
+/// Register adapter locally AND set webhook with Telegram.
+/// Used during initial setup (via `start_one`).
+async fn register_adapter_and_webhook(state: &AppState, cfg: &TgConfig, base_url: &str) {
+    register_adapter_local(state.clone(), cfg).await;
 
     // Set webhook with Telegram
     let webhook_url = format!(
@@ -243,7 +259,7 @@ async fn register_adapter(state: &AppState, cfg: &TgConfig, base_url: &str) {
             info!(config_id = %cfg.id, "Webhook registered with Telegram");
         }
         Err(e) => {
-            warn!(config_id = %cfg.id, "Failed to register webhook with Telegram: {e}. Will retry on next startup.");
+            warn!(config_id = %cfg.id, "Failed to register webhook with Telegram: {e}");
         }
     }
 }
@@ -260,8 +276,26 @@ pub async fn start_one(state: AppState, config_id: &str, external_origin: Option
     let base_url = external_origin
         .map(|s| s.to_string())
         .unwrap_or_else(|| state.config.external_base_url());
-    register_adapter(&state, &cfg, &base_url).await;
+    register_adapter_and_webhook(&state, &cfg, &base_url).await;
     Ok(())
+}
+
+/// Re-register the webhook for an existing adapter.
+/// Called from the troubleshoot UI on the Telegram detail page.
+pub async fn reregister_webhook(state: &AppState, config_id: &str, external_origin: &str) -> Result<()> {
+    let cfg = load_config_by_id(state, config_id).await?;
+    let webhook_url = format!(
+        "{}/api/telegram/webhook/{}?token={}",
+        external_origin, cfg.id, cfg.inbound_token
+    );
+
+    info!(
+        config_id = %cfg.id,
+        webhook_url = %webhook_url,
+        "Re-registering webhook with Telegram (troubleshoot)"
+    );
+
+    set_webhook(&cfg.bot_token, &webhook_url).await
 }
 
 // ---------------------------------------------------------------------------
@@ -494,6 +528,72 @@ pub async fn delete_webhook(bot_token: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Query the current webhook status from Telegram via `getWebhookInfo`.
+/// Returns a structured result suitable for displaying in the UI.
+pub async fn get_webhook_info(bot_token: &str) -> Result<WebhookInfo> {
+    let http = Client::new();
+    let token = bot_token.trim();
+    let url = format!(
+        "https://api.telegram.org/bot{}/getWebhookInfo",
+        token
+    );
+
+    let resp = http
+        .get(&url)
+        .send()
+        .await
+        .context("Failed to reach Telegram API for getWebhookInfo")?;
+
+    let resp_body = resp.text().await.unwrap_or_default();
+    debug!(response = %resp_body, "Telegram getWebhookInfo response");
+
+    let parsed: TgWebhookInfoResponse = serde_json::from_str(&resp_body)
+        .context("Failed to parse Telegram getWebhookInfo response")?;
+
+    if !parsed.ok {
+        anyhow::bail!(
+            "Telegram rejected getWebhookInfo: {}",
+            parsed.description.unwrap_or_default()
+        );
+    }
+
+    let result = parsed.result.unwrap_or_default();
+    Ok(WebhookInfo {
+        url: result.url,
+        has_custom_certificate: result.has_custom_certificate.unwrap_or(false),
+        pending_update_count: result.pending_update_count.unwrap_or(0),
+        last_error_date: result.last_error_date,
+        last_error_message: result.last_error_message,
+    })
+}
+
+/// Webhook status as returned by Telegram's `getWebhookInfo`.
+#[derive(Debug, Clone, Serialize)]
+pub struct WebhookInfo {
+    pub url: String,
+    pub has_custom_certificate: bool,
+    pub pending_update_count: i64,
+    pub last_error_date: Option<i64>,
+    pub last_error_message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TgWebhookInfoResponse {
+    ok: bool,
+    description: Option<String>,
+    result: Option<TgWebhookInfoResult>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct TgWebhookInfoResult {
+    #[serde(default)]
+    url: String,
+    has_custom_certificate: Option<bool>,
+    pending_update_count: Option<i64>,
+    last_error_date: Option<i64>,
+    last_error_message: Option<String>,
 }
 
 /// Send a text message via the Telegram Bot API.
@@ -928,7 +1028,16 @@ async fn dispatch_message(
 
     let reply_text = match reply {
         Ok(t) if !t.is_empty() => t,
-        Ok(_) => return,
+        Ok(_) => {
+            warn!("Agent turn returned empty reply");
+            let lang = crate::i18n::user_language(&state.db, &user_id).await;
+            let error_text = crate::i18n::t(&lang, "error.agent_turn_failed");
+            let _ = send_telegram_message(
+                &http, &bot_token, &chat_id, error_text,
+                Some(message_id),
+            ).await;
+            return;
+        }
         Err(e) => {
             error!("Agent turn failed: {e}");
             let _ = thread_mgr::fail_thread(&state.db, &thread_id).await;

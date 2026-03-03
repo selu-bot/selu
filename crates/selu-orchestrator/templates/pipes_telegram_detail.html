@@ -39,10 +39,6 @@
     <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
       <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
         <span class="text-sm font-semibold text-txt-heading" data-i18n="tg.detail.connection">Connection Details</span>
-        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-          <span data-i18n="pipes.connected">Connected</span>
-        </span>
       </div>
       <div class="p-5 space-y-3">
         <div class="flex items-center gap-3 text-sm">
@@ -53,6 +49,45 @@
           <span class="text-txt-muted w-24" data-i18n="tg.detail.agent">Agent</span>
           <span class="text-txt-heading">{{ config.agent_name }}</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Troubleshoot -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="tg.troubleshoot.title">Troubleshoot</span>
+        <button class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                hx-get="{{ base_path }}/pipes/telegram/{{ config.config_id }}/webhook-check"
+                hx-target="#webhook-status"
+                hx-swap="innerHTML"
+                hx-indicator="#webhook-spinner"
+                data-i18n="tg.troubleshoot.check">Check Webhook</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <p class="text-xs text-txt-muted" data-i18n="tg.troubleshoot.desc">Check if your Telegram webhook is set up correctly. If messages aren't coming through, use this to diagnose the issue.</p>
+        <div id="webhook-status" class="min-h-[2rem]">
+          <p class="text-xs text-txt-faint" data-i18n="tg.troubleshoot.hint">Click "Check Webhook" to see the current status.</p>
+        </div>
+        <span id="webhook-spinner" class="htmx-indicator text-xs text-txt-muted">Checking...</span>
+
+        {% if is_https %}
+        <div class="pt-3 border-t border-edge">
+          <p class="text-xs text-txt-muted mb-2" data-i18n="tg.troubleshoot.reregister.desc">If the webhook URL is wrong or missing, you can re-register it with Telegram.</p>
+          <button class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                  hx-post="{{ base_path }}/pipes/telegram/{{ config.config_id }}/webhook-reregister"
+                  hx-target="#reregister-result"
+                  hx-swap="innerHTML"
+                  hx-indicator="#reregister-spinner"
+                  hx-confirm="This will update the webhook URL with Telegram. Continue?"
+                  data-i18n="tg.troubleshoot.reregister">Re-register Webhook</button>
+          <span id="reregister-spinner" class="htmx-indicator text-xs text-txt-muted ml-2">Registering...</span>
+          <div id="reregister-result" class="mt-2"></div>
+        </div>
+        {% else %}
+        <div class="pt-3 border-t border-edge">
+          <p class="text-xs text-amber-400" data-i18n="tg.troubleshoot.httpsonly">Webhook registration requires HTTPS. Access Selu via HTTPS to re-register the webhook.</p>
+        </div>
+        {% endif %}
       </div>
     </div>
 

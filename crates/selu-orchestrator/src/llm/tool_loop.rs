@@ -433,5 +433,5 @@ pub async fn run_loop(
 
     let _ = tx.send(LoopEvent::Error("Max tool iterations reached".into())).await;
     let _ = tx.send(LoopEvent::Done).await;
-    Ok(String::new())
+    anyhow::bail!("Max tool iterations reached without a final text response")
 }

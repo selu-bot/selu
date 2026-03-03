@@ -64,6 +64,7 @@ struct TelegramDetailTemplate {
     users: Vec<UserOption>,
     flash: Option<String>,
     error: Option<String>,
+    is_https: bool,
 }
 
 // ── Form structs ──────────────────────────────────────────────────────────────
@@ -332,6 +333,7 @@ pub async fn telegram_detail(
     Query(q): Query<FlashQuery>,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
+    ExternalOrigin(external_origin): ExternalOrigin,
 ) -> Response {
     if !user.is_admin {
         return prefixed_redirect(&base_path, "/chat").into_response();
@@ -343,6 +345,7 @@ pub async fn telegram_detail(
 
     let people = load_allowed_people(&state.db, &config.pipe_id).await;
     let users = load_users(&state.db).await;
+    let is_https = external_origin.starts_with("https://");
 
     match (TelegramDetailTemplate {
         active_nav: "pipes",
@@ -353,6 +356,7 @@ pub async fn telegram_detail(
         users,
         flash: q.msg,
         error: q.error,
+        is_https,
     }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
@@ -464,6 +468,112 @@ pub async fn telegram_delete(
     .await;
 
     Redirect::to(&format!("{}/pipes?msg=Pipe+removed", base_path)).into_response()
+}
+
+// ── Handlers: Troubleshoot ───────────────────────────────────────────────────
+
+/// HTMX handler: check webhook status from Telegram's `getWebhookInfo`.
+/// Returns an HTML fragment to be swapped into the troubleshoot section.
+pub async fn telegram_check_webhook(
+    user: AuthUser,
+    Path(config_id): Path<String>,
+    State(state): State<AppState>,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let bot_token = match sqlx::query!(
+        "SELECT bot_token FROM telegram_configs WHERE id = ?",
+        config_id
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    {
+        Some(r) => r.bot_token,
+        None => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    match crate::telegram::adapter::get_webhook_info(&bot_token).await {
+        Ok(info) => {
+            let url_display = if info.url.is_empty() {
+                "<span class=\"text-amber-400\" data-i18n=\"tg.troubleshoot.nourl\">No webhook URL set</span>".to_string()
+            } else {
+                format!("<code class=\"font-mono text-xs bg-surface-alt px-2 py-1 rounded break-all\">{}</code>", info.url)
+            };
+
+            let error_html = if let Some(ref msg) = info.last_error_message {
+                format!(
+                    r#"<div class="flex items-start gap-2 mt-2">
+                        <span class="text-rosie text-xs">&#9888;</span>
+                        <span class="text-xs text-rosie">{}</span>
+                    </div>"#,
+                    msg
+                )
+            } else {
+                String::new()
+            };
+
+            let pending = info.pending_update_count;
+
+            Html(format!(
+                r#"<div class="space-y-2 text-sm animate-fadein">
+                    <div class="flex items-center gap-3">
+                        <span class="text-txt-muted w-28" data-i18n="tg.troubleshoot.url">Webhook URL</span>
+                        <div class="flex-1 min-w-0">{url_display}</div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-txt-muted w-28" data-i18n="tg.troubleshoot.pending">Pending</span>
+                        <span class="text-txt-heading">{pending}</span>
+                    </div>
+                    {error_html}
+                </div>"#
+            )).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get webhook info: {e}");
+            Html(format!(
+                r#"<div class="text-sm text-rosie animate-fadein">{}</div>"#,
+                "Could not reach Telegram. Please try again."
+            )).into_response()
+        }
+    }
+}
+
+/// HTMX handler: re-register webhook with Telegram.
+/// Returns an HTML fragment with the result.
+pub async fn telegram_reregister_webhook(
+    user: AuthUser,
+    Path(config_id): Path<String>,
+    State(state): State<AppState>,
+    ExternalOrigin(external_origin): ExternalOrigin,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    // Only allow over HTTPS
+    if !external_origin.starts_with("https://") {
+        return Html(
+            r#"<div class="text-sm text-rosie animate-fadein" data-i18n="tg.troubleshoot.httpsonly">Webhook registration requires HTTPS. Access Selu via HTTPS first.</div>"#.to_string()
+        ).into_response();
+    }
+
+    match crate::telegram::adapter::reregister_webhook(&state, &config_id, &external_origin).await {
+        Ok(()) => {
+            Html(
+                r#"<div class="text-sm text-emerald-400 animate-fadein" data-i18n="tg.troubleshoot.registered">Webhook re-registered successfully!</div>"#.to_string()
+            ).into_response()
+        }
+        Err(e) => {
+            error!("Failed to re-register webhook: {e}");
+            Html(format!(
+                r#"<div class="text-sm text-rosie animate-fadein">{e}</div>"#,
+            )).into_response()
+        }
+    }
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────

@@ -222,8 +222,24 @@ async fn handle_inbound(
         let reply_text = match reply {
             Ok(t) if !t.is_empty() => t,
             Ok(_) => {
-                // Empty reply — complete thread for non-threaded pipes only
-                if !is_threaded {
+                warn!("Agent turn returned empty reply");
+                // Empty reply — send a fallback message so the user isn't
+                // left staring at silence, then complete/keep the thread.
+                if is_threaded {
+                    let lang = crate::i18n::user_language(&state.db, &resolved_user_id).await;
+                    let error_text = crate::i18n::t(&lang, "error.agent_turn_failed");
+                    let sender = crate::pipes::outbound::OutboundSender::new();
+                    let outbound = selu_core::types::OutboundEnvelope {
+                        recipient_ref: recipient_ref.clone(),
+                        text: error_text.to_string(),
+                        thread_id: Some(thread_id.clone()),
+                        reply_to_message_ref: thread.origin_message_ref.clone(),
+                        metadata: None,
+                    };
+                    if let Err(send_err) = sender.send(&outbound_url, outbound_auth.as_deref(), &outbound).await {
+                        error!("Failed to send fallback message to user: {send_err}");
+                    }
+                } else {
                     let _ = thread_mgr::complete_thread(&state.db, &thread_id).await;
                 }
                 return;

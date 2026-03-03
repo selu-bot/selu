@@ -285,6 +285,14 @@ pub fn router(state: AppState) -> Router<AppState> {
             post(telegram::telegram_delete),
         )
         .route(
+            "/pipes/telegram/{config_id}/webhook-check",
+            get(telegram::telegram_check_webhook),
+        )
+        .route(
+            "/pipes/telegram/{config_id}/webhook-reregister",
+            post(telegram::telegram_reregister_webhook),
+        )
+        .route(
             "/pipes/telegram/{config_id}/people",
             post(telegram::telegram_add_person),
         )

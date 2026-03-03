@@ -825,7 +825,18 @@ async fn dispatch_message(
     let reply_text = match reply {
         Ok(t) if !t.is_empty() => t,
         Ok(_) => {
-            // Empty reply — thread stays active for future messages
+            warn!("Agent turn returned empty reply");
+            let lang = crate::i18n::user_language(&state.db, &user_id).await;
+            let error_text = crate::i18n::t(&lang, "error.agent_turn_failed");
+            let _ = send_bb_reply(
+                &http,
+                &server_url,
+                &server_password,
+                &chat_guid,
+                error_text,
+                message_guid.as_deref(),
+                &sent_guids,
+            ).await;
             return;
         }
         Err(e) => {
