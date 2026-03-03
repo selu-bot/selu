@@ -13,34 +13,86 @@ pub mod users;
 use crate::state::AppState;
 use axum::{
     Router,
-    response::Redirect,
+    extract::{FromRequestParts, State},
+    http::{request::Parts, HeaderMap},
+    middleware::{self, Next},
+    response::{IntoResponse, Redirect},
     routing::{delete, get, post},
 };
 
-/// Build a redirect target that respects the configured base path.
-/// Example: `prefixed_redirect(&state, "/chat")` → `Redirect::to("/selu/chat")`
-pub fn prefixed_redirect(state: &AppState, path: &str) -> Redirect {
-    Redirect::to(&format!("{}{}", state.base_path, path))
+// ── BasePath extractor ───────────────────────────────────────────────────────
+
+/// Per-request URL path prefix resolved from the `X-Forwarded-Prefix` header,
+/// falling back to the static `SELU__BASE_PATH` config, then to `""`.
+///
+/// Middleware inserts this into request extensions before any handler runs.
+/// Handlers extract it as `BasePath(base_path): BasePath`.
+#[derive(Debug, Clone)]
+pub struct BasePath(pub String);
+
+/// Middleware that resolves the base path from the `X-Forwarded-Prefix` header
+/// (set by the reverse proxy) and falls back to the static `state.base_path`.
+pub async fn resolve_base_path(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    mut req: axum::extract::Request,
+    next: Next,
+) -> impl IntoResponse {
+    let bp = headers
+        .get("x-forwarded-prefix")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| state.base_path.clone());
+    req.extensions_mut().insert(BasePath(bp));
+    next.run(req).await
 }
 
-/// Build a URL string that respects the configured base path.
+impl FromRequestParts<AppState> for BasePath {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(parts
+            .extensions
+            .get::<BasePath>()
+            .cloned()
+            .unwrap_or(BasePath(String::new())))
+    }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Build a redirect target that respects the resolved base path.
+/// Example: `prefixed_redirect("/selu", "/chat")` → `Redirect::to("/selu/chat")`
+pub fn prefixed_redirect(base_path: &str, path: &str) -> Redirect {
+    Redirect::to(&format!("{}{}", base_path, path))
+}
+
+/// Build a URL string that respects the resolved base path.
 /// Useful for `format!`-based redirect targets and `HX-Redirect` headers.
 pub fn prefixed(base_path: &str, path: &str) -> String {
     format!("{}{}", base_path, path)
 }
 
+// ── Root redirect handler ────────────────────────────────────────────────────
+
+async fn root_redirect(BasePath(base_path): BasePath) -> Redirect {
+    Redirect::to(&format!("{}/chat", base_path))
+}
+
+// ── Router ───────────────────────────────────────────────────────────────────
+
 pub fn router(state: AppState) -> Router<AppState> {
-    let bp = state.base_path.clone();
     Router::new()
         // Public routes (no auth required)
         .route("/login", get(auth::login_page).post(auth::login_submit))
         .route("/logout", post(auth::logout))
         .route("/setup", get(auth::setup_page).post(auth::setup_submit))
         // Root redirect
-        .route(
-            "/",
-            get(move || async move { axum::response::Redirect::to(&format!("{}/chat", bp)) }),
-        )
+        .route("/", get(root_redirect))
         // All routes below require AuthUser extractor (session cookie)
         // Chat
         .route("/chat", get(chat::chat_index))
@@ -195,5 +247,7 @@ pub fn router(state: AppState) -> Router<AppState> {
             get(personality::personality_edit_form),
         )
         .route("/personality/{id}/row", get(personality::personality_row))
+        // Apply base path resolution middleware to ALL routes
+        .layer(middleware::from_fn_with_state(state.clone(), resolve_base_path))
         .with_state(state)
 }

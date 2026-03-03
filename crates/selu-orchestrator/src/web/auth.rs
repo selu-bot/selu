@@ -17,7 +17,7 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::state::AppState;
-use crate::web::{prefixed, prefixed_redirect};
+use crate::web::{BasePath, prefixed, prefixed_redirect};
 
 /// Session lifetime: 7 days
 const SESSION_TTL_DAYS: i64 = 7;
@@ -61,12 +61,18 @@ impl FromRequestParts<AppState> for AuthUser {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        let base_path = parts
+            .extensions
+            .get::<BasePath>()
+            .map(|bp| bp.0.as_str())
+            .unwrap_or("");
+
         // Extract cookie jar
         let jar = CookieJar::from_headers(&parts.headers);
 
         let session_id = match jar.get(SESSION_COOKIE) {
             Some(c) => c.value().to_string(),
-            None => return Err(Redirect::to(&prefixed(state.base_path.as_str(), "/login")).into_response()),
+            None => return Err(Redirect::to(&prefixed(base_path, "/login")).into_response()),
         };
 
         // Look up session + user
@@ -92,14 +98,14 @@ impl FromRequestParts<AppState> for AuthUser {
                 is_admin: r.is_admin != 0,
                 language: r.language,
             }),
-            None => Err(Redirect::to(&prefixed(state.base_path.as_str(), "/login")).into_response()),
+            None => Err(Redirect::to(&prefixed(base_path, "/login")).into_response()),
         }
     }
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn login_page(State(state): State<AppState>) -> Response {
+pub async fn login_page(State(state): State<AppState>, BasePath(base_path): BasePath) -> Response {
     // If no users exist, redirect to first-run setup
     let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM users")
         .fetch_one(&state.db)
@@ -107,13 +113,13 @@ pub async fn login_page(State(state): State<AppState>) -> Response {
         .unwrap_or(0);
 
     if count == 0 {
-        return prefixed_redirect(&state, "/setup").into_response();
+        return prefixed_redirect(&base_path, "/setup").into_response();
     }
 
     let tmpl = LoginTemplate {
         active_nav: "",
         error: None,
-        base_path: state.base_path.clone(),
+        base_path,
     };
     match tmpl.render() {
         Ok(html) => Html(html).into_response(),
@@ -126,11 +132,12 @@ pub async fn login_page(State(state): State<AppState>) -> Response {
 
 pub async fn login_submit(
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     jar: CookieJar,
     Form(form): Form<LoginForm>,
 ) -> Response {
     let username = form.username.trim().to_string();
-    let bp = &state.base_path;
+    let bp = &base_path;
 
     // Look up user by username
     let user = sqlx::query!(
@@ -189,10 +196,10 @@ pub async fn login_submit(
         .max_age(time::Duration::days(SESSION_TTL_DAYS))
         .build();
 
-    (jar.add(cookie), prefixed_redirect(&state, "/chat")).into_response()
+    (jar.add(cookie), prefixed_redirect(&base_path, "/chat")).into_response()
 }
 
-pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Response {
+pub async fn logout(State(state): State<AppState>, BasePath(base_path): BasePath, jar: CookieJar) -> Response {
     // Delete session from DB
     if let Some(cookie) = jar.get(SESSION_COOKIE) {
         let session_id = cookie.value().to_string();
@@ -202,14 +209,14 @@ pub async fn logout(State(state): State<AppState>, jar: CookieJar) -> Response {
     }
 
     // Remove cookie
-    let bp = &state.base_path;
+    let bp = &base_path;
     let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
     let cookie = Cookie::build((SESSION_COOKIE, ""))
         .path(cookie_path)
         .max_age(time::Duration::ZERO)
         .build();
 
-    (jar.remove(cookie), prefixed_redirect(&state, "/login")).into_response()
+    (jar.remove(cookie), prefixed_redirect(&base_path, "/login")).into_response()
 }
 
 fn render_login_error(msg: &str, base_path: &str) -> Response {
@@ -245,7 +252,7 @@ pub struct SetupForm {
 }
 
 /// GET /setup - show the first-run setup page (only if no users exist)
-pub async fn setup_page(State(state): State<AppState>) -> Response {
+pub async fn setup_page(State(state): State<AppState>, BasePath(base_path): BasePath) -> Response {
     // If users already exist, redirect to login
     let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM users")
         .fetch_one(&state.db)
@@ -253,10 +260,10 @@ pub async fn setup_page(State(state): State<AppState>) -> Response {
         .unwrap_or(1);
 
     if count > 0 {
-        return prefixed_redirect(&state, "/login").into_response();
+        return prefixed_redirect(&base_path, "/login").into_response();
     }
 
-    let tmpl = SetupTemplate { error: None, base_path: state.base_path.clone() };
+    let tmpl = SetupTemplate { error: None, base_path };
     match tmpl.render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
@@ -269,6 +276,7 @@ pub async fn setup_page(State(state): State<AppState>) -> Response {
 /// POST /setup - create the first admin user (only if no users exist)
 pub async fn setup_submit(
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     jar: CookieJar,
     Form(form): Form<SetupForm>,
 ) -> Response {
@@ -279,13 +287,13 @@ pub async fn setup_submit(
         .unwrap_or(1);
 
     if count > 0 {
-        return prefixed_redirect(&state, "/login").into_response();
+        return prefixed_redirect(&base_path, "/login").into_response();
     }
 
     if form.username.trim().is_empty() || form.password.is_empty() {
         let tmpl = SetupTemplate {
             error: Some("Username and password are required.".to_string()),
-            base_path: state.base_path.clone(),
+            base_path: base_path.clone(),
         };
         return match tmpl.render() {
             Ok(html) => Html(html).into_response(),
@@ -377,7 +385,7 @@ pub async fn setup_submit(
     .execute(&state.db)
     .await;
 
-    let bp = &state.base_path;
+    let bp = &base_path;
     let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
     let cookie = Cookie::build((SESSION_COOKIE, session_id))
         .path(cookie_path)
@@ -386,5 +394,5 @@ pub async fn setup_submit(
         .max_age(time::Duration::days(SESSION_TTL_DAYS))
         .build();
 
-    (jar.add(cookie), prefixed_redirect(&state, "/chat")).into_response()
+    (jar.add(cookie), prefixed_redirect(&base_path, "/chat")).into_response()
 }

@@ -11,6 +11,7 @@ use tracing::error;
 use crate::agents::personality;
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
+use crate::web::BasePath;
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -125,6 +126,7 @@ pub async fn personality_index(
     user: AuthUser,
     Query(q): Query<PersonalityQuery>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     let facts = personality::get_facts(&state.db, &user.user_id)
         .await
@@ -135,7 +137,7 @@ pub async fn personality_index(
     match (PersonalityTemplate {
         active_nav: "personality",
         is_admin: user.is_admin,
-        base_path: state.base_path.clone(),
+        base_path,
         groups,
         error: q.error,
         success: q.success,
@@ -154,10 +156,11 @@ pub async fn personality_index(
 pub async fn personality_add(
     user: AuthUser,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<AddFactForm>,
 ) -> Response {
     if form.fact.trim().is_empty() {
-        return Redirect::to(&format!("{}/personality?error=empty", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/personality?error=empty", base_path)).into_response();
     }
 
     let valid_categories = ["personal", "preferences", "location", "work", "other"];
@@ -170,10 +173,10 @@ pub async fn personality_add(
     match personality::add_fact(&state.db, &user.user_id, &category, form.fact.trim(), "manual")
         .await
     {
-        Ok(_) => Redirect::to(&format!("{}/personality?success=added", state.base_path)).into_response(),
+        Ok(_) => Redirect::to(&format!("{}/personality?success=added", base_path)).into_response(),
         Err(e) => {
             error!("Failed to add personality fact: {e}");
-            Redirect::to(&format!("{}/personality?error=add_failed", state.base_path)).into_response()
+            Redirect::to(&format!("{}/personality?error=add_failed", base_path)).into_response()
         }
     }
 }
@@ -195,6 +198,7 @@ pub async fn personality_edit_form(
     _user: AuthUser,
     Path(fact_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     let facts = sqlx::query_as::<_, (String, String, String, String, String)>(
         "SELECT id, category, fact, source, created_at FROM user_personality WHERE id = ?",
@@ -212,7 +216,7 @@ pub async fn personality_edit_form(
                 source,
                 created_at,
             };
-            match (EditRowFragment { fact: row, base_path: state.base_path.clone() }).render() {
+            match (EditRowFragment { fact: row, base_path }).render() {
                 Ok(html) => Html(html).into_response(),
                 Err(e) => {
                     error!("Template render error: {e}");
@@ -229,6 +233,7 @@ pub async fn personality_update(
     _user: AuthUser,
     Path(fact_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<UpdateFactForm>,
 ) -> Response {
     let valid_categories = ["personal", "preferences", "location", "work", "other"];
@@ -263,7 +268,7 @@ pub async fn personality_update(
         source,
         created_at: String::new(),
     };
-    match (FactRowFragment { fact: row, base_path: state.base_path.clone() }).render() {
+    match (FactRowFragment { fact: row, base_path }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -277,6 +282,7 @@ pub async fn personality_row(
     _user: AuthUser,
     Path(fact_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     let facts = sqlx::query_as::<_, (String, String, String, String, String)>(
         "SELECT id, category, fact, source, created_at FROM user_personality WHERE id = ?",
@@ -294,7 +300,7 @@ pub async fn personality_row(
                 source,
                 created_at,
             };
-            match (FactRowFragment { fact: row, base_path: state.base_path.clone() }).render() {
+            match (FactRowFragment { fact: row, base_path }).render() {
                 Ok(html) => Html(html).into_response(),
                 Err(e) => {
                     error!("Template render error: {e}");

@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
-use crate::web::prefixed_redirect;
+use crate::web::{BasePath, prefixed_redirect};
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -69,9 +69,9 @@ pub struct CreateSubForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn subscriptions_index(user: AuthUser, Query(q): Query<SubsQuery>, State(state): State<AppState>) -> Response {
+pub async fn subscriptions_index(user: AuthUser, Query(q): Query<SubsQuery>, State(state): State<AppState>, BasePath(base_path): BasePath) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&state, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/chat").into_response();
     }
     let rows = sqlx::query!(
         r#"SELECT es.id, es.user_id, u.username,
@@ -116,7 +116,7 @@ pub async fn subscriptions_index(user: AuthUser, Query(q): Query<SubsQuery>, Sta
         })
         .collect();
 
-    match (SubscriptionsTemplate { active_nav: "subscriptions", is_admin: user.is_admin, base_path: state.base_path.clone(), subs, users, error: q.error, success: q.success }).render() {
+    match (SubscriptionsTemplate { active_nav: "subscriptions", is_admin: user.is_admin, base_path, subs, users, error: q.error, success: q.success }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -128,6 +128,7 @@ pub async fn subscriptions_index(user: AuthUser, Query(q): Query<SubsQuery>, Sta
 pub async fn subscriptions_create(
     user: AuthUser,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<CreateSubForm>,
 ) -> Response {
     if !user.is_admin {
@@ -137,17 +138,17 @@ pub async fn subscriptions_create(
         || form.event_type.trim().is_empty()
         || form.reaction_type.is_empty()
     {
-        return Redirect::to(&format!("{}/subscriptions?error=User%2C+event+type%2C+and+reaction+type+are+required.", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/subscriptions?error=User%2C+event+type%2C+and+reaction+type+are+required.", base_path)).into_response();
     }
 
     if form.reaction_type != "pipe_notification" && form.reaction_type != "agent_invocation" {
-        return Redirect::to(&format!("{}/subscriptions?error=Invalid+reaction+type.", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/subscriptions?error=Invalid+reaction+type.", base_path)).into_response();
     }
 
     // Validate and re-serialize reaction_config JSON
     let config_val: serde_json::Value = match serde_json::from_str(&form.reaction_config) {
         Ok(v) => v,
-        Err(_) => return Redirect::to(&format!("{}/subscriptions?error=Reaction+config+must+be+valid+JSON.", state.base_path)).into_response(),
+        Err(_) => return Redirect::to(&format!("{}/subscriptions?error=Reaction+config+must+be+valid+JSON.", base_path)).into_response(),
     };
     let config_json = config_val.to_string();
 
@@ -215,10 +216,10 @@ pub async fn subscriptions_create(
     .await;
 
     match result {
-        Ok(_) => Redirect::to(&format!("{}/subscriptions?success=Subscription+created.", state.base_path)).into_response(),
+        Ok(_) => Redirect::to(&format!("{}/subscriptions?success=Subscription+created.", base_path)).into_response(),
         Err(e) => {
             error!("Failed to create subscription: {e}");
-            Redirect::to(&format!("{}/subscriptions?error=Failed+to+create+subscription.+Please+try+again.", state.base_path)).into_response()
+            Redirect::to(&format!("{}/subscriptions?error=Failed+to+create+subscription.+Please+try+again.", base_path)).into_response()
         }
     }
 }

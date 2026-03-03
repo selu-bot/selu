@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
-use crate::web::prefixed_redirect;
+use crate::web::{BasePath, prefixed_redirect};
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -174,16 +174,17 @@ pub async fn telegram_setup_page(
     user: AuthUser,
     Query(q): Query<FlashQuery>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&state, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/chat").into_response();
     }
     let users = load_users(&state.db).await;
 
     match (TelegramSetupTemplate {
         active_nav: "pipes",
         is_admin: user.is_admin,
-        base_path: state.base_path.clone(),
+        base_path,
         users,
         error: q.error,
     }).render() {
@@ -199,6 +200,7 @@ pub async fn telegram_setup_page(
 pub async fn telegram_setup_submit(
     user: AuthUser,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<TelegramSetupForm>,
 ) -> Response {
     if !user.is_admin {
@@ -212,7 +214,7 @@ pub async fn telegram_setup_submit(
     if name.is_empty() || bot_token.is_empty() || chat_id.is_empty() {
         return Redirect::to(&format!(
             "{}/pipes/telegram/setup?error=Please+fill+in+all+required+fields",
-            state.base_path
+            base_path
         )).into_response();
     }
 
@@ -222,7 +224,7 @@ pub async fn telegram_setup_submit(
         None => {
             return Redirect::to(&format!(
                 "{}/pipes/telegram/setup?error=You+need+at+least+one+user.+Create+one+in+Users+first.",
-                state.base_path
+                base_path
             )).into_response();
         }
     };
@@ -246,7 +248,7 @@ pub async fn telegram_setup_submit(
         error!("Failed to create pipe: {e}");
         return Redirect::to(&format!(
             "{}/pipes/telegram/setup?error=Failed+to+create+pipe",
-            state.base_path
+            base_path
         )).into_response();
     }
 
@@ -264,7 +266,7 @@ pub async fn telegram_setup_submit(
         error!("Failed to create Telegram config: {e}");
         return Redirect::to(&format!(
             "{}/pipes/telegram/setup?error=Failed+to+create+adapter+config",
-            state.base_path
+            base_path
         )).into_response();
     }
 
@@ -292,7 +294,7 @@ pub async fn telegram_setup_submit(
     }
 
     // Start the adapter immediately
-    let bp = state.base_path.clone();
+    let bp = base_path;
     if let Err(e) = crate::telegram::adapter::start_one(state, &tg_config_id).await {
         error!("Failed to start Telegram adapter: {e}");
     }
@@ -310,13 +312,14 @@ pub async fn telegram_detail(
     Path(config_id): Path<String>,
     Query(q): Query<FlashQuery>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&state, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/chat").into_response();
     }
     let config = match load_telegram_config(&state.db, &config_id).await {
         Some(c) => c,
-        None => return prefixed_redirect(&state, "/pipes").into_response(),
+        None => return prefixed_redirect(&base_path, "/pipes").into_response(),
     };
 
     let people = load_allowed_people(&state.db, &config.pipe_id).await;
@@ -325,7 +328,7 @@ pub async fn telegram_detail(
     match (TelegramDetailTemplate {
         active_nav: "pipes",
         is_admin: user.is_admin,
-        base_path: state.base_path.clone(),
+        base_path,
         config,
         people,
         users,
@@ -344,6 +347,7 @@ pub async fn telegram_add_person(
     user: AuthUser,
     Path(config_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<AddPersonForm>,
 ) -> Response {
     if !user.is_admin {
@@ -352,7 +356,7 @@ pub async fn telegram_add_person(
     if form.user_id.is_empty() || form.sender_ref.trim().is_empty() {
         return Redirect::to(&format!(
             "{}/pipes/telegram/{}?error=Please+fill+in+both+fields",
-            state.base_path, config_id
+            base_path, config_id
         )).into_response();
     }
 
@@ -363,7 +367,7 @@ pub async fn telegram_add_person(
         .flatten()
     {
         Some(r) => r.pipe_id,
-        None => return prefixed_redirect(&state, "/pipes").into_response(),
+        None => return prefixed_redirect(&base_path, "/pipes").into_response(),
     };
 
     let ref_id = Uuid::new_v4().to_string();
@@ -376,17 +380,17 @@ pub async fn telegram_add_person(
     {
         Ok(_) => Redirect::to(&format!(
             "{}/pipes/telegram/{}?msg=Person+added",
-            state.base_path, config_id
+            base_path, config_id
         )).into_response(),
         Err(e) if e.to_string().contains("UNIQUE") => Redirect::to(&format!(
             "{}/pipes/telegram/{}?error=This+Telegram+user+is+already+added",
-            state.base_path, config_id
+            base_path, config_id
         )).into_response(),
         Err(e) => {
             error!("Failed to add person: {e}");
             Redirect::to(&format!(
                 "{}/pipes/telegram/{}?error=Failed+to+add+person.+Please+try+again.",
-                state.base_path, config_id
+                base_path, config_id
             )).into_response()
         }
     }
@@ -410,6 +414,7 @@ pub async fn telegram_delete(
     user: AuthUser,
     Path(config_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
         return StatusCode::FORBIDDEN.into_response();
@@ -439,7 +444,7 @@ pub async fn telegram_delete(
     .execute(&state.db)
     .await;
 
-    Redirect::to(&format!("{}/pipes?msg=Pipe+removed", state.base_path)).into_response()
+    Redirect::to(&format!("{}/pipes?msg=Pipe+removed", base_path)).into_response()
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────

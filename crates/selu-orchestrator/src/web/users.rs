@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
-use crate::web::prefixed_redirect;
+use crate::web::{BasePath, prefixed_redirect};
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -66,9 +66,10 @@ pub async fn users_index(
     user: AuthUser,
     Query(q): Query<UsersQuery>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&state, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/chat").into_response();
     }
 
     let users = sqlx::query!(
@@ -96,7 +97,7 @@ pub async fn users_index(
         _ => "An unexpected error occurred.".to_string(),
     });
 
-    match (UsersTemplate { active_nav: "users", is_admin: user.is_admin, base_path: state.base_path.clone(), current_user_id: user.user_id, users, error }).render() {
+    match (UsersTemplate { active_nav: "users", is_admin: user.is_admin, base_path, current_user_id: user.user_id, users, error }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             error!("Template render error: {e}");
@@ -108,14 +109,15 @@ pub async fn users_index(
 pub async fn users_create(
     user: AuthUser,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<CreateUserForm>,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&state, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/chat").into_response();
     }
 
     if form.username.trim().is_empty() || form.password.is_empty() {
-        return Redirect::to(&format!("{}/users?error=username_required", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/users?error=username_required", base_path)).into_response();
     }
 
     let display_name = if form.display_name.trim().is_empty() {
@@ -131,13 +133,13 @@ pub async fn users_create(
     let mut salt_bytes = [0u8; 16];
     if sys_rng.fill(&mut salt_bytes).is_err() {
         error!("Failed to generate random salt");
-        return Redirect::to(&format!("{}/users?error=hash_failed", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/users?error=hash_failed", base_path)).into_response();
     }
     let salt = match SaltString::encode_b64(&salt_bytes) {
         Ok(s) => s,
         Err(e) => {
             error!("Failed to encode SaltString: {e}");
-            return Redirect::to(&format!("{}/users?error=hash_failed", state.base_path)).into_response();
+            return Redirect::to(&format!("{}/users?error=hash_failed", base_path)).into_response();
         }
     };
     let argon2 = Argon2::default();
@@ -145,7 +147,7 @@ pub async fn users_create(
         Ok(h) => h.to_string(),
         Err(e) => {
             error!("Argon2 hashing failed: {e}");
-            return Redirect::to(&format!("{}/users?error=hash_failed", state.base_path)).into_response();
+            return Redirect::to(&format!("{}/users?error=hash_failed", base_path)).into_response();
         }
     };
 
@@ -169,13 +171,13 @@ pub async fn users_create(
     .await;
 
     match result {
-        Ok(_) => Redirect::to(&format!("{}/users", state.base_path)).into_response(),
+        Ok(_) => Redirect::to(&format!("{}/users", base_path)).into_response(),
         Err(e) if e.to_string().to_lowercase().contains("unique") => {
-            Redirect::to(&format!("{}/users?error=duplicate", state.base_path)).into_response()
+            Redirect::to(&format!("{}/users?error=duplicate", base_path)).into_response()
         }
         Err(e) => {
             error!("Failed to create user: {e}");
-            Redirect::to(&format!("{}/users?error=create_failed", state.base_path)).into_response()
+            Redirect::to(&format!("{}/users?error=create_failed", base_path)).into_response()
         }
     }
 }
@@ -207,6 +209,7 @@ pub async fn users_toggle_admin(
     user: AuthUser,
     Path(target_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
         return StatusCode::FORBIDDEN.into_response();
@@ -241,7 +244,7 @@ pub async fn users_toggle_admin(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    let bp = &state.base_path;
+    let bp = &base_path;
 
     // Return the updated badge HTML
     if new_val == 1 {
@@ -279,6 +282,7 @@ pub async fn users_set_language(
     user: AuthUser,
     Path(target_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<SetLanguageForm>,
 ) -> Response {
     if !user.is_admin {
@@ -302,7 +306,7 @@ pub async fn users_set_language(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    let bp = &state.base_path;
+    let bp = &base_path;
 
     Html(format!(
         r#"<select name="language"

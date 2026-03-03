@@ -21,6 +21,7 @@ use crate::agents::thread as thread_mgr;
 use crate::llm::tool_loop::LoopEvent;
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
+use crate::web::BasePath;
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -141,18 +142,18 @@ fn render_template(tmpl: ChatTemplate) -> Response {
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 /// GET /chat — chat index (no pipe selected)
-pub async fn chat_index(user: AuthUser, State(state): State<AppState>) -> Response {
+pub async fn chat_index(user: AuthUser, State(state): State<AppState>, BasePath(base_path): BasePath) -> Response {
     let pipes = fetch_pipes(&state.db, &user.user_id).await;
 
     // If the user has exactly one web pipe, redirect directly to it
     if pipes.len() == 1 {
-        return axum::response::Redirect::to(&format!("{}/chat/{}", state.base_path, pipes[0].id)).into_response();
+        return axum::response::Redirect::to(&format!("{}/chat/{}", base_path, pipes[0].id)).into_response();
     }
 
     render_template(ChatTemplate {
         active_nav: "chat",
         is_admin: user.is_admin,
-        base_path: state.base_path.clone(),
+        base_path,
         selected_pipe_id: String::new(),
         selected_pipe: None,
         threads: vec![],
@@ -167,6 +168,7 @@ pub async fn chat_pipe(
     user: AuthUser,
     Path(pipe_id): Path<Uuid>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     let pipe_id_str = pipe_id.to_string();
     let pipes = fetch_pipes(&state.db, &user.user_id).await;
@@ -176,7 +178,7 @@ pub async fn chat_pipe(
     render_template(ChatTemplate {
         active_nav: "chat",
         is_admin: user.is_admin,
-        base_path: state.base_path.clone(),
+        base_path,
         selected_pipe_id: pipe_id_str,
         selected_pipe: selected,
         threads,
@@ -191,6 +193,7 @@ pub async fn chat_thread(
     user: AuthUser,
     Path((pipe_id, thread_id)): Path<(Uuid, Uuid)>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     let pipe_id_str = pipe_id.to_string();
     let thread_id_str = thread_id.to_string();
@@ -202,7 +205,7 @@ pub async fn chat_thread(
     render_template(ChatTemplate {
         active_nav: "chat",
         is_admin: user.is_admin,
-        base_path: state.base_path.clone(),
+        base_path,
         selected_pipe_id: pipe_id_str,
         selected_pipe: selected,
         threads,
@@ -217,6 +220,7 @@ pub async fn chat_new_thread(
     user: AuthUser,
     Path(pipe_id): Path<Uuid>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     let pipe_id_str = pipe_id.to_string();
 
@@ -239,7 +243,7 @@ pub async fn chat_new_thread(
         None,
     ).await {
         Ok(thread) => {
-            let url = format!("{}/chat/{}/t/{}", state.base_path, pipe_id_str, thread.id);
+            let url = format!("{}/chat/{}/t/{}", base_path, pipe_id_str, thread.id);
             Redirect::to(&url).into_response()
         }
         Err(e) => {
@@ -254,6 +258,7 @@ pub async fn chat_send(
     user: AuthUser,
     Path((pipe_id, thread_id)): Path<(Uuid, Uuid)>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<HashMap<String, String>>,
 ) -> Response {
     let text = match form.get("text").map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
@@ -291,7 +296,7 @@ pub async fn chat_send(
         notify,
     ));
 
-    let bp = &state.base_path;
+    let bp = &base_path;
     let html = format!(
         r#"<div class="flex justify-end">
   <div class="max-w-[72%] bg-gradient-to-br from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">
@@ -321,6 +326,7 @@ pub async fn chat_send(
 pub async fn chat_stream(
     Path((_pipe_id, stream_id)): Path<(Uuid, String)>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Sse<impl futures::Stream<Item = Result<axum::response::sse::Event, Infallible>>> {
     let (bridge_tx, bridge_rx) = mpsc::channel::<LoopEvent>(64);
     {
@@ -336,7 +342,7 @@ pub async fn chat_stream(
         }
     }
 
-    let bp = state.base_path.clone();
+    let bp = base_path;
     let sid = stream_id.clone();
     let confirmations = state.pending_confirmations.clone();
     let sse_stream = ReceiverStream::new(bridge_rx).map(move |event| {

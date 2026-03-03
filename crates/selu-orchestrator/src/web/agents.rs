@@ -15,7 +15,7 @@ use crate::agents::{
 };
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
-use crate::web::prefixed_redirect;
+use crate::web::{BasePath, prefixed_redirect};
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -265,9 +265,10 @@ pub async fn agents_index(
     user: AuthUser,
     Query(q): Query<AgentsQuery>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&state, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/chat").into_response();
     }
     // Installed agents from in-memory map + DB metadata
     let agents_map = state.agents.load();
@@ -411,7 +412,7 @@ pub async fn agents_index(
     match (AgentsTemplate {
         active_nav: "agents",
         is_admin: user.is_admin,
-        base_path: state.base_path.clone(),
+        base_path: base_path.clone(),
         agents,
         marketplace_agents,
         providers,
@@ -437,6 +438,7 @@ pub async fn agents_index(
 pub async fn install_agent(
     user: AuthUser,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<InstallForm>,
 ) -> Response {
     if !user.is_admin {
@@ -448,7 +450,7 @@ pub async fn install_agent(
             error!("Invalid entry JSON: {e}");
             return Redirect::to(&format!(
                 "{}/agents?error=Invalid+agent+data.+Please+try+again.",
-                state.base_path
+                base_path
             ))
             .into_response();
         }
@@ -460,7 +462,7 @@ pub async fn install_agent(
             error!("Failed to connect to Docker: {e}");
             return Redirect::to(&format!(
                 "{}/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F",
-                state.base_path
+                base_path
             ))
             .into_response();
         }
@@ -482,9 +484,9 @@ pub async fn install_agent(
                 .values()
                 .any(|m| !m.tools.is_empty());
             if agent_def.install_steps.is_empty() && !has_tools {
-                prefixed_redirect(&state, "/agents").into_response()
+                prefixed_redirect(&base_path, "/agents").into_response()
             } else {
-                Redirect::to(&format!("{}/agents/{}/setup", state.base_path, entry.id))
+                Redirect::to(&format!("{}/agents/{}/setup", base_path, entry.id))
                     .into_response()
             }
         }
@@ -492,7 +494,7 @@ pub async fn install_agent(
             error!("Agent installation failed: {e}");
             let text = format!("Agent installation failed: {e}");
             let msg = urlencoding::encode(&text);
-            Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response()
+            Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response()
         }
     }
 }
@@ -502,9 +504,10 @@ pub async fn setup_wizard(
     user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&state, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/chat").into_response();
     }
     let installed_dir = &state.config.installed_agents_dir;
     let agent_dir = std::path::Path::new(installed_dir).join(&agent_id);
@@ -582,7 +585,7 @@ pub async fn setup_wizard(
     match (AgentSetupTemplate {
         active_nav: "agents",
         is_admin: user.is_admin,
-        base_path: state.base_path.clone(),
+        base_path,
         agent_id,
         agent_name: name,
         steps,
@@ -604,6 +607,7 @@ pub async fn setup_submit(
     user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<SetupSubmitForm>,
 ) -> Response {
     if !user.is_admin {
@@ -618,7 +622,7 @@ pub async fn setup_submit(
             error!("Failed to load agent for setup: {e}");
             let text = format!("Failed to load agent: {e}");
             let msg = urlencoding::encode(&text);
-            return Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+            return Redirect::to(&format!("{}/agents?error={msg}", base_path))
                 .into_response();
         }
     };
@@ -644,7 +648,7 @@ pub async fn setup_submit(
                         urlencoding::encode("Failed to encrypt credential. Please try again.");
                     return Redirect::to(&format!(
                         "{}/agents/{agent_id}/setup?error={msg}",
-                        state.base_path
+                        base_path
                     ))
                     .into_response();
                 }
@@ -666,7 +670,7 @@ pub async fn setup_submit(
                 {
                     error!("Failed to store system credential: {e}");
                     let msg = urlencoding::encode("Failed to store credential. Please try again.");
-                    return Redirect::to(&format!("{}/agents/{agent_id}/setup?error={msg}", state.base_path)).into_response();
+                    return Redirect::to(&format!("{}/agents/{agent_id}/setup?error={msg}", base_path)).into_response();
                 }
             }
         }
@@ -714,7 +718,7 @@ pub async fn setup_submit(
                 let msg = urlencoding::encode("Failed to save tool permissions. Please try again.");
                 return Redirect::to(&format!(
                     "{}/agents/{agent_id}/setup?error={msg}",
-                    state.base_path
+                    base_path
                 ))
                 .into_response();
             }
@@ -728,11 +732,11 @@ pub async fn setup_submit(
         error!("Failed to complete setup: {e}");
         let text = format!("Failed to complete setup: {e}");
         let msg = urlencoding::encode(&text);
-        return Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
     }
 
     let msg = urlencoding::encode("Agent setup completed successfully.");
-    Redirect::to(&format!("{}/agents?success={msg}", state.base_path)).into_response()
+    Redirect::to(&format!("{}/agents?success={msg}", base_path)).into_response()
 }
 
 /// Execute a test step during setup (HTMX endpoint)
@@ -833,6 +837,7 @@ pub async fn agent_detail(
     user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     // Load agent definition
     let agents_map = state.agents.load();
@@ -1029,7 +1034,7 @@ pub async fn agent_detail(
         agent_id,
         agent_name,
         is_admin: user.is_admin,
-        base_path: state.base_path.clone(),
+        base_path,
         capabilities,
         builtin_policies,
         egress_entries,
@@ -1049,6 +1054,7 @@ pub async fn set_agent_model_handler(
     user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<SetAgentModelForm>,
 ) -> Response {
     if !user.is_admin {
@@ -1068,14 +1074,14 @@ pub async fn set_agent_model_handler(
         error!("Failed to set agent model: {e}");
         return Redirect::to(&format!(
             "{}/agents?error=Failed+to+update+model+assignment.+Please+try+again.",
-            state.base_path
+            base_path
         ))
         .into_response();
     }
 
     Redirect::to(&format!(
         "{}/agents?success=Model+updated+successfully.",
-        state.base_path
+        base_path
     ))
     .into_response()
 }
@@ -1135,6 +1141,7 @@ pub async fn reset_tool_policy_handler(
     user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<ResetToolPolicyForm>,
 ) -> Response {
     if let Err(e) = crate::permissions::tool_policy::delete_user_policy(
@@ -1155,7 +1162,7 @@ pub async fn reset_tool_policy_handler(
         StatusCode::OK,
         [(
             "HX-Redirect",
-            format!("{}/agents/{agent_id}", state.base_path),
+            format!("{}/agents/{agent_id}", base_path),
         )],
         "",
     )
@@ -1166,6 +1173,7 @@ pub async fn reset_tool_policy_handler(
 pub async fn update_agent(
     user: AuthUser,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<InstallForm>,
 ) -> Response {
     if !user.is_admin {
@@ -1177,7 +1185,7 @@ pub async fn update_agent(
             error!("Invalid entry JSON: {e}");
             return Redirect::to(&format!(
                 "{}/agents?error=Invalid+agent+data.+Please+try+again.",
-                state.base_path
+                base_path
             ))
             .into_response();
         }
@@ -1189,7 +1197,7 @@ pub async fn update_agent(
             error!("Failed to connect to Docker: {e}");
             return Redirect::to(&format!(
                 "{}/agents?error=Cannot+connect+to+Docker.+Is+Docker+running%3F",
-                state.base_path
+                base_path
             ))
             .into_response();
         }
@@ -1212,11 +1220,11 @@ pub async fn update_agent(
                 .values()
                 .any(|m| !m.tools.is_empty());
             if !agent_def.install_steps.is_empty() || has_tools {
-                Redirect::to(&format!("{}/agents/{}/setup", state.base_path, entry.id))
+                Redirect::to(&format!("{}/agents/{}/setup", base_path, entry.id))
                     .into_response()
             } else {
                 let msg = urlencoding::encode("Agent updated successfully.");
-                Redirect::to(&format!("{}/agents?success={msg}", state.base_path))
+                Redirect::to(&format!("{}/agents?success={msg}", base_path))
                     .into_response()
             }
         }
@@ -1224,7 +1232,7 @@ pub async fn update_agent(
             error!("Agent update failed: {e}");
             let text = format!("Agent update failed: {e}");
             let msg = urlencoding::encode(&text);
-            Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+            Redirect::to(&format!("{}/agents?error={msg}", base_path))
                 .into_response()
         }
     }
@@ -1235,6 +1243,7 @@ pub async fn toggle_auto_update(
     user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<ToggleAutoUpdateForm>,
 ) -> Response {
     if !user.is_admin {
@@ -1254,14 +1263,14 @@ pub async fn toggle_auto_update(
         error!("Failed to toggle auto-update: {e}");
         return Redirect::to(&format!(
             "{}/agents?error=Failed+to+update+setting.+Please+try+again.",
-            state.base_path
+            base_path
         ))
         .into_response();
     }
 
     Redirect::to(&format!(
         "{}/agents?success=Auto-update+setting+saved.",
-        state.base_path
+        base_path
     ))
     .into_response()
 }
@@ -1271,6 +1280,7 @@ pub async fn rate_agent(
     _user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<RateAgentForm>,
 ) -> Response {
     let is_installed = sqlx::query_scalar::<_, i64>(
@@ -1285,12 +1295,12 @@ pub async fn rate_agent(
 
     if !is_installed {
         let msg = urlencoding::encode("This agent is not installed yet.");
-        return Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
     }
 
     if !(1..=5).contains(&form.rating) {
         let msg = urlencoding::encode("Please choose a rating between 1 and 5 stars.");
-        return Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
     }
 
     let instance_id = match crate::persistence::db::get_instance_id(&state.db).await {
@@ -1298,7 +1308,7 @@ pub async fn rate_agent(
         Err(e) => {
             error!("Failed to load instance ID: {e}");
             let msg = urlencoding::encode("Couldn't submit your rating. Please try again.");
-            return Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+            return Redirect::to(&format!("{}/agents?error={msg}", base_path))
                 .into_response();
         }
     };
@@ -1308,7 +1318,7 @@ pub async fn rate_agent(
         None => {
             error!("Invalid marketplace URL: {}", state.config.marketplace_url);
             let msg = urlencoding::encode("Couldn't submit your rating right now.");
-            return Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+            return Redirect::to(&format!("{}/agents?error={msg}", base_path))
                 .into_response();
         }
     };
@@ -1326,7 +1336,7 @@ pub async fn rate_agent(
         Err(e) => {
             error!("Failed to build HTTP client for rating submit: {e}");
             let msg = urlencoding::encode("Couldn't submit your rating right now.");
-            return Redirect::to(&format!("{}/agents?error={msg}", state.base_path))
+            return Redirect::to(&format!("{}/agents?error={msg}", base_path))
                 .into_response();
         }
     };
@@ -1341,17 +1351,17 @@ pub async fn rate_agent(
     match response {
         Ok(resp) if resp.status().is_success() => {
             let msg = urlencoding::encode("Thanks. Your rating was saved.");
-            Redirect::to(&format!("{}/agents?success={msg}", state.base_path)).into_response()
+            Redirect::to(&format!("{}/agents?success={msg}", base_path)).into_response()
         }
         Ok(resp) => {
             error!("Rating submission failed with status {}", resp.status());
             let msg = urlencoding::encode("Couldn't save your rating. Please try again.");
-            Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response()
+            Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response()
         }
         Err(e) => {
             error!("Rating submission request failed: {e}");
             let msg = urlencoding::encode("Couldn't save your rating. Please try again.");
-            Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response()
+            Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response()
         }
     }
 }
@@ -1361,6 +1371,7 @@ pub async fn uninstall_agent(
     user: AuthUser,
     Path(agent_id): Path<String>,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
         return StatusCode::FORBIDDEN.into_response();
@@ -1376,12 +1387,12 @@ pub async fn uninstall_agent(
         error!("Failed to uninstall agent: {e}");
         let text = format!("Failed to uninstall agent: {e}");
         let msg = urlencoding::encode(&text);
-        return Redirect::to(&format!("{}/agents?error={msg}", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/agents?error={msg}", base_path)).into_response();
     }
 
     Redirect::to(&format!(
         "{}/agents?success=Agent+uninstalled+successfully.",
-        state.base_path
+        base_path
     ))
     .into_response()
 }
@@ -1390,6 +1401,7 @@ pub async fn uninstall_agent(
 pub async fn set_default_model(
     user: AuthUser,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<SetDefaultModelForm>,
 ) -> Response {
     if !user.is_admin {
@@ -1403,14 +1415,14 @@ pub async fn set_default_model(
         error!("Failed to set default model: {e}");
         return Redirect::to(&format!(
             "{}/agents?error=Failed+to+update+global+default+model.+Please+try+again.",
-            state.base_path
+            base_path
         ))
         .into_response();
     }
 
     Redirect::to(&format!(
         "{}/agents?success=Global+default+model+updated.",
-        state.base_path
+        base_path
     ))
     .into_response()
 }

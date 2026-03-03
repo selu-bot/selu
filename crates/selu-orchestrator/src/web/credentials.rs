@@ -10,7 +10,7 @@ use tracing::error;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
-use crate::web::prefixed_redirect;
+use crate::web::{BasePath, prefixed_redirect};
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -76,9 +76,9 @@ pub struct SetUserCredForm {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-pub async fn credentials_index(user: AuthUser, Query(q): Query<CredentialsQuery>, State(state): State<AppState>) -> Response {
+pub async fn credentials_index(user: AuthUser, Query(q): Query<CredentialsQuery>, State(state): State<AppState>, BasePath(base_path): BasePath) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&state, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/chat").into_response();
     }
     let sys_creds = sqlx::query!(
         "SELECT capability_id, credential_name, created_at
@@ -125,7 +125,7 @@ pub async fn credentials_index(user: AuthUser, Query(q): Query<CredentialsQuery>
         })
         .collect();
 
-    match (CredentialsTemplate { active_nav: "credentials", is_admin: user.is_admin, base_path: state.base_path.clone(), sys_creds, user_creds, users, error: q.error, success: q.success })
+    match (CredentialsTemplate { active_nav: "credentials", is_admin: user.is_admin, base_path, sys_creds, user_creds, users, error: q.error, success: q.success })
         .render()
     {
         Ok(html) => Html(html).into_response(),
@@ -139,6 +139,7 @@ pub async fn credentials_index(user: AuthUser, Query(q): Query<CredentialsQuery>
 pub async fn credentials_set_system(
     user: AuthUser,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<SetSystemCredForm>,
 ) -> Response {
     if !user.is_admin {
@@ -148,17 +149,17 @@ pub async fn credentials_set_system(
         || form.credential_name.trim().is_empty()
         || form.value.is_empty()
     {
-        return Redirect::to(&format!("{}/credentials?error=All+fields+are+required.", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/credentials?error=All+fields+are+required.", base_path)).into_response();
     }
     match state
         .credentials
         .set_system(&form.capability_id, &form.credential_name, &form.value)
         .await
     {
-        Ok(_) => Redirect::to(&format!("{}/credentials?success=System+credential+saved.", state.base_path)).into_response(),
+        Ok(_) => Redirect::to(&format!("{}/credentials?success=System+credential+saved.", base_path)).into_response(),
         Err(e) => {
             error!("Failed to set system credential: {e}");
-            Redirect::to(&format!("{}/credentials?error=Failed+to+save+credential.+Please+try+again.", state.base_path)).into_response()
+            Redirect::to(&format!("{}/credentials?error=Failed+to+save+credential.+Please+try+again.", base_path)).into_response()
         }
     }
 }
@@ -180,6 +181,7 @@ pub async fn credentials_delete_system(
 pub async fn credentials_set_user(
     user: AuthUser,
     State(state): State<AppState>,
+    BasePath(base_path): BasePath,
     Form(form): Form<SetUserCredForm>,
 ) -> Response {
     if !user.is_admin {
@@ -190,17 +192,17 @@ pub async fn credentials_set_user(
         || form.credential_name.trim().is_empty()
         || form.value.is_empty()
     {
-        return Redirect::to(&format!("{}/credentials?error=All+fields+are+required.", state.base_path)).into_response();
+        return Redirect::to(&format!("{}/credentials?error=All+fields+are+required.", base_path)).into_response();
     }
     match state
         .credentials
         .set_user(&form.user_id, &form.capability_id, &form.credential_name, &form.value)
         .await
     {
-        Ok(_) => Redirect::to(&format!("{}/credentials?success=User+credential+saved.", state.base_path)).into_response(),
+        Ok(_) => Redirect::to(&format!("{}/credentials?success=User+credential+saved.", base_path)).into_response(),
         Err(e) => {
             error!("Failed to set user credential: {e}");
-            Redirect::to(&format!("{}/credentials?error=Failed+to+save+credential.+Please+try+again.", state.base_path)).into_response()
+            Redirect::to(&format!("{}/credentials?error=Failed+to+save+credential.+Please+try+again.", base_path)).into_response()
         }
     }
 }
