@@ -31,6 +31,12 @@ message InvokeRequest {
 
   // Capability ID — for logging / telemetry inside the container
   string capability_id = 5;
+
+  // Thread ID — identifies the conversation thread within a session.
+  // Capabilities that manage stateful resources (e.g. browser tabs) use this
+  // to isolate state per thread, so multiple threads sharing one container
+  // don't interfere with each other.
+  string thread_id = 6;
 }
 
 message InvokeResponse {

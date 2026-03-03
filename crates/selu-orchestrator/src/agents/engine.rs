@@ -217,6 +217,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     let mut cap_manifests = agent.capability_manifests.clone();
     cap_manifests.extend(inlined_manifests);
     let sid = session_id.clone();
+    let tid = thread_id.clone().unwrap_or_default();
     let uid = user_id.clone();
     let src_agent_id = agent.id.clone();
     let cap_owner_map = cap_owner;
@@ -244,6 +245,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             let bus = event_bus.clone();
             let manifests = cap_manifests.clone();
             let session = sid.clone();
+            let thread = tid.clone();
             let user = uid.clone();
             let agent_id_copy = src_agent_id.clone();
             let owners = cap_owner_map.clone();
@@ -351,10 +353,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         let name = name.clone();
                         let args = args.clone();
                         let session = session.clone();
+                        let thread = thread.clone();
                         let user = user.clone();
                         let store = store.clone();
                         Box::pin(async move {
-                            engine.invoke(&manifests, &name, args, &session, &user, &store).await
+                            engine.invoke(&manifests, &name, args, &session, &thread, &user, &store).await
                         })
                     },
                 ).await;

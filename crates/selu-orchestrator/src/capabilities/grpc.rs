@@ -59,6 +59,8 @@ impl CapabilityGrpcClient {
     /// `credentials`  — key/value map of declared credentials, injected as config_json  
     /// `session_id`   — forwarded to the container so Environment capabilities can  
     ///                  locate their workspace volume  
+    /// `thread_id`    — conversation thread within the session; capabilities use this  
+    ///                  to isolate per-thread state (e.g. separate browser tabs)  
     ///
     /// Returns the JSON result string to be fed back to the LLM.
     pub async fn invoke(
@@ -67,6 +69,7 @@ impl CapabilityGrpcClient {
         args: Value,
         credentials: Value,
         session_id: &str,
+        thread_id: &str,
     ) -> Result<String> {
         let mut client = CapabilityClient::new(self.channel.clone());
 
@@ -76,6 +79,7 @@ impl CapabilityGrpcClient {
             config_json: serde_json::to_vec(&credentials)?.into(),
             session_id: session_id.to_string(),
             capability_id: self.capability_id.clone(),
+            thread_id: thread_id.to_string(),
         };
 
         debug!(
@@ -129,6 +133,7 @@ impl CapabilityGrpcClient {
         args: Value,
         credentials: Value,
         session_id: &str,
+        thread_id: &str,
     ) -> Result<impl futures::Stream<Item = Result<String>>> {
         let mut client = CapabilityClient::new(self.channel.clone());
 
@@ -138,6 +143,7 @@ impl CapabilityGrpcClient {
             config_json: serde_json::to_vec(&credentials)?.into(),
             session_id: session_id.to_string(),
             capability_id: self.capability_id.clone(),
+            thread_id: thread_id.to_string(),
         };
 
         debug!(

@@ -52,6 +52,8 @@ impl CapabilityEngine {
     /// `tool_name`    — e.g. `"weather__get_forecast"`  
     /// `args`         — JSON args from the LLM  
     /// `session_id`   — active session (used for workspace volumes + container naming)  
+    /// `thread_id`    — conversation thread within the session; forwarded to the  
+    ///                  container so capabilities can isolate per-thread state  
     /// `user_id`      — the acting user (for credential lookup)  
     /// `cred_store`   — credential store for resolving declared credentials  
     ///
@@ -62,6 +64,7 @@ impl CapabilityEngine {
         tool_name: &str,
         args: Value,
         session_id: &str,
+        thread_id: &str,
         user_id: &str,
         cred_store: &CredentialStore,
     ) -> Result<String> {
@@ -77,7 +80,7 @@ impl CapabilityEngine {
             .map_err(|e: PermissionError| anyhow!("{}", e))?;
 
         let client = self.get_or_start(manifests, &cap_id, session_id).await?;
-        client.invoke(&actual_tool, args, credentials, session_id).await
+        client.invoke(&actual_tool, args, credentials, session_id, thread_id).await
     }
 
     /// Shut down all containers that belong to a specific session.
