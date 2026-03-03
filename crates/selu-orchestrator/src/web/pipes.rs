@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
-use crate::web::{BasePath, prefixed_redirect};
+use crate::web::{BasePath, ExternalOrigin, prefixed_redirect};
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -67,6 +67,9 @@ struct PipesTemplate {
     flash: Option<PipeCreatedFlash>,
     msg: Option<String>,
     error: Option<String>,
+    /// Whether the detected external origin uses HTTPS.
+    /// Telegram requires HTTPS for webhook callbacks.
+    https_available: bool,
 }
 
 #[derive(Template)]
@@ -168,10 +171,14 @@ pub async fn pipes_index(
     Query(q): Query<PipesQuery>,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
+    ExternalOrigin(external_origin): ExternalOrigin,
 ) -> Response {
     if !user.is_admin {
         return prefixed_redirect(&base_path, "/chat").into_response();
     }
+
+    let https_available = external_origin.starts_with("https://");
+
     // Build lookup maps: user_id -> display_name, pipe_id -> user_id
     let users = user_display_map(&state.db).await;
     let pipe_owners = pipe_owner_map(&state.db).await;
@@ -271,6 +278,7 @@ pub async fn pipes_index(
         flash,
         msg: q.msg,
         error: q.error,
+        https_available,
     }).render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {

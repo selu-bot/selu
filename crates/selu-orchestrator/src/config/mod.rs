@@ -38,11 +38,19 @@ fn default_max_chain_depth() -> i32 {
 
 impl AppConfig {
     /// The base URL external services should use to reach this Selu instance.
+    /// Includes the base path prefix when configured (e.g. `https://example.com/selu`).
     /// Defaults to `http://localhost:{port}` when `external_url` is not set.
     pub fn external_base_url(&self) -> String {
-        self.external_url
+        let origin = self
+            .external_url
             .clone()
-            .unwrap_or_else(|| format!("http://localhost:{}", self.server.port))
+            .unwrap_or_else(|| format!("http://localhost:{}", self.server.port));
+        let bp = self.base_path();
+        if bp.is_empty() {
+            origin
+        } else {
+            format!("{}{}", origin.trim_end_matches('/'), bp)
+        }
     }
 
     /// The URL path prefix for reverse-proxy sub-path deployments.

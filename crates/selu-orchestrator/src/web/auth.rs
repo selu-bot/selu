@@ -17,7 +17,7 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::state::AppState;
-use crate::web::{BasePath, prefixed, prefixed_redirect};
+use crate::web::{BasePath, ExternalOrigin, prefixed, prefixed_redirect};
 
 /// Session lifetime: 7 days
 const SESSION_TTL_DAYS: i64 = 7;
@@ -133,6 +133,7 @@ pub async fn login_page(State(state): State<AppState>, BasePath(base_path): Base
 pub async fn login_submit(
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
+    ExternalOrigin(origin): ExternalOrigin,
     jar: CookieJar,
     Form(form): Form<LoginForm>,
 ) -> Response {
@@ -189,9 +190,11 @@ pub async fn login_submit(
 
     // Set session cookie
     let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
+    let secure = origin.starts_with("https://");
     let cookie = Cookie::build((SESSION_COOKIE, session_id))
         .path(cookie_path)
         .http_only(true)
+        .secure(secure)
         .same_site(axum_extra::extract::cookie::SameSite::Lax)
         .max_age(time::Duration::days(SESSION_TTL_DAYS))
         .build();
@@ -199,7 +202,7 @@ pub async fn login_submit(
     (jar.add(cookie), prefixed_redirect(&base_path, "/chat")).into_response()
 }
 
-pub async fn logout(State(state): State<AppState>, BasePath(base_path): BasePath, jar: CookieJar) -> Response {
+pub async fn logout(State(state): State<AppState>, BasePath(base_path): BasePath, ExternalOrigin(origin): ExternalOrigin, jar: CookieJar) -> Response {
     // Delete session from DB
     if let Some(cookie) = jar.get(SESSION_COOKIE) {
         let session_id = cookie.value().to_string();
@@ -211,8 +214,10 @@ pub async fn logout(State(state): State<AppState>, BasePath(base_path): BasePath
     // Remove cookie
     let bp = &base_path;
     let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
+    let secure = origin.starts_with("https://");
     let cookie = Cookie::build((SESSION_COOKIE, ""))
         .path(cookie_path)
+        .secure(secure)
         .max_age(time::Duration::ZERO)
         .build();
 
@@ -277,6 +282,7 @@ pub async fn setup_page(State(state): State<AppState>, BasePath(base_path): Base
 pub async fn setup_submit(
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
+    ExternalOrigin(origin): ExternalOrigin,
     jar: CookieJar,
     Form(form): Form<SetupForm>,
 ) -> Response {
@@ -387,9 +393,11 @@ pub async fn setup_submit(
 
     let bp = &base_path;
     let cookie_path = if bp.is_empty() { "/".to_string() } else { format!("{}/", bp) };
+    let secure = origin.starts_with("https://");
     let cookie = Cookie::build((SESSION_COOKIE, session_id))
         .path(cookie_path)
         .http_only(true)
+        .secure(secure)
         .same_site(axum_extra::extract::cookie::SameSite::Lax)
         .max_age(time::Duration::days(SESSION_TTL_DAYS))
         .build();

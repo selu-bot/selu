@@ -14,8 +14,8 @@ use crate::state::AppState;
 use axum::{
     Router,
     extract::{FromRequestParts, State},
-    http::{request::Parts, HeaderMap},
-    middleware::{self, Next},
+    http::{request::Parts, HeaderMap, Uri},
+    middleware::Next,
     response::{IntoResponse, Redirect},
     routing::{delete, get, post},
 };
@@ -30,8 +30,31 @@ use axum::{
 #[derive(Debug, Clone)]
 pub struct BasePath(pub String);
 
-/// Middleware that resolves the base path from the `X-Forwarded-Prefix` header
-/// (set by the reverse proxy) and falls back to the static `state.base_path`.
+/// The full external origin URL (scheme + host + base_path) as seen by the
+/// user's browser.
+///
+/// Resolution order:
+///   1. `SELU__EXTERNAL_URL` config (explicit override, highest priority)
+///   2. Auto-detected from request headers: `X-Forwarded-Proto` + `Host`
+///      (or `X-Forwarded-Host`) + base_path
+///   3. Fallback: `http://localhost:{port}` (from config)
+///
+/// Handlers extract it as `ExternalOrigin(origin): ExternalOrigin`.
+#[derive(Debug, Clone)]
+pub struct ExternalOrigin(pub String);
+
+/// Middleware that resolves the base path and strips it from the request URI
+/// so Axum's router matches the bare paths (e.g. `/chat`, `/login`).
+///
+/// When a reverse proxy forwards `/selu/chat` and sets
+/// `X-Forwarded-Prefix: /selu`, this middleware:
+///   1. Sets `BasePath("/selu")` in request extensions (for templates/links)
+///   2. Rewrites the URI from `/selu/chat` to `/chat` (for route matching)
+///
+/// This means nginx does NOT need `rewrite` — just a plain `proxy_pass`.
+///
+/// Also resolves the full external origin URL for features that need to
+/// register webhook callbacks (Telegram, etc.).
 pub async fn resolve_base_path(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -44,7 +67,64 @@ pub async fn resolve_base_path(
         .map(|v| v.trim_end_matches('/').to_string())
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| state.base_path.clone());
+
+    // Strip the base path prefix from the request URI so the router matches
+    // bare paths like `/chat` even when the browser requested `/selu/chat`.
+    if !bp.is_empty() {
+        let uri = req.uri().clone();
+        let path = uri.path();
+        if let Some(stripped) = path.strip_prefix(&bp) {
+            // Ensure the stripped path starts with `/`
+            let new_path = if stripped.is_empty() || !stripped.starts_with('/') {
+                format!("/{}", stripped)
+            } else {
+                stripped.to_string()
+            };
+            // Rebuild the URI with the stripped path, preserving query string
+            let new_uri = if let Some(q) = uri.query() {
+                format!("{}?{}", new_path, q)
+            } else {
+                new_path
+            };
+            if let Ok(parsed) = new_uri.parse::<Uri>() {
+                *req.uri_mut() = parsed;
+            }
+        }
+    }
+
+    // Resolve external origin URL.
+    // Priority: SELU__EXTERNAL_URL config > auto-detect from headers > fallback
+    let origin = if let Some(ref configured) = state.config.external_url {
+        configured.trim_end_matches('/').to_string()
+    } else {
+        // Auto-detect from reverse-proxy headers
+        let proto = headers
+            .get("x-forwarded-proto")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("http");
+        let host = headers
+            .get("x-forwarded-host")
+            .or_else(|| headers.get("host"))
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        if host.is_empty() {
+            // No host info at all — use the static fallback
+            format!("http://localhost:{}", state.config.server.port)
+        } else {
+            format!("{}://{}", proto, host)
+        }
+    };
+
+    // Append the base path so the full URL works behind a reverse proxy
+    let full_origin = if bp.is_empty() {
+        origin
+    } else {
+        format!("{}{}", origin, bp)
+    };
+
     req.extensions_mut().insert(BasePath(bp));
+    req.extensions_mut().insert(ExternalOrigin(full_origin));
     next.run(req).await
 }
 
@@ -60,6 +140,21 @@ impl FromRequestParts<AppState> for BasePath {
             .get::<BasePath>()
             .cloned()
             .unwrap_or(BasePath(String::new())))
+    }
+}
+
+impl FromRequestParts<AppState> for ExternalOrigin {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(parts
+            .extensions
+            .get::<ExternalOrigin>()
+            .cloned()
+            .unwrap_or(ExternalOrigin(String::new())))
     }
 }
 
@@ -247,7 +342,5 @@ pub fn router(state: AppState) -> Router<AppState> {
             get(personality::personality_edit_form),
         )
         .route("/personality/{id}/row", get(personality::personality_row))
-        // Apply base path resolution middleware to ALL routes
-        .layer(middleware::from_fn_with_state(state.clone(), resolve_base_path))
         .with_state(state)
 }

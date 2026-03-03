@@ -251,9 +251,15 @@ async fn register_adapter(state: &AppState, cfg: &TgConfig, base_url: &str) {
 /// Register a single adapter by config ID.
 /// Called after creating a new telegram_configs row so the adapter
 /// is ready immediately without restart.
-pub async fn start_one(state: AppState, config_id: &str) -> Result<()> {
+///
+/// `external_origin` — if provided, overrides `config.external_base_url()`
+/// for the webhook URL.  The setup handler passes the auto-detected origin
+/// from the user's browser request (e.g. `https://selu.example.com/app`).
+pub async fn start_one(state: AppState, config_id: &str, external_origin: Option<&str>) -> Result<()> {
     let cfg = load_config_by_id(&state, config_id).await?;
-    let base_url = state.config.external_base_url();
+    let base_url = external_origin
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| state.config.external_base_url());
     register_adapter(&state, &cfg, &base_url).await;
     Ok(())
 }

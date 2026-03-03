@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
-use crate::web::{BasePath, prefixed_redirect};
+use crate::web::{BasePath, ExternalOrigin, prefixed_redirect};
 
 // ── View structs ──────────────────────────────────────────────────────────────
 
@@ -175,10 +175,20 @@ pub async fn telegram_setup_page(
     Query(q): Query<FlashQuery>,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
+    ExternalOrigin(external_origin): ExternalOrigin,
 ) -> Response {
     if !user.is_admin {
         return prefixed_redirect(&base_path, "/chat").into_response();
     }
+
+    // Telegram requires HTTPS for webhooks
+    if !external_origin.starts_with("https://") {
+        return Redirect::to(&format!(
+            "{}/pipes?error=Telegram+requires+HTTPS.+Access+Selu+via+HTTPS+or+set+SELU__EXTERNAL_URL+to+an+https://+address.",
+            base_path
+        )).into_response();
+    }
+
     let users = load_users(&state.db).await;
 
     match (TelegramSetupTemplate {
@@ -201,10 +211,19 @@ pub async fn telegram_setup_submit(
     user: AuthUser,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
+    ExternalOrigin(external_origin): ExternalOrigin,
     Form(form): Form<TelegramSetupForm>,
 ) -> Response {
     if !user.is_admin {
         return StatusCode::FORBIDDEN.into_response();
+    }
+
+    // Telegram requires HTTPS for webhooks
+    if !external_origin.starts_with("https://") {
+        return Redirect::to(&format!(
+            "{}/pipes?error=Telegram+requires+HTTPS.+Access+Selu+via+HTTPS+or+set+SELU__EXTERNAL_URL+to+an+https://+address.",
+            base_path
+        )).into_response();
     }
 
     let bot_token = form.bot_token.trim().to_string();
@@ -295,7 +314,7 @@ pub async fn telegram_setup_submit(
 
     // Start the adapter immediately
     let bp = base_path;
-    if let Err(e) = crate::telegram::adapter::start_one(state, &tg_config_id).await {
+    if let Err(e) = crate::telegram::adapter::start_one(state, &tg_config_id, Some(&external_origin)).await {
         error!("Failed to start Telegram adapter: {e}");
     }
 

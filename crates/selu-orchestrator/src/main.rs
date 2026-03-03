@@ -217,6 +217,10 @@ async fn main() -> Result<()> {
         .merge(pipes::inbound::router())
         .merge(bluebubbles::adapter::router())
         .merge(telegram::adapter::router())
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            web::resolve_base_path,
+        ))
         .with_state(state);
 
     let addr: std::net::SocketAddr = format!("{}:{}", cfg.server.host, cfg.server.port).parse()?;
