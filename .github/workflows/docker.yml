@@ -49,7 +49,8 @@ jobs:
 
   # ── Verify sqlx offline cache is up-to-date ────────────────────────────
   sqlx-check:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+#    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
