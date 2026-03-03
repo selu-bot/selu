@@ -18,7 +18,8 @@ use selu_core::types::Role;
 
 use crate::agents::loader::{AgentDefinition, RoutingMode};
 use crate::agents::{
-    context, delegation, router as agent_router, session as session_mgr, thread as thread_mgr,
+    context, delegation, router as agent_router, session as session_mgr, storage,
+    thread as thread_mgr,
 };
 use crate::capabilities::build_tool_specs;
 use crate::capabilities::manifest::CapabilityManifest;
@@ -27,7 +28,8 @@ use crate::llm::registry::load_provider;
 use crate::llm::tool_loop::{LoopEvent, LoopSender, ToolDispatchResult, run_loop};
 use crate::permissions::approval_queue;
 use crate::permissions::tool_policy::{
-    self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, ToolPolicy,
+    self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_STORE_DELETE,
+    BUILTIN_STORE_GET, BUILTIN_STORE_LIST, BUILTIN_STORE_SET, ToolPolicy,
 };
 use crate::state::AppState;
 
@@ -222,6 +224,10 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     let mut tool_specs = build_tool_specs(&agent.capability_manifests);
     tool_specs.extend(build_tool_specs(&inlined_manifests));
     tool_specs.push(crate::events::emit_event_tool_spec());
+    tool_specs.push(storage::store_get_tool_spec());
+    tool_specs.push(storage::store_set_tool_spec());
+    tool_specs.push(storage::store_delete_tool_spec());
+    tool_specs.push(storage::store_list_tool_spec());
 
     // Only add delegation tool if there are agents that still need delegation
     if !delegated_agents.is_empty() {
@@ -307,6 +313,59 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                                     chain_depth,
                                 )
                                 .await
+                            })
+                        },
+                    )
+                    .await;
+                    return result;
+                }
+
+                // ── Built-in tools: persistent agent storage ─────────────
+                if let Some(builtin_store_name) = match name.as_str() {
+                    "store_get" => Some(BUILTIN_STORE_GET),
+                    "store_set" => Some(BUILTIN_STORE_SET),
+                    "store_delete" => Some(BUILTIN_STORE_DELETE),
+                    "store_list" => Some(BUILTIN_STORE_LIST),
+                    _ => None,
+                } {
+                    let result = check_policy_and_dispatch(
+                        &state,
+                        &user,
+                        BUILTIN_CAPABILITY_ID,
+                        builtin_store_name,
+                        &name,
+                        &args,
+                        &channel,
+                        &session,
+                        &pipe,
+                        &agent_id_copy,
+                        approved,
+                        || {
+                            let db = state.db.clone();
+                            let agent_id = agent_id_copy.clone();
+                            let user = user.clone();
+                            let args = args.clone();
+                            let tool = name.clone();
+                            Box::pin(async move {
+                                match tool.as_str() {
+                                    "store_get" => {
+                                        storage::dispatch_store_get(&db, &agent_id, &user, &args)
+                                            .await
+                                    }
+                                    "store_set" => {
+                                        storage::dispatch_store_set(&db, &agent_id, &user, &args)
+                                            .await
+                                    }
+                                    "store_delete" => {
+                                        storage::dispatch_store_delete(&db, &agent_id, &user, &args)
+                                            .await
+                                    }
+                                    "store_list" => {
+                                        storage::dispatch_store_list(&db, &agent_id, &user, &args)
+                                            .await
+                                    }
+                                    _ => unreachable!(),
+                                }
                             })
                         },
                     )

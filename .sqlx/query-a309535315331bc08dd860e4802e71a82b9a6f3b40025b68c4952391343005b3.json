@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM agent_storage WHERE agent_id = ? AND user_id = ? AND key = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "a309535315331bc08dd860e4802e71a82b9a6f3b40025b68c4952391343005b3"
+}

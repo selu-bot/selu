@@ -8,4 +8,5 @@ pub mod model;
 pub mod personality;
 pub mod router;
 pub mod session;
+pub mod storage;
 pub mod thread;

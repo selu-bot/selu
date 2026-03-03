@@ -102,3 +102,81 @@ entries:
             description: >
               API key for SerpAPI (https://serpapi.com). Enables reliable
               web search. Optional — falls back to browser search if absent.
+
+  - id: 2026-03-03-agent-persistent-storage
+    date: "2026-03-03"
+    pr:
+    area: agents
+    type: added
+    audience: both
+    summary: "Agents can now persistently store key-value data via built-in store_* tools"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0018_agent_storage.sql
+      - crates/selu-orchestrator/src/agents/storage.rs
+      - crates/selu-orchestrator/src/agents/mod.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/bundled.rs
+      - crates/selu-orchestrator/src/agents/marketplace.rs
+      - crates/selu-orchestrator/src/permissions/tool_policy.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - developer-guide/built-in-tools
+      - developer-guide/agent-format/agent-yaml
+      - user-guide/agents
+    details: |
+      Four new built-in tools are now available to all agents:
+
+      - store_get(key) — retrieve a stored value by key
+      - store_set(key, value) — persistently store a key-value pair
+      - store_delete(key) — delete a stored key
+      - store_list() — list all stored key-value pairs
+
+      Storage is scoped per agent + per user — each user's agent state
+      is fully isolated. Data survives container restarts, session resets,
+      and orchestrator reboots (stored in SQLite).
+
+      These tools follow the same pattern as emit_event and
+      delegate_to_agent: they are handled by the orchestrator, not by
+      capability containers, and are subject to tool policy (default: Allow).
+
+      The agent detail page now shows these tools in the built-in tools
+      policy section with both English and German translations.
+
+      Agent developers can instruct their agents to use store_* tools
+      in their agent.md or capability prompt.md for maintaining state
+      like sync checkpoints, user preferences, or bookmarks.
+
+      On agent uninstall, all stored data for that agent is cleaned up.
+
+  - id: 2026-03-03-egress-proxy-wildcard-hosts
+    date: "2026-03-03"
+    pr:
+    area: capabilities
+    type: added
+    audience: developers
+    summary: "Egress proxy allowlists now support wildcard suffix matching (*.domain.com)"
+    affected_files:
+      - crates/selu-orchestrator/src/capabilities/egress_proxy.rs
+    docs_sections:
+      - developer-guide/capabilities/container-guidelines
+      - reference/manifest-yaml-schema
+    details: |
+      The egress proxy's allowlist matching now supports wildcard entries
+      prefixed with "*." to match any subdomain.
+
+      Examples:
+        - "*.icloud.com:443" matches p42-caldav.icloud.com:443
+        - "*.example.com" matches sub.example.com on any port
+        - "*.example.com" does NOT match example.com itself (only subdomains)
+
+      This is useful for services like iCloud CalDAV that redirect to
+      numbered subdomains (p01-caldav.icloud.com, p42-caldav.icloud.com).
+
+      Manifest.yaml example:
+        network:
+          mode: allowlist
+          hosts:
+            - "api.example.com:443"
+            - "*.cdn.example.com:443"

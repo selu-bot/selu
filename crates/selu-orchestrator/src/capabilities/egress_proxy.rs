@@ -49,7 +49,17 @@ impl ContainerEgressPolicy {
             NetworkMode::Allowlist => {
                 let target_with_port = format!("{}:{}", host, port);
                 self.allowed_hosts.iter().any(|entry| {
-                    if entry.contains(':') {
+                    // Wildcard suffix matching: "*.example.com" or "*.example.com:443"
+                    if let Some(pattern) = entry.strip_prefix("*.") {
+                        if pattern.contains(':') {
+                            // "*.example.com:443" — must match suffix and port
+                            host.ends_with(&format!(".{}", pattern.split(':').next().unwrap_or("")))
+                                && entry.ends_with(&format!(":{}", port))
+                        } else {
+                            // "*.example.com" — suffix match, any port
+                            host.ends_with(&format!(".{}", pattern))
+                        }
+                    } else if entry.contains(':') {
                         // Entry specifies a port — must match exactly
                         entry == &target_with_port
                     } else {
@@ -621,6 +631,33 @@ mod tests {
         assert!(p.allows("example.com", 443));
         assert!(p.allows("example.com", 80));
         assert!(!p.allows("other.com", 443));
+    }
+
+    #[test]
+    fn test_wildcard_suffix_with_port() {
+        let p = policy(NetworkMode::Allowlist, &["*.icloud.com:443"]);
+        assert!(p.allows("p42-caldav.icloud.com", 443));
+        assert!(p.allows("caldav.icloud.com", 443));
+        assert!(!p.allows("p42-caldav.icloud.com", 80)); // wrong port
+        assert!(!p.allows("evil.com", 443)); // wrong domain
+    }
+
+    #[test]
+    fn test_wildcard_suffix_without_port() {
+        let p = policy(NetworkMode::Allowlist, &["*.icloud.com"]);
+        assert!(p.allows("p42-caldav.icloud.com", 443));
+        assert!(p.allows("p42-caldav.icloud.com", 80));
+        assert!(p.allows("anything.icloud.com", 993));
+        assert!(!p.allows("icloud.com", 443)); // exact match, not a subdomain
+        assert!(!p.allows("evil.com", 443));
+    }
+
+    #[test]
+    fn test_wildcard_does_not_match_bare_domain() {
+        // "*.example.com" should NOT match "example.com" itself
+        let p = policy(NetworkMode::Allowlist, &["*.example.com"]);
+        assert!(!p.allows("example.com", 443));
+        assert!(p.allows("sub.example.com", 443));
     }
 
     #[test]

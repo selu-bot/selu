@@ -399,6 +399,22 @@ pub async fn has_all_policies(
         BUILTIN_CAPABILITY_ID.to_string(),
         BUILTIN_DELEGATE.to_string(),
     ));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_STORE_GET.to_string(),
+    ));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_STORE_SET.to_string(),
+    ));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_STORE_DELETE.to_string(),
+    ));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_STORE_LIST.to_string(),
+    ));
 
     if required.is_empty() {
         return Ok(true);
@@ -415,7 +431,7 @@ pub async fn has_all_policies(
 
 // ── Built-in tool identifiers ─────────────────────────────────────────────────
 
-/// Virtual capability ID used for built-in tools (emit_event, delegate_to_agent).
+/// Virtual capability ID used for built-in tools (emit_event, delegate_to_agent, store_*).
 pub const BUILTIN_CAPABILITY_ID: &str = "__builtin__";
 
 /// Tool name for the emit_event built-in.
@@ -423,3 +439,15 @@ pub const BUILTIN_EMIT_EVENT: &str = "emit_event";
 
 /// Tool name for the delegate_to_agent built-in.
 pub const BUILTIN_DELEGATE: &str = "delegate_to_agent";
+
+/// Tool name for the store_get built-in (persistent agent storage).
+pub const BUILTIN_STORE_GET: &str = "store_get";
+
+/// Tool name for the store_set built-in (persistent agent storage).
+pub const BUILTIN_STORE_SET: &str = "store_set";
+
+/// Tool name for the store_delete built-in (persistent agent storage).
+pub const BUILTIN_STORE_DELETE: &str = "store_delete";
+
+/// Tool name for the store_list built-in (persistent agent storage).
+pub const BUILTIN_STORE_LIST: &str = "store_list";

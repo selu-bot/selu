@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT value FROM agent_storage WHERE agent_id = ? AND user_id = ? AND key = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "value",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "755fce3bbe55acb7299835c987e2b3f0fae5cfa7d068a5df3acc633f8f7d725b"
+}

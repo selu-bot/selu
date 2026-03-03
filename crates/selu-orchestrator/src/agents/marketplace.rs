@@ -608,6 +608,11 @@ pub async fn uninstall_agent(
             .context("Failed to delete egress log entries")?;
     }
 
+    // Remove persistent agent storage for all users
+    crate::agents::storage::delete_all_for_agent(db, agent_id)
+        .await
+        .context("Failed to delete agent storage")?;
+
     // Remove agent DB row
     sqlx::query("DELETE FROM agents WHERE id = ?")
         .bind(agent_id)

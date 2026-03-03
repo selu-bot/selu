@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO agent_storage (id, agent_id, user_id, key, value)\n         VALUES (?, ?, ?, ?, ?)\n         ON CONFLICT(agent_id, user_id, key)\n         DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "39e998b670ddd293056821ef26ae3b13a2f095d9958f7a505aa6c7a6538ea177"
+}
