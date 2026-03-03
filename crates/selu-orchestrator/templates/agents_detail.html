@@ -25,6 +25,14 @@
       </div>
     </div>
 
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
+    {% endif %}
+
+    {% if let Some(msg) = success %}
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{{ msg }}</div>
+    {% endif %}
+
     <!-- Capabilities (infrastructure info) -->
     {% for cap in capabilities %}
     <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
@@ -60,6 +68,76 @@
             <span><span data-i18n="agents.detail.fs">FS</span>: {{ cap.filesystem }}</span>
           </div>
         </div>
+
+        {# ── Secrets declared by this capability ─────────────────────── #}
+        {% if !cap.credentials.is_empty() %}
+        <div>
+          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.secrets">Secrets</p>
+          <div class="space-y-2">
+            {% for cred in cap.credentials %}
+            <div class="bg-surface-alt/30 rounded-xl p-3 space-y-2">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium text-txt-heading font-mono">{{ cred.name }}</span>
+                  {% if cred.required %}
+                  <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20" data-i18n="agents.detail.required">Required</span>
+                  {% else %}
+                  <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted border border-edge" data-i18n="agents.detail.optional">Optional</span>
+                  {% endif %}
+                  {% if cred.scope == "system" %}
+                  <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20" data-i18n="agents.detail.shared">Shared</span>
+                  {% else %}
+                  <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20" data-i18n="agents.detail.personal">Personal</span>
+                  {% endif %}
+                </div>
+                <div class="flex items-center gap-1.5">
+                  {% if cred.is_set %}
+                  <span class="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    <span data-i18n="agents.detail.secret_set">Set</span>
+                  </span>
+                  {% if let Some(at) = cred.set_at %}
+                  <span class="text-[10px] text-txt-muted opacity-70">{{ at }}</span>
+                  {% endif %}
+                  {% else %}
+                  <span class="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+                    <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+                    <span data-i18n="agents.detail.secret_missing">Missing</span>
+                  </span>
+                  {% endif %}
+                </div>
+              </div>
+              {% if !cred.description.is_empty() %}
+              <p class="text-xs text-txt-muted leading-relaxed">{{ cred.description }}</p>
+              {% endif %}
+              {% if is_admin %}
+              <form method="post" action="{{ base_path }}/agents/{{ agent_id }}/credential" class="flex items-end gap-2">
+                <input type="hidden" name="capability_id" value="{{ cred.capability_id }}" />
+                <input type="hidden" name="credential_name" value="{{ cred.name }}" />
+                <input type="hidden" name="scope" value="{{ cred.scope }}" />
+                <div class="flex-1">
+                  <input name="value" type="password" required
+                         placeholder="{% if cred.is_set %}&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;{% endif %}"
+                         data-i18n-placeholder="agents.detail.secret_placeholder"
+                         class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                </div>
+                <button type="submit"
+                        class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-xs px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 whitespace-nowrap"
+                        data-i18n="agents.detail.secret_save">Save</button>
+                {% if cred.is_set %}
+                <button type="button"
+                        class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-3 py-2 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                        hx-delete="{{ base_path }}/agents/{{ agent_id }}/credential/{{ cred.scope }}/{{ cred.capability_id }}/{{ cred.name }}"
+                        hx-confirm="Remove this secret?"
+                        data-i18n="agents.detail.secret_remove">Remove</button>
+                {% endif %}
+              </form>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
     {% endfor %}

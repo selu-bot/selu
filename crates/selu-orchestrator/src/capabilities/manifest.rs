@@ -108,6 +108,8 @@ pub struct CredentialDeclaration {
     pub credential_type: String,
     #[serde(default = "default_true")]
     pub required: bool,
+    #[serde(default)]
+    pub description: String,
 }
 
 fn default_cred_type() -> String { "secret".to_string() }

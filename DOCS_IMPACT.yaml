@@ -27,4 +27,44 @@
 #     Multi-line description of what changed, why, and how it affects
 #     the user or developer experience.
 
-entries: []
+entries:
+  - id: 2026-03-03-agent-detail-secrets
+    date: "2026-03-03"
+    pr:
+    area: ui
+    type: added
+    audience: both
+    summary: "Credential management is now available directly on the agent detail page"
+    affected_files:
+      - crates/selu-orchestrator/src/capabilities/manifest.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/credentials
+      - developer-guide/capabilities/container-guidelines
+      - reference/manifest-yaml-schema
+    details: |
+      The agent detail page (/agents/{id}) now shows a "Secrets" section inside
+      each capability card. Each secret declared in the capability's manifest.yaml
+      is listed with its name, description, required/optional status, and whether
+      it is currently set or missing.
+
+      Admins can save or remove secrets directly from this page — no need to
+      navigate to the standalone Credentials page or manually type capability IDs.
+
+      For capability developers: the manifest.yaml `credentials[]` entries now
+      support an optional `description` field (string) that is displayed to the
+      user alongside the secret input. Authors should add human-readable
+      descriptions explaining what the credential is for and where to obtain it.
+
+      Example manifest.yaml:
+        credentials:
+          - name: SERPAPI_API_KEY
+            scope: system
+            required: false
+            description: >
+              API key for SerpAPI (https://serpapi.com). Enables reliable
+              web search. Optional — falls back to browser search if absent.

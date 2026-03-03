@@ -336,6 +336,14 @@ pub fn router(state: AppState) -> Router<AppState> {
         )
         .route("/agents/{agent_id}/rate", post(agents::rate_agent))
         .route(
+            "/agents/{agent_id}/credential",
+            post(agents::agent_credential_set),
+        )
+        .route(
+            "/agents/{agent_id}/credential/{scope}/{cap_id}/{name}",
+            delete(agents::agent_credential_delete),
+        )
+        .route(
             "/agents/models/{provider_id}",
             get(agents::models_for_provider),
         )

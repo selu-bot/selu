@@ -127,6 +127,17 @@ struct AgentSetupTemplate {
 // ── Agent detail page ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
+pub struct CredentialView {
+    pub capability_id: String,
+    pub name: String,
+    pub scope: String,
+    pub description: String,
+    pub required: bool,
+    pub is_set: bool,
+    pub set_at: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct CapabilityView {
     pub id: String,
     pub network_mode: String,
@@ -136,6 +147,7 @@ pub struct CapabilityView {
     pub max_cpu_fraction: String,
     pub pids_limit: u32,
     pub tools: Vec<ToolView>,
+    pub credentials: Vec<CredentialView>,
 }
 
 #[derive(Debug, Clone)]
@@ -187,6 +199,8 @@ struct AgentDetailTemplate {
     capabilities: Vec<CapabilityView>,
     builtin_policies: Vec<BuiltinPolicyView>,
     egress_entries: Vec<EgressEntryView>,
+    error: Option<String>,
+    success: Option<String>,
 }
 
 // ── Form structs ──────────────────────────────────────────────────────────────
@@ -220,6 +234,20 @@ fn default_scope_user() -> String {
 pub struct ResetToolPolicyForm {
     pub capability_id: String,
     pub tool_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetAgentCredentialForm {
+    pub capability_id: String,
+    pub credential_name: String,
+    pub scope: String,
+    pub value: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AgentDetailQuery {
+    pub error: Option<String>,
+    pub success: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -836,6 +864,7 @@ pub async fn setup_test(
 pub async fn agent_detail(
     user: AuthUser,
     Path(agent_id): Path<String>,
+    Query(q): Query<AgentDetailQuery>,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
 ) -> Response {
@@ -941,6 +970,66 @@ pub async fn agent_detail(
             })
             .collect();
 
+        // Build credential views from manifest declarations
+        let mut credential_views: Vec<CredentialView> = Vec::new();
+        for cred_decl in &manifest.credentials {
+            let scope_str = match cred_decl.scope {
+                crate::capabilities::manifest::CredentialScope::System => "system",
+                crate::capabilities::manifest::CredentialScope::User => "user",
+            };
+
+            // Check if credential is already set
+            let (is_set, set_at) = match cred_decl.scope {
+                crate::capabilities::manifest::CredentialScope::System => {
+                    let row = sqlx::query(
+                        "SELECT created_at FROM system_credentials WHERE capability_id = ? AND credential_name = ?",
+                    )
+                    .bind(cap_id)
+                    .bind(&cred_decl.name)
+                    .fetch_optional(&state.db)
+                    .await
+                    .ok()
+                    .flatten();
+                    match row {
+                        Some(r) => {
+                            use sqlx::Row;
+                            (true, r.try_get::<String, _>("created_at").ok())
+                        }
+                        None => (false, None),
+                    }
+                }
+                crate::capabilities::manifest::CredentialScope::User => {
+                    let row = sqlx::query(
+                        "SELECT created_at FROM user_credentials WHERE user_id = ? AND capability_id = ? AND credential_name = ?",
+                    )
+                    .bind(&user.user_id)
+                    .bind(cap_id)
+                    .bind(&cred_decl.name)
+                    .fetch_optional(&state.db)
+                    .await
+                    .ok()
+                    .flatten();
+                    match row {
+                        Some(r) => {
+                            use sqlx::Row;
+                            (true, r.try_get::<String, _>("created_at").ok())
+                        }
+                        None => (false, None),
+                    }
+                }
+            };
+
+            credential_views.push(CredentialView {
+                capability_id: cap_id.clone(),
+                name: cred_decl.name.clone(),
+                scope: scope_str.to_string(),
+                description: cred_decl.description.clone(),
+                required: cred_decl.required,
+                is_set,
+                set_at,
+            });
+        }
+
         capabilities.push(CapabilityView {
             id: cap_id.clone(),
             network_mode: network_mode.to_string(),
@@ -950,6 +1039,7 @@ pub async fn agent_detail(
             max_cpu_fraction: format!("{:.0}%", manifest.resources.max_cpu_fraction * 100.0),
             pids_limit: manifest.resources.pids_limit,
             tools,
+            credentials: credential_views,
         });
     }
 
@@ -1038,6 +1128,8 @@ pub async fn agent_detail(
         capabilities,
         builtin_policies,
         egress_entries,
+        error: q.error,
+        success: q.success,
     })
     .render()
     {
@@ -1047,6 +1139,111 @@ pub async fn agent_detail(
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+}
+
+// ── Agent credential management (inline on detail page) ──────────────────────
+
+/// HTMX: set a credential for a capability from the agent detail page.
+/// Returns an HTML fragment that replaces the credential row.
+pub async fn agent_credential_set(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+    Form(form): Form<SetAgentCredentialForm>,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    if form.value.is_empty() {
+        return Redirect::to(&format!(
+            "{}/agents/{}?error=Secret+value+cannot+be+empty.",
+            base_path, agent_id
+        ))
+        .into_response();
+    }
+
+    let result = match form.scope.as_str() {
+        "system" => {
+            state
+                .credentials
+                .set_system(&form.capability_id, &form.credential_name, &form.value)
+                .await
+        }
+        "user" => {
+            state
+                .credentials
+                .set_user(
+                    &user.user_id,
+                    &form.capability_id,
+                    &form.credential_name,
+                    &form.value,
+                )
+                .await
+        }
+        _ => {
+            return Redirect::to(&format!(
+                "{}/agents/{}?error=Invalid+credential+scope.",
+                base_path, agent_id
+            ))
+            .into_response();
+        }
+    };
+
+    match result {
+        Ok(_) => Redirect::to(&format!(
+            "{}/agents/{}?success=Secret+saved.",
+            base_path, agent_id
+        ))
+        .into_response(),
+        Err(e) => {
+            error!("Failed to set agent credential: {e}");
+            Redirect::to(&format!(
+                "{}/agents/{}?error=Could+not+save+secret.+Please+try+again.",
+                base_path, agent_id
+            ))
+            .into_response()
+        }
+    }
+}
+
+/// HTMX: delete a credential for a capability from the agent detail page.
+pub async fn agent_credential_delete(
+    user: AuthUser,
+    Path((agent_id, scope, cap_id, name)): Path<(String, String, String, String)>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let result = match scope.as_str() {
+        "system" => state.credentials.delete_system(&cap_id, &name).await,
+        "user" => {
+            state
+                .credentials
+                .delete_user(&user.user_id, &cap_id, &name)
+                .await
+        }
+        _ => {
+            return Redirect::to(&format!(
+                "{}/agents/{}?error=Invalid+credential+scope.",
+                base_path, agent_id
+            ))
+            .into_response();
+        }
+    };
+
+    if let Err(e) = result {
+        error!("Failed to delete agent credential: {e}");
+    }
+    Redirect::to(&format!(
+        "{}/agents/{}?success=Secret+removed.",
+        base_path, agent_id
+    ))
+    .into_response()
 }
 
 /// Set model for a specific agent
