@@ -432,3 +432,67 @@ entries:
       - bundled/default agent policies seed and backfill now include `set_schedule`
       - Agent detail UI now lists both `set_schedule` and `set_reminder` under
         built-in tools with English/German labels
+
+  - id: 2026-03-04-reminder-timezone-handling
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Reminder times are now interpreted in the user's timezone when no UTC offset is provided"
+    affected_files:
+      - crates/selu-orchestrator/src/schedules/mod.rs
+      - crates/selu-orchestrator/src/web/schedules.rs
+    docs_sections:
+      - user-guide/channels/web-chat
+      - user-guide/agents
+      - developer-guide/built-in-tools
+    details: |
+      Fixed confusing timezone behavior for one-shot reminders created via the
+      built-in `set_reminder` tool.
+
+      Before:
+      - naive timestamps like `2026-03-04T11:10:00` were interpreted as UTC
+      - this could schedule reminders one hour late/early for users outside UTC
+
+      After:
+      - timestamps with explicit timezone/offset are honored as-is
+      - naive timestamps are interpreted in the user's configured timezone
+      - optional `timezone` argument can override the user's timezone for a
+        specific reminder tool call
+
+      Also updated schedules page display:
+      - `next_run_at` and `last_run_at` now render in the user's timezone with
+        timezone abbreviation (e.g. `CET`, `CEST`) instead of raw UTC-like values.
+  - id: 2026-03-04-provider-onboarding-wizard
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "LLM Providers page now shows active providers and a guided add-provider setup flow"
+    affected_files:
+      - crates/selu-orchestrator/src/web/providers.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/providers.html
+      - crates/selu-orchestrator/templates/providers_new.html
+      - crates/selu-orchestrator/templates/providers_setup.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/llm-providers
+      - user-guide/self-hosting/environment-variables
+    details: |
+      The /providers page was redesigned to reduce clutter. It now focuses on a
+      simple list of active/connected providers and a single "Add Provider"
+      action.
+
+      Provider setup is now a guided flow:
+      - Step 1: choose provider type on /providers/new
+      - Step 2: fill only required fields on /providers/new/{provider_id}
+      - Step 3: Selu validates connectivity before saving
+
+      The setup form adapts per provider (OpenAI, Anthropic, Bedrock, Ollama),
+      requesting only relevant fields. A disconnect action was added to remove a
+      provider from the active list.
+
+      New/updated UI copy is fully translated in English and German.

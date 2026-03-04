@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, display_name, api_key_encrypted, base_url, active\n         FROM llm_providers ORDER BY id",
+  "query": "SELECT id, display_name, api_key_encrypted, base_url, active\n         FROM llm_providers\n         WHERE active = 1\n         ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -40,5 +40,5 @@
       false
     ]
   },
-  "hash": "c73cb0dc5a3a5a82bd450722b46423053830339a627e9429c667cdad9a298dff"
+  "hash": "63c61cdd706017450f508e7e44258cb1c5b3c30cb7e2b17b2ba2cf75fb01dd5f"
 }

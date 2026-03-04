@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
 };
-use chrono::Utc;
+use chrono::{NaiveDateTime, TimeZone, Utc};
 use serde::Deserialize;
 use tracing::error;
 
@@ -121,6 +121,15 @@ pub async fn schedules_index(
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
 ) -> Response {
+    // Get user timezone
+    let user_timezone =
+        sqlx::query_scalar!("SELECT timezone FROM users WHERE id = ?", user.user_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "UTC".to_string());
+
     let schedule_rows = schedules::list_schedules(&state.db, &user.user_id)
         .await
         .unwrap_or_default();
@@ -135,8 +144,11 @@ pub async fn schedules_index(
             cron_expression: s.cron_expression,
             active: s.active,
             one_shot: s.one_shot,
-            last_run_at: s.last_run_at.unwrap_or_else(|| "Never".to_string()),
-            next_run_at: s.next_run_at,
+            last_run_at: s
+                .last_run_at
+                .map(|v| format_utc_for_timezone(&v, &user_timezone))
+                .unwrap_or_else(|| "Never".to_string()),
+            next_run_at: format_utc_for_timezone(&s.next_run_at, &user_timezone),
             pipe_names: s.pipe_names,
             pipe_ids: s.pipe_ids,
         })
@@ -157,15 +169,6 @@ pub async fn schedules_index(
     })
     .collect();
 
-    // Get user timezone
-    let user_timezone =
-        sqlx::query_scalar!("SELECT timezone FROM users WHERE id = ?", user.user_id)
-            .fetch_optional(&state.db)
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "UTC".to_string());
-
     match (SchedulesTemplate {
         active_nav: "schedules",
         is_admin: user.is_admin,
@@ -185,6 +188,24 @@ pub async fn schedules_index(
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+}
+
+fn format_utc_for_timezone(value: &str, timezone: &str) -> String {
+    let naive = match NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S") {
+        Ok(dt) => dt,
+        Err(_) => return value.to_string(),
+    };
+
+    let tz: chrono_tz::Tz = match timezone.parse() {
+        Ok(tz) => tz,
+        Err(_) => return format!("{} UTC", value),
+    };
+
+    let utc_dt = Utc.from_utc_datetime(&naive);
+    utc_dt
+        .with_timezone(&tz)
+        .format("%Y-%m-%d %H:%M:%S %Z")
+        .to_string()
 }
 
 /// POST /schedules — create a new schedule

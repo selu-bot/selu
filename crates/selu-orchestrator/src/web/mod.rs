@@ -370,13 +370,14 @@ pub fn router(state: AppState) -> Router<AppState> {
         )
         // Providers
         .route("/providers", get(providers::providers_index))
+        .route("/providers/new", get(providers::providers_new))
         .route(
-            "/providers/{provider_id}/key",
-            post(providers::providers_set_key).delete(providers::providers_delete_key),
+            "/providers/new/{provider_id}",
+            get(providers::providers_setup_page).post(providers::providers_setup_submit),
         )
         .route(
-            "/providers/{provider_id}/region",
-            post(providers::providers_set_region),
+            "/providers/{provider_id}/disconnect",
+            post(providers::providers_disconnect),
         )
         // Subscriptions
         .route(

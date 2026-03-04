@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO llm_providers (id, display_name, api_key_encrypted, base_url, active)\n         VALUES (?, ?, ?, ?, 1)\n         ON CONFLICT(id) DO UPDATE SET\n           display_name = excluded.display_name,\n           api_key_encrypted = excluded.api_key_encrypted,\n           base_url = excluded.base_url,\n           active = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "5ccf79858f7dd7eb2edb3b42fc732e895680447ecb945e1cf145706087b70461"
+}

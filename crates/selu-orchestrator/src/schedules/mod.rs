@@ -7,7 +7,7 @@ pub mod executor;
 pub mod nl_to_cron;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, LocalResult, NaiveDateTime, TimeZone, Utc};
 use cron::Schedule as CronSchedule;
 use sqlx::SqlitePool;
 use std::str::FromStr;
@@ -616,8 +616,10 @@ pub fn set_reminder_tool_spec() -> ToolSpec {
              When the reminder fires, the prompt is executed as a new agent turn — \
              the agent can then use any of its tools (check weather, send emails, etc.). \
              Use this when the user wants something to happen at a specific future time. \
-             The fire_at must be an ISO 8601 datetime string in UTC (e.g. 2026-03-08T10:00:00Z). \
-             Convert the user's local time to UTC before calling this tool."
+             The fire_at can be either: \
+             - an ISO 8601 datetime with timezone/offset (e.g. 2026-03-08T10:00:00Z or 2026-03-08T11:00:00+01:00), or \
+             - a local datetime without timezone (e.g. 2026-03-08T11:00:00), interpreted in the user's timezone. \
+             Prefer passing the user's local time directly."
             .to_string(),
         parameters: serde_json::json!({
             "type": "object",
@@ -628,11 +630,15 @@ pub fn set_reminder_tool_spec() -> ToolSpec {
                 },
                 "fire_at": {
                     "type": "string",
-                    "description": "ISO 8601 datetime in UTC for when the reminder should fire (e.g. 2026-03-08T10:00:00Z)"
+                    "description": "Reminder time as ISO 8601. With timezone/offset it is used directly; without timezone it is interpreted in the user's timezone."
                 },
                 "name": {
                     "type": "string",
                     "description": "Short name for the reminder (kebab-case, max 30 characters, e.g. 'check-weather-sunday')"
+                },
+                "timezone": {
+                    "type": "string",
+                    "description": "Optional IANA timezone override for naive fire_at values (e.g. Europe/Berlin). Defaults to the user's timezone."
                 }
             },
             "required": ["prompt", "fire_at", "name"]
@@ -662,21 +668,22 @@ pub async fn dispatch_set_reminder(
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("Missing required parameter: name"))?;
 
-    // Parse the ISO 8601 datetime
-    let fire_at = chrono::DateTime::parse_from_rfc3339(fire_at_str)
-        .or_else(|_| {
-            // Also try without timezone suffix (assume UTC)
-            chrono::NaiveDateTime::parse_from_str(fire_at_str, "%Y-%m-%dT%H:%M:%S")
-                .map(|dt| dt.and_utc().fixed_offset())
-        })
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Invalid fire_at datetime '{}': {}. Expected ISO 8601 format like 2026-03-08T10:00:00Z",
-                fire_at_str,
-                e
-            )
-        })?
-        .with_timezone(&Utc);
+    let timezone = match args
+        .get("timezone")
+        .and_then(|v| v.as_str())
+        .filter(|tz| !tz.trim().is_empty())
+    {
+        Some(tz) => tz.to_string(),
+        None => sqlx::query_scalar::<_, String>("SELECT timezone FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "UTC".to_string()),
+    };
+
+    let fire_at = parse_user_datetime_to_utc(fire_at_str, &timezone)?;
 
     // Validate the time is in the future
     if fire_at <= Utc::now() {
@@ -692,7 +699,11 @@ pub async fn dispatch_set_reminder(
         name,
         prompt,
         fire_at,
-        &format!("Reminder for {}", fire_at.format("%Y-%m-%d %H:%M UTC")),
+        &format!(
+            "Reminder for {}",
+            fire_at_in_timezone(&fire_at, &timezone)
+                .unwrap_or_else(|| fire_at.format("%Y-%m-%d %H:%M UTC").to_string())
+        ),
         &[pipe_id.to_string()],
     )
     .await?;
@@ -702,9 +713,54 @@ pub async fn dispatch_set_reminder(
         "id": id,
         "name": name,
         "fire_at": fire_at.to_rfc3339(),
+        "timezone": timezone,
         "prompt": prompt
     })
     .to_string())
+}
+
+fn parse_user_datetime_to_utc(input: &str, timezone: &str) -> Result<DateTime<Utc>> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(input) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+
+    let tz: chrono_tz::Tz = timezone
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid timezone '{}'", timezone))?;
+
+    let naive = NaiveDateTime::parse_from_str(input, "%Y-%m-%dT%H:%M:%S")
+        .or_else(|_| NaiveDateTime::parse_from_str(input, "%Y-%m-%d %H:%M:%S"))
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Invalid fire_at datetime '{}': {}. Use ISO 8601, e.g. 2026-03-08T11:00:00 or 2026-03-08T10:00:00Z",
+                input,
+                e
+            )
+        })?;
+
+    let local_dt = match tz.from_local_datetime(&naive) {
+        LocalResult::Single(dt) => dt,
+        LocalResult::Ambiguous(a, _) => a,
+        LocalResult::None => {
+            return Err(anyhow::anyhow!(
+                "The local time '{}' does not exist in timezone '{}' (DST transition).",
+                input,
+                timezone
+            ));
+        }
+    };
+
+    Ok(local_dt.with_timezone(&Utc))
+}
+
+fn fire_at_in_timezone(fire_at: &DateTime<Utc>, timezone: &str) -> Option<String> {
+    let tz: chrono_tz::Tz = timezone.parse().ok()?;
+    Some(
+        fire_at
+            .with_timezone(&tz)
+            .format("%Y-%m-%d %H:%M %Z")
+            .to_string(),
+    )
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -759,5 +815,18 @@ mod tests {
     fn test_validate_cron_invalid() {
         assert!(validate_cron("not a cron").is_err());
         assert!(validate_cron("").is_err());
+    }
+
+    #[test]
+    fn test_parse_user_datetime_to_utc_naive_uses_timezone() {
+        let dt = parse_user_datetime_to_utc("2026-03-04T11:10:00", "Europe/Berlin").unwrap();
+        // March in Berlin is CET (UTC+1) until DST switch later in month.
+        assert_eq!(dt.format("%Y-%m-%d %H:%M").to_string(), "2026-03-04 10:10");
+    }
+
+    #[test]
+    fn test_parse_user_datetime_to_utc_with_offset_keeps_absolute_time() {
+        let dt = parse_user_datetime_to_utc("2026-03-04T11:10:00+01:00", "UTC").unwrap();
+        assert_eq!(dt.format("%Y-%m-%d %H:%M").to_string(), "2026-03-04 10:10");
     }
 }

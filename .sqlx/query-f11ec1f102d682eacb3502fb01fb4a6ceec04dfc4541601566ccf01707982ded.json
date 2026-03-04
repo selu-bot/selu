@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT base_url, api_key_encrypted\n         FROM llm_providers\n         WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "base_url",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "api_key_encrypted",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "f11ec1f102d682eacb3502fb01fb4a6ceec04dfc4541601566ccf01707982ded"
+}

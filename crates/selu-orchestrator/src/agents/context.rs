@@ -102,6 +102,9 @@ pub async fn build(
          Built-in scheduling tools:\n\
          - `set_schedule` — use for recurring requests (daily, weekdays, every Monday, etc.)\n\
          - `set_reminder` — use for one-time future requests (tomorrow, next Sunday, in 2 hours, etc.)\n\n\
+         For `set_reminder`: when the user gives a local time, pass `fire_at` as a local datetime \
+         without a timezone suffix (e.g. `2026-03-04T11:10:00`). The system will interpret it in the \
+         user's timezone. \
          Prefer these tools over asking users to type slash commands, unless the user explicitly \
          asks for command syntax. \
          Do NOT try to implement scheduling yourself using store_set or emit_event — \
