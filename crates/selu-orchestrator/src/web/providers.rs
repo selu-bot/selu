@@ -456,11 +456,7 @@ pub async fn providers_setup_submit(
 
     state.provider_cache.invalidate().await;
 
-    Redirect::to(&format!(
-        "{}/providers?success=connected",
-        base_path
-    ))
-    .into_response()
+    Redirect::to(&format!("{}/providers?success=connected", base_path)).into_response()
 }
 
 pub async fn providers_disconnect(
@@ -496,11 +492,7 @@ pub async fn providers_disconnect(
 
     state.provider_cache.invalidate().await;
 
-    Redirect::to(&format!(
-        "{}/providers?success=disconnected",
-        base_path
-    ))
-    .into_response()
+    Redirect::to(&format!("{}/providers?success=disconnected", base_path)).into_response()
 }
 
 // ── Access checks ─────────────────────────────────────────────────────────────

@@ -138,11 +138,22 @@ async fn execute_on_pipe(
         ChannelKind::NonInteractive
     };
 
+    // Determine the user's preferred language so we can instruct the agent
+    // to respond in that language even though the prompt may have been stored
+    // in a different language (e.g. English).
+    let user_lang = crate::i18n::user_language(&state.db, user_id).await;
+    let lang_instruction = match user_lang.as_str() {
+        "de" => "Antworte auf Deutsch. ",
+        "en" => "",
+        _ => "Antworte auf Deutsch. ",
+    };
+    let full_prompt = format!("{}{}", lang_instruction, prompt);
+
     let params = TurnParams {
         pipe_id: pipe_id.to_string(),
         user_id: user_id.to_string(),
         agent_id: Some(agent_id),
-        message: prompt.to_string(),
+        message: full_prompt,
         thread_id: Some(thread_id.clone()),
         chain_depth: 0,
         channel_kind,

@@ -132,7 +132,8 @@ Rules for the description:
 
 Rules for the prompt:
 - The full task description WITHOUT any timing information
-- Keep the user's original wording
+- Keep the user's original wording and language — do NOT translate it
+- If the user wrote in German, the prompt must remain in German
 
 Rules for determining type:
 - Words like "every", "daily", "weekly", "weekdays", "on mondays" → recurring

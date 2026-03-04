@@ -616,6 +616,8 @@ pub fn set_reminder_tool_spec() -> ToolSpec {
              When the reminder fires, the prompt is executed as a new agent turn — \
              the agent can then use any of its tools (check weather, send emails, etc.). \
              Use this when the user wants something to happen at a specific future time. \
+             IMPORTANT: Write the prompt in the same language the user is using. \
+             If the user speaks German, the prompt must be in German. \
              The fire_at can be either: \
              - an ISO 8601 datetime with timezone/offset (e.g. 2026-03-08T10:00:00Z or 2026-03-08T11:00:00+01:00), or \
              - a local datetime without timezone (e.g. 2026-03-08T11:00:00), interpreted in the user's timezone. \
@@ -626,7 +628,7 @@ pub fn set_reminder_tool_spec() -> ToolSpec {
             "properties": {
                 "prompt": {
                     "type": "string",
-                    "description": "What the agent should do when the reminder fires"
+                    "description": "What the agent should do when the reminder fires. MUST be in the user's language."
                 },
                 "fire_at": {
                     "type": "string",
