@@ -51,6 +51,9 @@ async fn main() -> Result<()> {
     agents::bundled::ensure_db_row(&db).await?;
     agents::bundled::ensure_global_policies(&db).await?;
 
+    // ── Backfill built-in tool policies for all agents (handles upgrades) ─────
+    agents::bundled::backfill_builtin_policies(&db).await?;
+
     // ── Load installed agents from DB + filesystem ────────────────────────────
     let mut agent_defs = agents::loader::load_installed(&db, &cfg.installed_agents_dir).await?;
 
