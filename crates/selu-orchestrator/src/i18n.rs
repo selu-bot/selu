@@ -24,10 +24,16 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
             "approval.would_like_to_use",
             "I'd like to use the tool \"{tool}\"",
         );
+        en.insert(
+            "approval.confirm_header",
+            "Before I continue, I need your confirmation.",
+        );
+        en.insert("approval.action", "Action: {tool}");
+        en.insert("approval.details", "Details:");
         en.insert("approval.with_args", " with:");
         en.insert(
             "approval.reply_to_approve",
-            "Reply to this message to approve.",
+            "If this looks right, reply to this message.",
         );
         en.insert("approval.approved_processing", "Approved. Processing...");
         en.insert(
@@ -118,16 +124,22 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
         let mut de = HashMap::new();
         de.insert(
             "approval.would_like_to_use",
-            "Ich moechte das Tool \"{tool}\" verwenden",
+            "Ich möchte das Tool \"{tool}\" verwenden",
         );
+        de.insert(
+            "approval.confirm_header",
+            "Bevor ich weitermache, brauche ich kurz deine Bestätigung.",
+        );
+        de.insert("approval.action", "Aktion: {tool}");
+        de.insert("approval.details", "Details:");
         de.insert("approval.with_args", " mit:");
         de.insert(
             "approval.reply_to_approve",
-            "Antworte auf diese Nachricht, um zu bestaetigen.",
+            "Wenn das passt, antworte einfach auf diese Nachricht.",
         );
         de.insert(
             "approval.approved_processing",
-            "Bestaetigt. Wird verarbeitet...",
+            "Bestätigt. Wird verarbeitet...",
         );
         de.insert(
             "error.agent_turn_failed",

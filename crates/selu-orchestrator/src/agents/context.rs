@@ -110,6 +110,15 @@ pub async fn build(
          Users can also manage schedules from the Schedules page in the web interface.",
     );
 
+    system.push_str(
+        "\n\n## Tool approval copy\n\
+         When you call a tool, also include `_approval_message` in the tool arguments. \
+         This must be a short, plain-language sentence describing what you want to do \
+         from the user's perspective (no JSON, no field names, no technical wording). \
+         Example (German): `Ich möchte den Artikel Spülmaschinensalz von deiner Liste entfernen.` \
+         Keep it under 140 characters.",
+    );
+
     messages.push(ChatMessage::system(system));
 
     // ── User personality ──────────────────────────────────────────────────────

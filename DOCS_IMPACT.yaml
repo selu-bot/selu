@@ -362,3 +362,37 @@ entries:
       Runtime tool exposure now hydrates dynamic capability tools from the
       discovered cache, so LLM tool specs and invocation resolution reflect
       the latest synced tool set instead of static manifest declarations.
+
+  - id: 2026-03-04-approval-prompt-copy
+    date: "2026-03-04"
+    pr:
+    area: channels
+    type: changed
+    audience: users
+    summary: "Non-interactive approval prompts now use friendlier, less technical wording"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/i18n.rs
+    docs_sections:
+      - user-guide/security/tool-policies
+      - user-guide/channels/imessage
+    details: |
+      Approval prompts sent via non-interactive threaded channels (such as
+      iMessage and webhook-based channels) were rewritten to be easier for
+      non-technical users to understand.
+
+      The prompt format now:
+      - starts with a short confirmation request ("Before I continue...")
+      - shows a humanized action label derived from the tool name
+      - presents up to three arguments using humanized field names and
+        simplified values (arrays of strings are displayed as plain lists)
+      - ends with a plain-language reply instruction
+
+      Server-side i18n entries for both English and German were updated for
+      this flow.
+
+      Hybrid approval copy support was added: the LLM can include an optional
+      `_approval_message` field in tool arguments, and Selu will use it as the
+      headline text in the approval request. This field is internal-only and
+      is stripped before actual tool invocation.

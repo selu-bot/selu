@@ -324,6 +324,8 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             let del_tx = dispatcher_tx.clone();
 
             Box::pin(async move {
+                let invoke_args = strip_internal_tool_args(&args);
+
                 // ── Built-in tools: emit_event, delegate_to_agent ─────────
                 if name == "emit_event" {
                     // Check policy for built-in emit_event
@@ -343,7 +345,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                             let bus = bus.clone();
                             let session = session.clone();
                             let agent_id = agent_id_copy.clone();
-                            let args = args.clone();
+                            let args = invoke_args.clone();
                             let chain_depth = chain_depth;
                             Box::pin(async move {
                                 crate::events::dispatch_emit_event(
@@ -385,7 +387,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                             let db = state.db.clone();
                             let agent_id = agent_id_copy.clone();
                             let user = user.clone();
-                            let args = args.clone();
+                            let args = invoke_args.clone();
                             let tool = name.clone();
                             Box::pin(async move {
                                 match tool.as_str() {
@@ -432,7 +434,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                             let db = state.db.clone();
                             let user = user.clone();
                             let pipe = pipe.clone();
-                            let args = args.clone();
+                            let args = invoke_args.clone();
                             Box::pin(async move {
                                 crate::schedules::dispatch_set_reminder(&db, &user, &pipe, &args)
                                     .await
@@ -461,7 +463,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                             let del_state = del_state.clone();
                             let del_pipe = del_pipe.clone();
                             let user = user.clone();
-                            let args = args.clone();
+                            let args = invoke_args.clone();
                             let chain_depth = chain_depth;
                             let del_channel = channel.clone();
                             let del_tx = del_tx.clone();
@@ -512,7 +514,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         let engine = engine.clone();
                         let manifests = manifests.clone();
                         let name = name.clone();
-                        let args = args.clone();
+                        let args = invoke_args.clone();
                         let session = session.clone();
                         let thread = thread.clone();
                         let user = user.clone();
@@ -807,45 +809,133 @@ where
 /// user's preferred language.
 fn build_approval_prompt(lang: &str, tool_name: &str, args: &serde_json::Value) -> String {
     let display_name = tool_name.split("__").last().unwrap_or(tool_name);
+    let tool_label = humanize_identifier(display_name);
+    let user_message = extract_approval_message(args);
+    let public_args = strip_internal_tool_args(args);
 
-    let mut prompt = crate::i18n::t_with_tool(lang, "approval.would_like_to_use", display_name);
+    let mut prompt = String::new();
+    prompt.push_str(crate::i18n::t(lang, "approval.confirm_header"));
+    prompt.push('\n');
+
+    if let Some(message) = user_message {
+        prompt.push_str(&message);
+    } else {
+        prompt.push_str(&crate::i18n::t_with_tool(
+            lang,
+            "approval.action",
+            &tool_label,
+        ));
+    }
 
     // Add key argument values for context
-    if let Some(obj) = args.as_object() {
+    if let Some(obj) = public_args.as_object() {
         let relevant: Vec<String> = obj
             .iter()
             .filter(|(_, v)| !v.is_null())
             .take(3) // limit to avoid massive prompts
             .map(|(k, v)| {
-                let val = match v {
-                    serde_json::Value::String(s) => s.clone(),
-                    other => other.to_string(),
-                };
-                let truncated = if val.len() > 80 {
-                    format!("{}...", &val[..77])
-                } else {
-                    val
-                };
-                format!("{k}: {truncated}")
+                let key = humanize_identifier(k);
+                let value = format_approval_value(v);
+                format!("{key}: {value}")
             })
             .collect();
 
         if !relevant.is_empty() {
-            prompt.push_str(crate::i18n::t(lang, "approval.with_args"));
+            prompt.push('\n');
+            prompt.push_str(crate::i18n::t(lang, "approval.details"));
             prompt.push('\n');
             for item in &relevant {
-                prompt.push_str(&format!("  - {item}\n"));
+                prompt.push_str("- ");
+                prompt.push_str(item);
+                prompt.push('\n');
             }
-        } else {
-            prompt.push_str(".\n");
         }
-    } else {
-        prompt.push_str(".\n");
     }
 
     prompt.push('\n');
     prompt.push_str(crate::i18n::t(lang, "approval.reply_to_approve"));
     prompt
+}
+
+const INTERNAL_APPROVAL_MESSAGE_KEY: &str = "_approval_message";
+
+fn strip_internal_tool_args(args: &serde_json::Value) -> serde_json::Value {
+    let mut sanitized = args.clone();
+    if let Some(obj) = sanitized.as_object_mut() {
+        obj.remove(INTERNAL_APPROVAL_MESSAGE_KEY);
+    }
+    sanitized
+}
+
+fn extract_approval_message(args: &serde_json::Value) -> Option<String> {
+    let raw = args
+        .as_object()
+        .and_then(|obj| obj.get(INTERNAL_APPROVAL_MESSAGE_KEY))
+        .and_then(|v| v.as_str())?;
+
+    let collapsed = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = collapsed.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(truncate_for_approval(trimmed))
+}
+
+fn format_approval_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => truncate_for_approval(s),
+        serde_json::Value::Array(items) => {
+            let all_strings: Option<Vec<&str>> = items.iter().map(|v| v.as_str()).collect();
+            if let Some(values) = all_strings {
+                truncate_for_approval(&values.join(", "))
+            } else {
+                truncate_for_approval(&value.to_string())
+            }
+        }
+        _ => truncate_for_approval(&value.to_string()),
+    }
+}
+
+fn truncate_for_approval(text: &str) -> String {
+    if text.len() > 80 {
+        format!("{}...", &text[..77])
+    } else {
+        text.to_string()
+    }
+}
+
+fn humanize_identifier(identifier: &str) -> String {
+    let mut out = String::new();
+    let mut prev_was_lower_or_digit = false;
+
+    for ch in identifier.chars() {
+        if ch == '_' || ch == '-' {
+            if !out.ends_with(' ') {
+                out.push(' ');
+            }
+            prev_was_lower_or_digit = false;
+            continue;
+        }
+
+        if ch.is_ascii_uppercase() && prev_was_lower_or_digit && !out.ends_with(' ') {
+            out.push(' ');
+        }
+
+        out.push(ch.to_ascii_lowercase());
+        prev_was_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
+    }
+
+    let normalized = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() {
+        return identifier.to_string();
+    }
+
+    let mut chars = normalized.chars();
+    let first = chars
+        .next()
+        .map(|c| c.to_ascii_uppercase())
+        .unwrap_or_default();
+    format!("{}{}", first, chars.collect::<String>())
 }
 
 /// Generate a short title for a thread by asking the LLM.
@@ -1013,4 +1103,60 @@ fn confirmation_only_sender(parent_tx: LoopSender) -> LoopSender {
 pub fn noop_sender() -> LoopSender {
     let (tx, _) = mpsc::channel::<LoopEvent>(1);
     tx
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn humanize_identifier_splits_camel_case() {
+        assert_eq!(
+            humanize_identifier("deleteMultipleItemsFromList"),
+            "Delete multiple items from list"
+        );
+        assert_eq!(humanize_identifier("list_uuid"), "List uuid");
+    }
+
+    #[test]
+    fn approval_prompt_uses_friendly_text_and_values() {
+        let args = json!({
+            "itemNames": ["Spulmaschinensalz"],
+            "listUuid": "d6018602-2aa7-4f26-bbb6-c25065b86ca0"
+        });
+        let prompt = build_approval_prompt("de", "deleteMultipleItemsFromList", &args);
+
+        assert!(prompt.contains("Bevor ich weitermache"));
+        assert!(prompt.contains("Aktion: Delete multiple items from list"));
+        assert!(prompt.contains("Item names: Spulmaschinensalz"));
+        assert!(prompt.contains("List uuid: d6018602-2aa7-4f26-bbb6-c25065b86ca0"));
+    }
+
+    #[test]
+    fn approval_prompt_prefers_llm_message_and_hides_internal_field() {
+        let args = json!({
+            "_approval_message": "Ich moechte Spuelmaschinensalz von deiner Liste loeschen.",
+            "itemNames": ["Spulmaschinensalz"],
+            "listUuid": "d6018602-2aa7-4f26-bbb6-c25065b86ca0"
+        });
+        let prompt = build_approval_prompt("de", "deleteMultipleItemsFromList", &args);
+
+        assert!(prompt.contains("Ich moechte Spuelmaschinensalz von deiner Liste loeschen."));
+        assert!(!prompt.contains("Aktion:"));
+        assert!(!prompt.contains("_approval_message"));
+        assert!(prompt.contains("Item names: Spulmaschinensalz"));
+    }
+
+    #[test]
+    fn strip_internal_tool_args_removes_approval_message() {
+        let args = json!({
+            "_approval_message": "friendly",
+            "itemNames": ["A"]
+        });
+        let stripped = strip_internal_tool_args(&args);
+
+        assert!(stripped.get("_approval_message").is_none());
+        assert_eq!(stripped.get("itemNames").unwrap(), &json!(["A"]));
+    }
 }
