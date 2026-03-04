@@ -179,17 +179,23 @@ pub struct EgressEntryView {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct StorageEntryView {
+    pub id: String,
+    pub user_id: String,
+    pub key: String,
+    pub value: String,
+    pub updated_at: String,
+}
+
 /// A built-in tool (delegate_to_agent, emit_event) with its current policy.
 #[derive(Debug, Clone)]
 pub struct BuiltinPolicyView {
     pub capability_id: String,
     pub tool_name: String,
     pub display_name: String,
-    pub description: String,
     /// The effective policy for the current viewer.
     pub policy: String,
-    /// The global default policy.
-    pub global_default: String,
     /// Whether the current user has a personal override.
     pub has_override: bool,
 }
@@ -198,15 +204,30 @@ pub struct BuiltinPolicyView {
 #[template(path = "agents_detail.html")]
 struct AgentDetailTemplate {
     active_nav: &'static str,
+    active_tab: String,
     agent_id: String,
     agent_name: String,
     is_admin: bool,
     base_path: String,
+    overview: AgentOverviewStats,
     capabilities: Vec<CapabilityView>,
+    storage_entries: Vec<StorageEntryView>,
     builtin_policies: Vec<BuiltinPolicyView>,
     egress_entries: Vec<EgressEntryView>,
     error: Option<String>,
     success: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentOverviewStats {
+    pub capability_count: usize,
+    pub storage_count: i64,
+    pub network_request_count: i64,
+    pub permissions_allow_count: usize,
+    pub permissions_ask_count: usize,
+    pub permissions_block_count: usize,
+    pub secrets_set_count: usize,
+    pub secrets_missing_count: usize,
 }
 
 // ── Form structs ──────────────────────────────────────────────────────────────
@@ -240,6 +261,7 @@ fn default_scope_user() -> String {
 pub struct ResetToolPolicyForm {
     pub capability_id: String,
     pub tool_name: String,
+    pub return_to: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -248,12 +270,23 @@ pub struct SetAgentCredentialForm {
     pub credential_name: String,
     pub scope: String,
     pub value: String,
+    pub return_to: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct AgentDetailQuery {
     pub error: Option<String>,
     pub success: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteStorageForm {
+    pub entry_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CredentialDeleteQuery {
+    pub return_to: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -934,6 +967,57 @@ pub async fn agent_detail(
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
 ) -> Response {
+    render_agent_detail_page(user, agent_id, q, state, base_path, "overview").await
+}
+
+pub async fn agent_detail_storage(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    Query(q): Query<AgentDetailQuery>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
+    render_agent_detail_page(user, agent_id, q, state, base_path, "storage").await
+}
+
+pub async fn agent_detail_network(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    Query(q): Query<AgentDetailQuery>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
+    render_agent_detail_page(user, agent_id, q, state, base_path, "network").await
+}
+
+pub async fn agent_detail_permissions(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    Query(q): Query<AgentDetailQuery>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
+    render_agent_detail_page(user, agent_id, q, state, base_path, "permissions").await
+}
+
+pub async fn agent_detail_secrets(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    Query(q): Query<AgentDetailQuery>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
+    render_agent_detail_page(user, agent_id, q, state, base_path, "secrets").await
+}
+
+async fn render_agent_detail_page(
+    user: AuthUser,
+    agent_id: String,
+    q: AgentDetailQuery,
+    state: AppState,
+    base_path: String,
+    active_tab: &str,
+) -> Response {
     // Load agent definition
     let agents_map = state.agents.load();
     let agent = match agents_map.get(&agent_id) {
@@ -1119,9 +1203,20 @@ pub async fn agent_detail(
     // Fetch egress log entries for this agent's capabilities
     let cap_ids: Vec<String> = agent.capability_manifests.keys().cloned().collect();
     let mut egress_entries: Vec<EgressEntryView> = Vec::new();
+    let mut network_request_count = 0_i64;
 
     // Query egress log for all capabilities of this agent (last 100)
     for cap_id in &cap_ids {
+        let count_row = sqlx::query("SELECT COUNT(*) AS c FROM egress_log WHERE capability_id = ?")
+            .bind(cap_id)
+            .fetch_one(&state.db)
+            .await
+            .ok();
+        if let Some(row) = count_row {
+            use sqlx::Row;
+            network_request_count += row.try_get::<i64, _>("c").unwrap_or(0);
+        }
+
         let rows = sqlx::query(
             "SELECT capability_id, method, host, port, allowed, created_at
              FROM egress_log
@@ -1150,6 +1245,81 @@ pub async fn agent_detail(
     // Sort by timestamp descending and limit to 100 total
     egress_entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     egress_entries.truncate(100);
+
+    // Agent persistent storage entries.
+    let storage_entries = if user.is_admin {
+        let rows = sqlx::query(
+            "SELECT id, user_id, key, value, updated_at
+             FROM agent_storage
+             WHERE agent_id = ?
+             ORDER BY updated_at DESC, key ASC
+             LIMIT 500",
+        )
+        .bind(&agent_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter()
+            .map(|row| {
+                use sqlx::Row;
+                StorageEntryView {
+                    id: row.get("id"),
+                    user_id: row.get("user_id"),
+                    key: row.get("key"),
+                    value: row.get("value"),
+                    updated_at: row.try_get::<String, _>("updated_at").unwrap_or_default(),
+                }
+            })
+            .collect()
+    } else {
+        let rows = sqlx::query(
+            "SELECT id, user_id, key, value, updated_at
+             FROM agent_storage
+             WHERE agent_id = ? AND user_id = ?
+             ORDER BY updated_at DESC, key ASC
+             LIMIT 500",
+        )
+        .bind(&agent_id)
+        .bind(&user.user_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter()
+            .map(|row| {
+                use sqlx::Row;
+                StorageEntryView {
+                    id: row.get("id"),
+                    user_id: row.get("user_id"),
+                    key: row.get("key"),
+                    value: row.get("value"),
+                    updated_at: row.try_get::<String, _>("updated_at").unwrap_or_default(),
+                }
+            })
+            .collect()
+    };
+
+    let storage_count_row = if user.is_admin {
+        sqlx::query("SELECT COUNT(*) AS c FROM agent_storage WHERE agent_id = ?")
+            .bind(&agent_id)
+            .fetch_one(&state.db)
+            .await
+            .ok()
+    } else {
+        sqlx::query("SELECT COUNT(*) AS c FROM agent_storage WHERE agent_id = ? AND user_id = ?")
+            .bind(&agent_id)
+            .bind(&user.user_id)
+            .fetch_one(&state.db)
+            .await
+            .ok()
+    };
+    let storage_count = storage_count_row
+        .and_then(|row| {
+            use sqlx::Row;
+            row.try_get::<i64, _>("c").ok()
+        })
+        .unwrap_or(0);
 
     // Build built-in tool policy views
     use crate::permissions::tool_policy::{
@@ -1201,7 +1371,7 @@ pub async fn agent_detail(
     ];
     let builtin_policies: Vec<BuiltinPolicyView> = builtin_tools
         .iter()
-        .map(|(tool_name, display, desc)| {
+        .map(|(tool_name, display, _desc)| {
             let key = (BUILTIN_CAPABILITY_ID.to_string(), tool_name.to_string());
             let global_default = global_policy_map
                 .get(&key)
@@ -1216,21 +1386,64 @@ pub async fn agent_detail(
                 capability_id: BUILTIN_CAPABILITY_ID.to_string(),
                 tool_name: tool_name.to_string(),
                 display_name: display.to_string(),
-                description: desc.to_string(),
                 policy,
-                global_default,
                 has_override,
             }
         })
         .collect();
 
+    let mut permissions_allow_count = 0_usize;
+    let mut permissions_ask_count = 0_usize;
+    let mut permissions_block_count = 0_usize;
+
+    for cap in &capabilities {
+        for tool in &cap.tools {
+            match tool.policy.as_str() {
+                "allow" => permissions_allow_count += 1,
+                "ask" => permissions_ask_count += 1,
+                _ => permissions_block_count += 1,
+            }
+        }
+    }
+    for tool in &builtin_policies {
+        match tool.policy.as_str() {
+            "allow" => permissions_allow_count += 1,
+            "ask" => permissions_ask_count += 1,
+            _ => permissions_block_count += 1,
+        }
+    }
+
+    let mut secrets_set_count = 0_usize;
+    let mut secrets_missing_count = 0_usize;
+    for cap in &capabilities {
+        for cred in &cap.credentials {
+            if cred.is_set {
+                secrets_set_count += 1;
+            } else {
+                secrets_missing_count += 1;
+            }
+        }
+    }
+
     match (AgentDetailTemplate {
         active_nav: "agents",
+        active_tab: active_tab.to_string(),
         agent_id,
         agent_name,
         is_admin: user.is_admin,
         base_path,
+        overview: AgentOverviewStats {
+            capability_count: capabilities.len(),
+            storage_count,
+            network_request_count,
+            permissions_allow_count,
+            permissions_ask_count,
+            permissions_block_count,
+            secrets_set_count,
+            secrets_missing_count,
+        },
         capabilities,
+        storage_entries,
         builtin_policies,
         egress_entries,
         error: q.error,
@@ -1261,12 +1474,14 @@ pub async fn agent_credential_set(
         return StatusCode::FORBIDDEN.into_response();
     }
 
+    let return_to = safe_return_path(
+        form.return_to.as_deref(),
+        &base_path,
+        &format!("/agents/{agent_id}/secrets"),
+    );
+
     if form.value.is_empty() {
-        return Redirect::to(&format!(
-            "{}/agents/{}?error=secret_empty",
-            base_path, agent_id
-        ))
-        .into_response();
+        return Redirect::to(&format!("{}?error=secret_empty", return_to)).into_response();
     }
 
     let result = match form.scope.as_str() {
@@ -1288,27 +1503,15 @@ pub async fn agent_credential_set(
                 .await
         }
         _ => {
-            return Redirect::to(&format!(
-                "{}/agents/{}?error=invalid_scope",
-                base_path, agent_id
-            ))
-            .into_response();
+            return Redirect::to(&format!("{}?error=invalid_scope", return_to)).into_response();
         }
     };
 
     match result {
-        Ok(_) => Redirect::to(&format!(
-            "{}/agents/{}?success=secret_saved",
-            base_path, agent_id
-        ))
-        .into_response(),
+        Ok(_) => Redirect::to(&format!("{}?success=secret_saved", return_to)).into_response(),
         Err(e) => {
             error!("Failed to set agent credential: {e}");
-            Redirect::to(&format!(
-                "{}/agents/{}?error=secret_save_failed",
-                base_path, agent_id
-            ))
-            .into_response()
+            Redirect::to(&format!("{}?error=secret_save_failed", return_to)).into_response()
         }
     }
 }
@@ -1317,12 +1520,19 @@ pub async fn agent_credential_set(
 pub async fn agent_credential_delete(
     user: AuthUser,
     Path((agent_id, scope, cap_id, name)): Path<(String, String, String, String)>,
+    Query(q): Query<CredentialDeleteQuery>,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
         return StatusCode::FORBIDDEN.into_response();
     }
+
+    let return_to = safe_return_path(
+        q.return_to.as_deref(),
+        &base_path,
+        &format!("/agents/{agent_id}/secrets"),
+    );
 
     let result = match scope.as_str() {
         "system" => state.credentials.delete_system(&cap_id, &name).await,
@@ -1333,22 +1543,46 @@ pub async fn agent_credential_delete(
                 .await
         }
         _ => {
-            return Redirect::to(&format!(
-                "{}/agents/{}?error=invalid_scope",
-                base_path, agent_id
-            ))
-            .into_response();
+            return Redirect::to(&format!("{}?error=invalid_scope", return_to)).into_response();
         }
     };
 
     if let Err(e) = result {
         error!("Failed to delete agent credential: {e}");
     }
-    Redirect::to(&format!(
-        "{}/agents/{}?success=secret_removed",
-        base_path, agent_id
-    ))
-    .into_response()
+    Redirect::to(&format!("{}?success=secret_removed", return_to)).into_response()
+}
+
+/// Delete one persistent storage entry for the current agent.
+pub async fn agent_storage_delete(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    State(state): State<AppState>,
+    Form(form): Form<DeleteStorageForm>,
+) -> Response {
+    if user.is_admin {
+        if let Err(e) = sqlx::query("DELETE FROM agent_storage WHERE id = ? AND agent_id = ?")
+            .bind(&form.entry_id)
+            .bind(&agent_id)
+            .execute(&state.db)
+            .await
+        {
+            error!("Failed to delete agent storage entry (admin): {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    } else if let Err(e) =
+        sqlx::query("DELETE FROM agent_storage WHERE id = ? AND agent_id = ? AND user_id = ?")
+            .bind(&form.entry_id)
+            .bind(&agent_id)
+            .bind(&user.user_id)
+            .execute(&state.db)
+            .await
+    {
+        error!("Failed to delete agent storage entry (user): {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    StatusCode::OK.into_response()
 }
 
 /// Set model for a specific agent
@@ -1459,13 +1693,14 @@ pub async fn reset_tool_policy_handler(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    let return_to = safe_return_path(
+        form.return_to.as_deref(),
+        &base_path,
+        &format!("/agents/{agent_id}/permissions"),
+    );
+
     // Tell HTMX to reload the page so the UI reflects the reset state
-    (
-        StatusCode::OK,
-        [("HX-Redirect", format!("{}/agents/{agent_id}", base_path))],
-        "",
-    )
-        .into_response()
+    (StatusCode::OK, [("HX-Redirect", return_to)], "").into_response()
 }
 
 /// Update an already-installed agent to a newer marketplace version
@@ -1929,8 +2164,22 @@ pub async fn set_default_model(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Load only providers that have an API key configured (i.e. are actually usable).
-/// Bedrock is special: it uses IAM auth, so it's considered configured if it has a region.
+fn is_provider_configured_for_agent_selector(
+    provider_id: &str,
+    api_key_encrypted: Option<&str>,
+    base_url: Option<&str>,
+) -> bool {
+    let has_key = api_key_encrypted.is_some_and(|k| !k.is_empty());
+    let has_base_url = base_url.is_some_and(|u| !u.is_empty());
+
+    // Most providers need a key. Bedrock and Ollama can be usable without one.
+    has_key || ((provider_id == "bedrock" || provider_id == "ollama") && has_base_url)
+}
+
+/// Load only providers that are actually usable in the agents UI.
+/// Most providers require an API key.
+/// Bedrock is considered configured if it has a region set in `base_url`.
+/// Ollama is considered configured if it has a base URL (API key is optional).
 async fn load_provider_options(state: &AppState) -> Vec<ProviderOption> {
     sqlx::query_as::<_, (String, String, Option<String>, Option<String>)>(
         "SELECT id, display_name, api_key_encrypted, base_url FROM llm_providers WHERE active = 1 ORDER BY id",
@@ -1940,11 +2189,7 @@ async fn load_provider_options(state: &AppState) -> Vec<ProviderOption> {
     .unwrap_or_default()
     .into_iter()
     .filter(|(id, _, key, base_url)| {
-        let has_key = key.as_ref().map_or(false, |k| !k.is_empty());
-        let has_region = base_url.as_ref().map_or(false, |u| !u.is_empty());
-        // Bedrock uses IAM credentials (not an API key in our DB), so treat
-        // it as configured if it has a region set.
-        has_key || (id == "bedrock" && has_region)
+        is_provider_configured_for_agent_selector(id, key.as_deref(), base_url.as_deref())
     })
     .map(|(id, display_name, _, _)| ProviderOption { id, display_name })
     .collect()
@@ -1997,4 +2242,59 @@ fn ratings_api_base_url(marketplace_url: &str) -> Option<String> {
     let marker = "/marketplace/agents";
     let idx = trimmed.find(marker)?;
     Some(trimmed[..idx].to_string())
+}
+
+fn safe_return_path(return_to: Option<&str>, base_path: &str, fallback_suffix: &str) -> String {
+    let fallback = format!("{base_path}{fallback_suffix}");
+    let Some(path) = return_to else {
+        return fallback;
+    };
+    if path.starts_with(base_path) {
+        path.to_string()
+    } else {
+        fallback
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_provider_configured_for_agent_selector;
+
+    #[test]
+    fn openai_requires_api_key() {
+        assert!(!is_provider_configured_for_agent_selector(
+            "openai",
+            None,
+            Some("https://api.openai.com")
+        ));
+        assert!(is_provider_configured_for_agent_selector(
+            "openai",
+            Some("encrypted-key"),
+            None
+        ));
+    }
+
+    #[test]
+    fn bedrock_works_with_region_even_without_key() {
+        assert!(is_provider_configured_for_agent_selector(
+            "bedrock",
+            None,
+            Some("eu-central-1")
+        ));
+        assert!(!is_provider_configured_for_agent_selector(
+            "bedrock", None, None
+        ));
+    }
+
+    #[test]
+    fn ollama_works_with_base_url_even_without_key() {
+        assert!(is_provider_configured_for_agent_selector(
+            "ollama",
+            None,
+            Some("http://localhost:11434")
+        ));
+        assert!(!is_provider_configured_for_agent_selector(
+            "ollama", None, None
+        ));
+    }
 }

@@ -313,6 +313,22 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/agents/default-model", post(agents::set_default_model))
         .route("/agents/{agent_id}", get(agents::agent_detail))
         .route(
+            "/agents/{agent_id}/storage",
+            get(agents::agent_detail_storage),
+        )
+        .route(
+            "/agents/{agent_id}/network",
+            get(agents::agent_detail_network),
+        )
+        .route(
+            "/agents/{agent_id}/permissions",
+            get(agents::agent_detail_permissions),
+        )
+        .route(
+            "/agents/{agent_id}/secrets",
+            get(agents::agent_detail_secrets),
+        )
+        .route(
             "/agents/{agent_id}/setup",
             get(agents::setup_wizard).post(agents::setup_submit),
         )
@@ -348,6 +364,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route(
             "/agents/{agent_id}/credential/{scope}/{cap_id}/{name}",
             delete(agents::agent_credential_delete),
+        )
+        .route(
+            "/agents/{agent_id}/storage/delete",
+            post(agents::agent_storage_delete),
         )
         .route(
             "/agents/models/{provider_id}",

@@ -4,15 +4,13 @@
 
 {% block body %}
 <div class="flex-1 overflow-y-auto">
-  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+  <div class="max-w-5xl mx-auto px-6 py-8 space-y-6 animate-fadein">
 
-    <!-- Back link -->
     <a href="{{ base_path }}/agents" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       <span data-i18n="agents.back">Back to Agents</span>
     </a>
 
-    <!-- Header -->
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-coral/10 border border-coral/20 flex items-center justify-center flex-shrink-0">
@@ -23,6 +21,14 @@
           <p class="text-sm text-txt-muted">{{ agent_id }}</p>
         </div>
       </div>
+    </div>
+
+    <div class="flex flex-wrap gap-2 p-1 rounded-xl bg-surface-raised border border-edge">
+      <a href="{{ base_path }}/agents/{{ agent_id }}" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "overview" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.overview">Overview</a>
+      <a href="{{ base_path }}/agents/{{ agent_id }}/storage" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "storage" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.storage">Storage</a>
+      <a href="{{ base_path }}/agents/{{ agent_id }}/secrets" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "secrets" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.secrets">Secrets</a>
+      <a href="{{ base_path }}/agents/{{ agent_id }}/network" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "network" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.network">Network</a>
+      <a href="{{ base_path }}/agents/{{ agent_id }}/permissions" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "permissions" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.permissions">Permissions</a>
     </div>
 
     {% if let Some(err) = error %}
@@ -44,45 +50,223 @@
     </div>
     {% endif %}
 
-    <!-- Capabilities (infrastructure info) -->
-    {% for cap in capabilities %}
-    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
-        <span class="text-sm font-semibold text-txt-heading">{{ cap.id }}</span>
-        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full
-          {% if cap.network_mode == "none" %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
-          {% else if cap.network_mode == "allowlist" %}bg-amber-500/10 text-amber-400 border border-amber-500/20
-          {% else %}bg-red-500/10 text-red-400 border border-red-500/20{% endif %}">
-          <span data-i18n="agents.detail.network">Network</span>: {{ cap.network_mode }}
-        </span>
+    {% if active_tab == "overview" %}
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-txt-heading" data-i18n="agents.detail.overview.title">Overview</h2>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.overview.desc">A quick status snapshot. Use tabs for full details.</p>
       </div>
-      <div class="p-5 space-y-4">
-        <!-- Network allowlist -->
-        {% if !cap.allowed_hosts.is_empty() %}
-        <div>
-          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.allowedhosts">Allowed Hosts</p>
-          <div class="flex flex-wrap gap-1.5">
-            {% for host in cap.allowed_hosts %}
-            <span class="inline-flex px-2 py-0.5 rounded-md bg-surface-alt text-xs text-txt font-mono">{{ host }}</span>
-            {% endfor %}
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div class="bg-surface-raised border border-edge rounded-xl p-4">
+          <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.capabilities">Capabilities</p>
+          <p class="mt-2 text-2xl font-bold text-txt-heading">{{ overview.capability_count }}</p>
+        </div>
+        <div class="bg-surface-raised border border-edge rounded-xl p-4">
+          <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.storage_entries">Stored Entries</p>
+          <p class="mt-2 text-2xl font-bold text-txt-heading">{{ overview.storage_count }}</p>
+        </div>
+        <div class="bg-surface-raised border border-edge rounded-xl p-4">
+          <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.network_requests">Network Requests</p>
+          <p class="mt-2 text-2xl font-bold text-txt-heading">{{ overview.network_request_count }}</p>
+        </div>
+        <div class="bg-surface-raised border border-edge rounded-xl p-4">
+          <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.secrets">Secrets</p>
+          <p class="mt-2 text-2xl font-bold text-txt-heading">{{ overview.secrets_set_count }}/{{ overview.secrets_set_count + overview.secrets_missing_count }}</p>
+        </div>
+      </div>
+
+      <div class="bg-surface-raised border border-edge rounded-2xl p-5 space-y-3">
+        <h3 class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.overview.permissions_summary">Permissions Summary</h3>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <span class="inline-flex px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><span data-i18n="agents.policy.allow">Allow</span>: {{ overview.permissions_allow_count }}</span>
+          <span class="inline-flex px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20"><span data-i18n="agents.policy.ask">Ask</span>: {{ overview.permissions_ask_count }}</span>
+          <span class="inline-flex px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20"><span data-i18n="agents.policy.block">Block</span>: {{ overview.permissions_block_count }}</span>
+        </div>
+        <div class="pt-2 flex flex-wrap gap-2">
+          <a href="{{ base_path }}/agents/{{ agent_id }}/storage" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_storage">Open Storage</a>
+          <a href="{{ base_path }}/agents/{{ agent_id }}/network" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_network">Open Network</a>
+          <a href="{{ base_path }}/agents/{{ agent_id }}/secrets" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_secrets">Open Secrets</a>
+          <a href="{{ base_path }}/agents/{{ agent_id }}/permissions" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_permissions">Open Permissions</a>
+        </div>
+      </div>
+
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.resources">Resources</span>
+        </div>
+        <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {% for cap in capabilities %}
+          <div class="bg-surface-alt/30 rounded-xl p-3 space-y-2">
+            <p class="text-sm font-semibold text-txt-heading">{{ cap.id }}</p>
+            <div class="grid grid-cols-2 gap-2 text-xs text-txt-muted">
+              <span><span data-i18n="agents.detail.memory">Memory</span>: {{ cap.max_memory_mb }}MB</span>
+              <span><span data-i18n="agents.detail.cpu">CPU</span>: {{ cap.max_cpu_fraction }}</span>
+              <span><span data-i18n="agents.detail.pids">PIDs</span>: {{ cap.pids_limit }}</span>
+              <span><span data-i18n="agents.detail.fs">FS</span>: {{ cap.filesystem }}</span>
+            </div>
           </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if active_tab == "storage" %}
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-txt-heading" data-i18n="agents.detail.section.storage">Storage</h2>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.section.storage_desc">Values the agent has saved persistently with store_set.</p>
+      </div>
+
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.section.storage">Storage</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.detail.storage.last500">Last 500 entries</span>
+        </div>
+        {% if storage_entries.is_empty() %}
+        <div class="p-5">
+          <p class="text-sm text-txt-muted text-center py-6" data-i18n="agents.detail.storage.empty">No stored values yet.</p>
+        </div>
+        {% else %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="border-b border-edge text-left">
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.storage.updated">Updated</th>
+                {% if is_admin %}
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.storage.user">User</th>
+                {% endif %}
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.storage.key">Key</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.storage.value">Value</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.storage.actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in storage_entries %}
+              <tr class="border-b border-edge/50 hover:bg-surface-alt/20">
+                <td class="px-5 py-2 text-txt-muted whitespace-nowrap">{{ entry.updated_at }}</td>
+                {% if is_admin %}
+                <td class="px-5 py-2 text-txt-muted font-mono">{{ entry.user_id }}</td>
+                {% endif %}
+                <td class="px-5 py-2 text-txt font-mono align-top">{{ entry.key }}</td>
+                <td class="px-5 py-2 text-txt font-mono align-top break-all">{{ entry.value }}</td>
+                <td class="px-5 py-2">
+                  <button
+                    class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-3 py-1.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                    data-i18n="agents.detail.storage.delete"
+                    hx-post="{{ base_path }}/agents/{{ agent_id }}/storage/delete"
+                    hx-vals='{"entry_id": "{{ entry.id }}"}'
+                    hx-target="closest tr"
+                    hx-swap="delete">Delete</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
         {% endif %}
+      </div>
+    </section>
+    {% endif %}
 
-        <!-- Resources -->
-        <div>
-          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.resources">Resources</p>
-          <div class="flex flex-wrap gap-3 text-xs text-txt-muted">
-            <span><span data-i18n="agents.detail.memory">Memory</span>: {{ cap.max_memory_mb }}MB</span>
-            <span><span data-i18n="agents.detail.cpu">CPU</span>: {{ cap.max_cpu_fraction }}</span>
-            <span><span data-i18n="agents.detail.pids">PIDs</span>: {{ cap.pids_limit }}</span>
-            <span><span data-i18n="agents.detail.fs">FS</span>: {{ cap.filesystem }}</span>
+    {% if active_tab == "network" %}
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-txt-heading" data-i18n="agents.detail.section.network">Network</h2>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.section.network_desc">Connectivity limits, host allowlists, and recent outbound requests.</p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {% for cap in capabilities %}
+        <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+            <span class="text-sm font-semibold text-txt-heading">{{ cap.id }}</span>
+            <span class="text-[10px] font-medium px-2 py-0.5 rounded-full
+              {% if cap.network_mode == "none" %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20
+              {% else if cap.network_mode == "allowlist" %}bg-amber-500/10 text-amber-400 border border-amber-500/20
+              {% else %}bg-red-500/10 text-red-400 border border-red-500/20{% endif %}">
+              <span data-i18n="agents.detail.network">Network</span>: {{ cap.network_mode }}
+            </span>
+          </div>
+          <div class="p-5 space-y-4">
+            {% if !cap.allowed_hosts.is_empty() %}
+            <div>
+              <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.allowedhosts">Allowed Hosts</p>
+              <div class="flex flex-wrap gap-1.5">
+                {% for host in cap.allowed_hosts %}
+                <span class="inline-flex px-2 py-0.5 rounded-md bg-surface-alt text-xs text-txt font-mono">{{ host }}</span>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+
           </div>
         </div>
+        {% endfor %}
+      </div>
 
-        {# ── Secrets declared by this capability ─────────────────────── #}
-        {% if !cap.credentials.is_empty() %}
-        <div>
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.networkactivity">Network Activity</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.detail.last100">Last 100 requests</span>
+        </div>
+        {% if egress_entries.is_empty() %}
+        <div class="p-5">
+          <p class="text-sm text-txt-muted text-center py-6" data-i18n="agents.detail.norequests">No network requests recorded yet.</p>
+        </div>
+        {% else %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="border-b border-edge text-left">
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.time">Time</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.capability">Capability</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.method">Method</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.host">Host</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.port">Port</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.status">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in egress_entries %}
+              <tr class="border-b border-edge/50 hover:bg-surface-alt/20">
+                <td class="px-5 py-2 text-txt-muted whitespace-nowrap">{{ entry.created_at }}</td>
+                <td class="px-5 py-2 text-txt font-mono">{{ entry.capability_id }}</td>
+                <td class="px-5 py-2 text-txt">{{ entry.method }}</td>
+                <td class="px-5 py-2 text-txt font-mono">{{ entry.host }}</td>
+                <td class="px-5 py-2 text-txt-muted">{{ entry.port }}</td>
+                <td class="px-5 py-2">
+                  {% if entry.allowed %}
+                  <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-i18n="agents.detail.allowed">Allowed</span>
+                  {% else %}
+                  <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20" data-i18n="agents.detail.denied">Denied</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if active_tab == "secrets" %}
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-txt-heading" data-i18n="agents.detail.section.secrets">Secrets</h2>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.section.secrets_desc">Credentials this agent can use to access external services.</p>
+      </div>
+
+      {% for cap in capabilities %}
+      {% if !cap.credentials.is_empty() %}
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge">
+          <p class="text-sm font-semibold text-txt-heading">{{ cap.id }}</p>
+        </div>
+        <div class="p-5">
           <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.secrets">Secrets</p>
           <div class="space-y-2">
             {% for cred in cap.credentials %}
@@ -126,6 +310,7 @@
                 <input type="hidden" name="capability_id" value="{{ cred.capability_id }}" />
                 <input type="hidden" name="credential_name" value="{{ cred.name }}" />
                 <input type="hidden" name="scope" value="{{ cred.scope }}" />
+                <input type="hidden" name="return_to" value="{{ base_path }}/agents/{{ agent_id }}/secrets" />
                 <div class="flex-1">
                   <input name="value" type="password" required
                          placeholder="{% if cred.is_set %}&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;{% endif %}"
@@ -138,8 +323,7 @@
                 {% if cred.is_set %}
                 <button type="button"
                         class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-3 py-2 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
-                        hx-delete="{{ base_path }}/agents/{{ agent_id }}/credential/{{ cred.scope }}/{{ cred.capability_id }}/{{ cred.name }}"
-                        hx-confirm="Remove this secret?"
+                        hx-delete="{{ base_path }}/agents/{{ agent_id }}/credential/{{ cred.scope }}/{{ cred.capability_id }}/{{ cred.name }}?return_to={{ base_path }}/agents/{{ agent_id }}/secrets"
                         data-i18n="agents.detail.secret_remove">Remove</button>
                 {% endif %}
               </form>
@@ -148,327 +332,150 @@
             {% endfor %}
           </div>
         </div>
-        {% endif %}
-      </div>
-    </div>
-    {% endfor %}
-
-    {# ── ADMIN: Default Permissions (global) ──────────────────────────── #}
-    {% if is_admin %}
-    <div class="bg-surface-raised border border-amber-500/20 rounded-2xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-amber-500/20 flex items-center gap-2.5">
-        <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
-        <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.global_perms">Default Permissions</span>
-        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20" data-i18n="agents.detail.global_perms_badge">For everyone</span>
-      </div>
-      <div class="p-5 space-y-4">
-        <p class="text-xs text-txt-muted leading-relaxed" data-i18n="agents.detail.global_perms_desc">
-          These permissions apply to all users by default. Individual users can override them for their own account.
-        </p>
-
-        {# Capability tools #}
-        {% for cap in capabilities %}
-        {% if !cap.tools.is_empty() %}
-        <div>
-          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">{{ cap.id }}</p>
-          <div class="space-y-1.5">
-            {% for tool in cap.tools %}
-            <div class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl flex-wrap gap-2">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm text-txt-heading font-medium truncate">{{ tool.name }}</div>
-                <div class="text-xs text-txt-muted mt-0.5 line-clamp-2">{{ tool.description }}</div>
-              </div>
-              <div class="flex items-center gap-1 shrink-0">
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="global_{{ tool.capability_id }}_{{ tool.name }}" value="allow"
-                         {% if tool.global_default == "allow" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "allow", "scope": "global"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.allow">Allow</span>
-                </label>
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="global_{{ tool.capability_id }}_{{ tool.name }}" value="ask"
-                         {% if tool.global_default == "ask" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "ask", "scope": "global"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.ask">Ask</span>
-                </label>
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="global_{{ tool.capability_id }}_{{ tool.name }}" value="block"
-                         {% if tool.global_default == "block" || tool.global_default == "not set" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "block", "scope": "global"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.block">Block</span>
-                </label>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-        {% endfor %}
-
-        {# Built-in tools #}
-        {% if !builtin_policies.is_empty() %}
-        <div>
-          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.builtintools">Built-in Tools</p>
-          <div class="space-y-1.5">
-            {% for bp in builtin_policies %}
-             <div class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl flex-wrap gap-2">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-txt-heading truncate" data-i18n="agents.builtin.{{ bp.tool_name }}">{{ bp.display_name }}</div>
-                <div class="text-xs text-txt-muted mt-0.5 line-clamp-2" data-i18n="agents.builtin.{{ bp.tool_name }}.desc">{{ bp.description }}</div>
-              </div>
-              <div class="flex items-center gap-1 shrink-0">
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="global_{{ bp.tool_name }}" value="allow"
-                         {% if bp.global_default == "allow" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "allow", "scope": "global"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.allow">Allow</span>
-                </label>
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="global_{{ bp.tool_name }}" value="ask"
-                         {% if bp.global_default == "ask" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "ask", "scope": "global"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.ask">Ask</span>
-                </label>
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="global_{{ bp.tool_name }}" value="block"
-                         {% if bp.global_default == "block" || bp.global_default == "not set" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "block", "scope": "global"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.block">Block</span>
-                </label>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-    {% endif %}
-
-    {# ── Your Permissions (per-user overrides) ────────────────────────── #}
-    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-edge flex items-center gap-2.5">
-        <svg class="w-4 h-4 text-txt-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.your_perms">Your Permissions</span>
-      </div>
-      <div class="p-5 space-y-4">
-        <p class="text-xs text-txt-muted leading-relaxed" data-i18n="agents.detail.your_perms_desc">
-          Personal overrides for your account only. Tools without an override use the default.
-        </p>
-
-        {# Capability tools #}
-        {% for cap in capabilities %}
-        {% if !cap.tools.is_empty() %}
-        <div>
-          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">{{ cap.id }}</p>
-          <div class="space-y-1.5">
-            {% for tool in cap.tools %}
-            <div id="tool_{{ tool.capability_id }}_{{ tool.name }}" class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl gap-4">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm text-txt-heading font-medium truncate">{{ tool.name }}</div>
-                <div class="flex items-center gap-2 mt-1">
-                  {% if tool.has_override %}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20" data-i18n="agents.policy.user_override">Custom</span>
-                  <button
-                    hx-post="{{ base_path }}/agents/{{ agent_id }}/policy/reset"
-                    hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}"}'
-                    hx-swap="none"
-                    class="text-[10px] text-coral hover:text-coral/80 transition-colors underline underline-offset-2"
-                    data-i18n="agents.policy.reset">Reset to default</button>
-                  {% else %}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-alt text-txt-muted border border-edge" data-i18n="agents.policy.using_default">Using default</span>
-                  <span class="text-[10px] text-txt-muted opacity-70">
-                    (<span class="{% if tool.global_default == "allow" %}text-emerald-400{% else if tool.global_default == "ask" %}text-amber-400{% else %}text-red-400{% endif %}">{{ tool.global_default }}</span>)
-                  </span>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="flex items-center gap-1 shrink-0">
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="user_{{ tool.capability_id }}_{{ tool.name }}" value="allow"
-                         {% if tool.policy == "allow" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "allow"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.allow">Allow</span>
-                </label>
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="user_{{ tool.capability_id }}_{{ tool.name }}" value="ask"
-                         {% if tool.policy == "ask" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "ask"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.ask">Ask</span>
-                </label>
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="user_{{ tool.capability_id }}_{{ tool.name }}" value="block"
-                         {% if tool.policy == "block" || tool.policy == "not set" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "block"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.block">Block</span>
-                </label>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-        {% endfor %}
-
-        {# Built-in tools #}
-        {% if !builtin_policies.is_empty() %}
-        <div>
-          <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.builtintools">Built-in Tools</p>
-          <div class="space-y-1.5">
-            {% for bp in builtin_policies %}
-             <div id="builtin_{{ bp.tool_name }}" class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl gap-4">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-txt-heading truncate" data-i18n="agents.builtin.{{ bp.tool_name }}">{{ bp.display_name }}</div>
-                <div class="flex items-center gap-2 mt-1">
-                  {% if bp.has_override %}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20" data-i18n="agents.policy.user_override">Custom</span>
-                  <button
-                    hx-post="{{ base_path }}/agents/{{ agent_id }}/policy/reset"
-                    hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}"}'
-                    hx-swap="none"
-                    class="text-[10px] text-coral hover:text-coral/80 transition-colors underline underline-offset-2"
-                    data-i18n="agents.policy.reset">Reset to default</button>
-                  {% else %}
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-alt text-txt-muted border border-edge" data-i18n="agents.policy.using_default">Using default</span>
-                  <span class="text-[10px] text-txt-muted opacity-70">
-                    (<span class="{% if bp.global_default == "allow" %}text-emerald-400{% else if bp.global_default == "ask" %}text-amber-400{% else %}text-red-400{% endif %}">{{ bp.global_default }}</span>)
-                  </span>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="flex items-center gap-1 shrink-0">
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="user_{{ bp.tool_name }}" value="allow"
-                         {% if bp.policy == "allow" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "allow"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.allow">Allow</span>
-                </label>
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="user_{{ bp.tool_name }}" value="ask"
-                         {% if bp.policy == "ask" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "ask"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.ask">Ask</span>
-                </label>
-                <label class="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name="user_{{ bp.tool_name }}" value="block"
-                         {% if bp.policy == "block" || bp.policy == "not set" %}checked{% endif %}
-                         hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
-                         hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "block"}'
-                         hx-swap="none"
-                         class="sr-only peer" />
-                  <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge
-                                peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30
-                                text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.block">Block</span>
-                </label>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-
-    <!-- Egress Log -->
-    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
-      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
-        <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.networkactivity">Network Activity</span>
-        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.detail.last100">Last 100 requests</span>
-      </div>
-      {% if egress_entries.is_empty() %}
-      <div class="p-5">
-        <p class="text-sm text-txt-muted text-center py-6" data-i18n="agents.detail.norequests">No network requests recorded yet.</p>
-      </div>
-      {% else %}
-      <div class="overflow-x-auto">
-        <table class="w-full text-xs">
-          <thead>
-            <tr class="border-b border-edge text-left">
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.time">Time</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.capability">Capability</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.method">Method</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.host">Host</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.port">Port</th>
-              <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.status">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for entry in egress_entries %}
-            <tr class="border-b border-edge/50 hover:bg-surface-alt/20">
-              <td class="px-5 py-2 text-txt-muted whitespace-nowrap">{{ entry.created_at }}</td>
-              <td class="px-5 py-2 text-txt font-mono">{{ entry.capability_id }}</td>
-              <td class="px-5 py-2 text-txt">{{ entry.method }}</td>
-              <td class="px-5 py-2 text-txt font-mono">{{ entry.host }}</td>
-              <td class="px-5 py-2 text-txt-muted">{{ entry.port }}</td>
-              <td class="px-5 py-2">
-                {% if entry.allowed %}
-                <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-i18n="agents.detail.allowed">Allowed</span>
-                {% else %}
-                <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20" data-i18n="agents.detail.denied">Denied</span>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
       </div>
       {% endif %}
-    </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if active_tab == "permissions" %}
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-txt-heading" data-i18n="agents.detail.section.permissions">Permissions</h2>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.section.permissions_desc">Tool access controls for this agent.</p>
+      </div>
+
+      {% if is_admin %}
+      <div class="bg-surface-raised border border-amber-500/20 rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-amber-500/20 flex items-center gap-2.5">
+          <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.global_perms">Default Permissions</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20" data-i18n="agents.detail.global_perms_badge">For everyone</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-txt-muted leading-relaxed" data-i18n="agents.detail.global_perms_desc">
+            These permissions apply to all users by default. Individual users can override them for their own account.
+          </p>
+
+          {% for cap in capabilities %}
+          {% if !cap.tools.is_empty() %}
+          <div>
+            <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">{{ cap.id }}</p>
+            <div class="space-y-1.5">
+              {% for tool in cap.tools %}
+              <div class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl flex-wrap gap-2">
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm text-txt-heading font-medium truncate">{{ tool.name }}</div>
+                  <div class="text-xs text-txt-muted mt-0.5 line-clamp-2">{{ tool.description }}</div>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <label class="inline-flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="global_{{ tool.capability_id }}_{{ tool.name }}" value="allow"
+                           {% if tool.global_default == "allow" %}checked{% endif %}
+                           hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
+                           hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "allow", "scope": "global"}'
+                           hx-swap="none"
+                           class="sr-only peer" />
+                    <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30 text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.allow">Allow</span>
+                  </label>
+                  <label class="inline-flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="global_{{ tool.capability_id }}_{{ tool.name }}" value="ask"
+                           {% if tool.global_default == "ask" %}checked{% endif %}
+                           hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
+                           hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "ask", "scope": "global"}'
+                           hx-swap="none"
+                           class="sr-only peer" />
+                    <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30 text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.ask">Ask</span>
+                  </label>
+                  <label class="inline-flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="global_{{ tool.capability_id }}_{{ tool.name }}" value="block"
+                           {% if tool.global_default == "block" || tool.global_default == "not set" %}checked{% endif %}
+                           hx-post="{{ base_path }}/agents/{{ agent_id }}/policy"
+                           hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "block", "scope": "global"}'
+                           hx-swap="none"
+                           class="sr-only peer" />
+                    <span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30 text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.block">Block</span>
+                  </label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center gap-2.5">
+          <svg class="w-4 h-4 text-txt-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.your_perms">Your Permissions</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-txt-muted leading-relaxed" data-i18n="agents.detail.your_perms_desc">Personal overrides for your account only. Tools without an override use the default.</p>
+
+          {% for cap in capabilities %}
+          {% if !cap.tools.is_empty() %}
+          <div>
+            <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5">{{ cap.id }}</p>
+            <div class="space-y-1.5">
+              {% for tool in cap.tools %}
+              <div id="tool_{{ tool.capability_id }}_{{ tool.name }}" class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl gap-4">
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm text-txt-heading font-medium truncate">{{ tool.name }}</div>
+                  <div class="flex items-center gap-2 mt-1">
+                    {% if tool.has_override %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20" data-i18n="agents.policy.user_override">Custom</span>
+                    <button hx-post="{{ base_path }}/agents/{{ agent_id }}/policy/reset" hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "return_to": "{{ base_path }}/agents/{{ agent_id }}/permissions"}' hx-swap="none" class="text-[10px] text-coral hover:text-coral/80 transition-colors underline underline-offset-2" data-i18n="agents.policy.reset">Reset to default</button>
+                    {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-alt text-txt-muted border border-edge" data-i18n="agents.policy.using_default">Using default</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <label class="inline-flex items-center gap-1 cursor-pointer"><input type="radio" name="user_{{ tool.capability_id }}_{{ tool.name }}" value="allow" {% if tool.policy == "allow" %}checked{% endif %} hx-post="{{ base_path }}/agents/{{ agent_id }}/policy" hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "allow"}' hx-swap="none" class="sr-only peer" /><span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30 text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.allow">Allow</span></label>
+                  <label class="inline-flex items-center gap-1 cursor-pointer"><input type="radio" name="user_{{ tool.capability_id }}_{{ tool.name }}" value="ask" {% if tool.policy == "ask" %}checked{% endif %} hx-post="{{ base_path }}/agents/{{ agent_id }}/policy" hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "ask"}' hx-swap="none" class="sr-only peer" /><span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30 text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.ask">Ask</span></label>
+                  <label class="inline-flex items-center gap-1 cursor-pointer"><input type="radio" name="user_{{ tool.capability_id }}_{{ tool.name }}" value="block" {% if tool.policy == "block" || tool.policy == "not set" %}checked{% endif %} hx-post="{{ base_path }}/agents/{{ agent_id }}/policy" hx-vals='{"capability_id": "{{ tool.capability_id }}", "tool_name": "{{ tool.name }}", "policy": "block"}' hx-swap="none" class="sr-only peer" /><span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30 text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.block">Block</span></label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          {% endfor %}
+
+          {% if !builtin_policies.is_empty() %}
+          <div>
+            <p class="text-[11px] font-medium text-txt-muted uppercase tracking-wide mb-1.5" data-i18n="agents.detail.builtintools">Built-in Tools</p>
+            <div class="space-y-1.5">
+              {% for bp in builtin_policies %}
+              <div id="builtin_{{ bp.tool_name }}" class="flex items-center justify-between py-2.5 px-3 bg-surface-alt/30 rounded-xl gap-4">
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-txt-heading truncate" data-i18n="agents.builtin.{{ bp.tool_name }}">{{ bp.display_name }}</div>
+                  <div class="flex items-center gap-2 mt-1">
+                    {% if bp.has_override %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20" data-i18n="agents.policy.user_override">Custom</span>
+                    <button hx-post="{{ base_path }}/agents/{{ agent_id }}/policy/reset" hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "return_to": "{{ base_path }}/agents/{{ agent_id }}/permissions"}' hx-swap="none" class="text-[10px] text-coral hover:text-coral/80 transition-colors underline underline-offset-2" data-i18n="agents.policy.reset">Reset to default</button>
+                    {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-alt text-txt-muted border border-edge" data-i18n="agents.policy.using_default">Using default</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <label class="inline-flex items-center gap-1 cursor-pointer"><input type="radio" name="user_{{ bp.tool_name }}" value="allow" {% if bp.policy == "allow" %}checked{% endif %} hx-post="{{ base_path }}/agents/{{ agent_id }}/policy" hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "allow"}' hx-swap="none" class="sr-only peer" /><span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge peer-checked:bg-emerald-500/15 peer-checked:text-emerald-400 peer-checked:border-emerald-500/30 text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.allow">Allow</span></label>
+                  <label class="inline-flex items-center gap-1 cursor-pointer"><input type="radio" name="user_{{ bp.tool_name }}" value="ask" {% if bp.policy == "ask" %}checked{% endif %} hx-post="{{ base_path }}/agents/{{ agent_id }}/policy" hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "ask"}' hx-swap="none" class="sr-only peer" /><span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge peer-checked:bg-amber-500/15 peer-checked:text-amber-400 peer-checked:border-amber-500/30 text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.ask">Ask</span></label>
+                  <label class="inline-flex items-center gap-1 cursor-pointer"><input type="radio" name="user_{{ bp.tool_name }}" value="block" {% if bp.policy == "block" || bp.policy == "not set" %}checked{% endif %} hx-post="{{ base_path }}/agents/{{ agent_id }}/policy" hx-vals='{"capability_id": "{{ bp.capability_id }}", "tool_name": "{{ bp.tool_name }}", "policy": "block"}' hx-swap="none" class="sr-only peer" /><span class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge peer-checked:bg-red-500/15 peer-checked:text-red-400 peer-checked:border-red-500/30 text-txt-muted hover:text-txt-heading transition-all" data-i18n="agents.policy.block">Block</span></label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+    {% endif %}
 
   </div>
 </div>

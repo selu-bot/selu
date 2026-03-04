@@ -28,6 +28,64 @@
 #     the user or developer experience.
 
 entries:
+  - id: 2026-03-04-agent-detail-subpages
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Agent detail is now split into focused subpages (Overview, Storage, Secrets, Network, Permissions)"
+    affected_files:
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/credentials
+    details: |
+      The previous single long /agents/{id} page was restructured into tabbed
+      subpages:
+      - /agents/{id} (Overview)
+      - /agents/{id}/storage
+      - /agents/{id}/secrets
+      - /agents/{id}/network
+      - /agents/{id}/permissions
+
+      This reduces cognitive load by showing one concern per page.
+      Actions related to permissions and credentials now keep users on the
+      Permissions subpage instead of navigating back to Overview.
+      Capability resource limits (memory, CPU, PIDs, filesystem) were also
+      moved from the Network page into Overview for a faster at-a-glance
+      summary.
+
+  - id: 2026-03-04-agent-detail-storage-section
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Agent detail now has separate Network, Storage, and Permissions sections, including storage inspection and delete actions"
+    affected_files:
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/credentials
+    details: |
+      The /agents/{id} detail page was reorganized into clearer sections:
+      Network, Storage, and Permissions.
+
+      A new Storage section now lists persistent key-value entries saved by
+      agents through store_* built-in tools. Each row shows key, value, and
+      timestamp; admins also see the owning user. Users can delete entries
+      directly from the page.
+
+      Existing permissions controls remain but are grouped under a dedicated
+      Permissions section alongside credential management to reduce clutter.
+
   - id: 2026-03-03-agent-update-background-progress
     date: "2026-03-03"
     pr:
