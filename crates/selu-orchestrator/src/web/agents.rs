@@ -14,6 +14,10 @@ use crate::agents::{
     marketplace::{self, MarketplaceEntry},
     model,
 };
+use crate::capabilities::discovery::{
+    load_discovered_tools, sync_dynamic_tools_for_agent, sync_dynamic_tools_for_capability,
+};
+use crate::capabilities::manifest::ToolSource;
 use crate::state::AppState;
 use crate::web::auth::AuthUser;
 use crate::web::{BasePath, prefixed_redirect};
@@ -122,6 +126,7 @@ struct AgentSetupTemplate {
     agent_name: String,
     steps: Vec<SetupStepView>,
     tool_policies: Vec<ToolPolicyView>,
+    discovery_warning: Option<String>,
     providers: Vec<ProviderOption>,
 }
 
@@ -522,6 +527,8 @@ pub async fn install_agent(
         &state.db,
         &state.agents,
         &docker,
+        &state.capabilities,
+        &state.credentials,
     )
     .await
     {
@@ -530,7 +537,7 @@ pub async fn install_agent(
             let has_tools = agent_def
                 .capability_manifests
                 .values()
-                .any(|m| !m.tools.is_empty());
+                .any(|m| !m.tools.is_empty() || m.tool_source == ToolSource::Dynamic);
             if agent_def.install_steps.is_empty() && !has_tools {
                 prefixed_redirect(&base_path, "/agents").into_response()
             } else {
@@ -587,8 +594,36 @@ pub async fn setup_wizard(
 
     // Build tool policy views from capability manifests
     let mut tool_policies: Vec<ToolPolicyView> = Vec::new();
+    let mut discovery_failed_caps: Vec<String> = Vec::new();
     for (cap_id, manifest) in &agent_def.capability_manifests {
-        for tool in &manifest.tools {
+        let tools = if manifest.tool_source == ToolSource::Dynamic {
+            if let Err(e) = sync_dynamic_tools_for_capability(
+                &state.db,
+                &state.capabilities,
+                &state.credentials,
+                &agent_id,
+                cap_id,
+                manifest,
+                &agent_def.capability_manifests,
+            )
+            .await
+            {
+                error!(
+                    agent_id = %agent_id,
+                    capability_id = %cap_id,
+                    "Dynamic tool discovery failed in setup: {e}"
+                );
+                discovery_failed_caps.push(cap_id.clone());
+            }
+
+            load_discovered_tools(&state.db, &agent_id, cap_id)
+                .await
+                .unwrap_or_default()
+        } else {
+            manifest.tools.clone()
+        };
+
+        for tool in &tools {
             let key = format!("{}_{}", cap_id, tool.name).replace('-', "_");
             tool_policies.push(ToolPolicyView {
                 key,
@@ -637,6 +672,11 @@ pub async fn setup_wizard(
         agent_name: name,
         steps,
         tool_policies,
+        discovery_warning: if discovery_failed_caps.is_empty() {
+            None
+        } else {
+            Some(discovery_failed_caps.join(", "))
+        },
         providers,
     })
     .render()
@@ -723,6 +763,15 @@ pub async fn setup_submit(
 
     // Process tool policies: extract policy_cap_*, policy_tool_*, policy_val_* fields
     // These are saved as GLOBAL defaults (not per-user) — they apply to all users.
+    sync_dynamic_tools_for_agent(
+        &state.db,
+        &state.capabilities,
+        &state.credentials,
+        &agent_id,
+        &agent_def.capability_manifests,
+    )
+    .await;
+
     {
         use crate::permissions::tool_policy::{self, ToolPolicy};
 
@@ -956,8 +1005,15 @@ pub async fn agent_detail(
             crate::capabilities::manifest::FilesystemPolicy::Workspace => "workspace",
         };
 
-        let tools: Vec<ToolView> = manifest
-            .tools
+        let tool_defs = if manifest.tool_source == ToolSource::Dynamic {
+            load_discovered_tools(&state.db, &agent_id, cap_id)
+                .await
+                .unwrap_or_default()
+        } else {
+            manifest.tools.clone()
+        };
+
+        let tools: Vec<ToolView> = tool_defs
             .iter()
             .map(|t| {
                 let key = (cap_id.clone(), t.name.clone());
@@ -1529,6 +1585,7 @@ async fn run_agent_update_job(state: AppState, entry: MarketplaceEntry, job_id: 
         &state.agents,
         &docker,
         &state.capabilities,
+        &state.credentials,
         Some(progress_tx),
     )
     .await;
@@ -1647,6 +1704,7 @@ pub async fn update_agent(
         &state.agents,
         &docker,
         &state.capabilities,
+        &state.credentials,
     )
     .await
     {
@@ -1655,7 +1713,7 @@ pub async fn update_agent(
             let has_tools = agent_def
                 .capability_manifests
                 .values()
-                .any(|m| !m.tools.is_empty());
+                .any(|m| !m.tools.is_empty() || m.tool_source == ToolSource::Dynamic);
             if !agent_def.install_steps.is_empty() || has_tools {
                 Redirect::to(&format!("{}/agents/{}/setup", base_path, entry.id)).into_response()
             } else {

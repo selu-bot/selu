@@ -10,6 +10,10 @@ pub struct CapabilityManifest {
     pub class: CapabilityClass,
     pub image: String,
     #[serde(default)]
+    pub tool_source: ToolSource,
+    #[serde(default = "default_discovery_tool_name")]
+    pub discovery_tool_name: String,
+    #[serde(default)]
     pub tools: Vec<ToolDefinition>,
     #[serde(default)]
     pub network: NetworkPolicy,
@@ -22,6 +26,14 @@ pub struct CapabilityManifest {
     /// Contents of the co-located prompt.md, injected into agent context
     #[serde(skip_deserializing)]
     pub prompt: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolSource {
+    #[default]
+    Manifest,
+    Dynamic,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -162,6 +174,10 @@ fn default_pids() -> u32 {
     64
 }
 
+fn default_discovery_tool_name() -> String {
+    "list_tools".to_string()
+}
+
 /// Load a capability manifest from a directory containing manifest.yaml (+ optional prompt.md)
 pub async fn load_from_dir(dir: &Path) -> Result<CapabilityManifest> {
     let yaml_path = dir.join("manifest.yaml");
@@ -173,6 +189,13 @@ pub async fn load_from_dir(dir: &Path) -> Result<CapabilityManifest> {
 
     let mut manifest: CapabilityManifest = serde_yaml::from_str(&yaml)
         .with_context(|| format!("Invalid manifest.yaml in {}", dir.display()))?;
+
+    if manifest.tool_source == ToolSource::Dynamic && !manifest.tools.is_empty() {
+        anyhow::bail!(
+            "Invalid manifest.yaml in {}: `tool_source: dynamic` requires `tools: []`",
+            dir.display()
+        );
+    }
 
     if prompt_path.exists() {
         manifest.prompt = fs::read_to_string(&prompt_path)

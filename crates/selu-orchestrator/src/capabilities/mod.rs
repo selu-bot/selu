@@ -1,3 +1,4 @@
+pub mod discovery;
 pub mod egress_proxy;
 pub mod grpc;
 pub mod manifest;
@@ -82,6 +83,30 @@ impl CapabilityEngine {
         let client = self.get_or_start(manifests, &cap_id, session_id).await?;
         client
             .invoke(&actual_tool, args, credentials, session_id, thread_id)
+            .await
+    }
+
+    /// Invoke a specific tool on a specific capability with explicit
+    /// credentials. This is used by internal control-plane flows
+    /// (e.g. dynamic tool discovery) and bypasses tool-name resolution.
+    pub async fn invoke_direct(
+        &self,
+        manifests: &HashMap<String, CapabilityManifest>,
+        capability_id: &str,
+        tool_name: &str,
+        args: Value,
+        credentials: Value,
+        session_id: &str,
+        thread_id: &str,
+    ) -> Result<String> {
+        if !manifests.contains_key(capability_id) {
+            return Err(anyhow!("Unknown capability '{}'", capability_id));
+        }
+        let client = self
+            .get_or_start(manifests, capability_id, session_id)
+            .await?;
+        client
+            .invoke(tool_name, args, credentials, session_id, thread_id)
             .await
     }
 

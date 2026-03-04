@@ -17,6 +17,13 @@
     </div>
 
     <form method="POST" action="{{ base_path }}/agents/{{ agent_id }}/setup" id="setup-form" class="space-y-4">
+      {% if let Some(caps) = discovery_warning %}
+      <div class="px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm">
+        <span data-i18n="agents.setup.dynamic.discovery_warning">We couldn't refresh dynamic tools for some capabilities. Existing cached tools are shown.</span>
+        <span class="font-mono text-xs">({{ caps }})</span>
+      </div>
+      {% endif %}
+
       {% for step in steps %}
       <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
         <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">

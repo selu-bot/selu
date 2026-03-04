@@ -22,6 +22,7 @@ use crate::agents::{
     thread as thread_mgr,
 };
 use crate::capabilities::build_tool_specs;
+use crate::capabilities::discovery::{hydrate_dynamic_tools_for_agent, load_discovered_tools};
 use crate::capabilities::manifest::CapabilityManifest;
 use crate::llm::provider::{ChatMessage, LlmResponse};
 use crate::llm::registry::load_provider;
@@ -230,8 +231,38 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     );
 
     // ── Tool specs: own capabilities + inlined + built-ins + delegation ───────
-    let mut tool_specs = build_tool_specs(&agent.capability_manifests);
-    tool_specs.extend(build_tool_specs(&inlined_manifests));
+    let mut own_manifests = agent.capability_manifests.clone();
+    if let Err(e) = hydrate_dynamic_tools_for_agent(&state.db, &agent.id, &mut own_manifests).await
+    {
+        warn!(agent_id = %agent.id, "Failed to hydrate dynamic tools: {e}");
+    }
+
+    let mut hydrated_inlined = inlined_manifests.clone();
+    for (cap_id, manifest) in &mut hydrated_inlined {
+        if manifest.tool_source != crate::capabilities::manifest::ToolSource::Dynamic {
+            continue;
+        }
+        let owner_agent_id = cap_owner
+            .get(cap_id)
+            .map(|s| s.as_str())
+            .unwrap_or_else(|| agent.id.as_str());
+        match load_discovered_tools(&state.db, owner_agent_id, cap_id).await {
+            Ok(tools) => {
+                manifest.tools = tools;
+            }
+            Err(e) => {
+                warn!(
+                    agent_id = %agent.id,
+                    capability_id = %cap_id,
+                    owner_agent_id = %owner_agent_id,
+                    "Failed to load discovered tools for inlined capability: {e}"
+                );
+            }
+        }
+    }
+
+    let mut tool_specs = build_tool_specs(&own_manifests);
+    tool_specs.extend(build_tool_specs(&hydrated_inlined));
     tool_specs.push(crate::events::emit_event_tool_spec());
     tool_specs.push(storage::store_get_tool_spec());
     tool_specs.push(storage::store_set_tool_spec());
@@ -250,8 +281,8 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     let event_bus = state.events.clone();
     // Merge the agent's own capability manifests with inlined manifests so the
     // dispatcher can resolve and invoke tools from both sources.
-    let mut cap_manifests = agent.capability_manifests.clone();
-    cap_manifests.extend(inlined_manifests);
+    let mut cap_manifests = own_manifests;
+    cap_manifests.extend(hydrated_inlined);
     let sid = session_id.clone();
     let tid = thread_id.clone().unwrap_or_default();
     let uid = user_id.clone();

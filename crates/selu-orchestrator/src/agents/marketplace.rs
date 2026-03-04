@@ -15,6 +15,8 @@ use tracing::{info, warn};
 
 use crate::agents::loader::{self, AgentDefinition};
 use crate::capabilities::CapabilityEngine;
+use crate::capabilities::discovery::sync_dynamic_tools_for_agent;
+use crate::permissions::CredentialStore;
 use crate::state::AgentMap;
 
 // ── Marketplace types ─────────────────────────────────────────────────────────
@@ -114,6 +116,8 @@ pub async fn install_agent(
     db: &SqlitePool,
     agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
+    capabilities: &CapabilityEngine,
+    cred_store: &CredentialStore,
 ) -> Result<AgentDefinition> {
     let agent_dir = Path::new(installed_dir).join(&entry.id);
 
@@ -144,7 +148,17 @@ pub async fn install_agent(
     // Steps 4-6 can fail after files have been extracted to disk.
     // If anything goes wrong, clean up the extracted directory and any
     // partial DB row so the user can retry cleanly.
-    match install_agent_inner(entry, &agent_dir, db, agents, docker).await {
+    match install_agent_inner(
+        entry,
+        &agent_dir,
+        db,
+        agents,
+        docker,
+        capabilities,
+        cred_store,
+    )
+    .await
+    {
         Ok(agent_def) => Ok(agent_def),
         Err(e) => {
             warn!(agent = %entry.id, "Installation failed, cleaning up: {e}");
@@ -181,6 +195,8 @@ async fn install_agent_inner(
     db: &SqlitePool,
     agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
+    capabilities: &CapabilityEngine,
+    cred_store: &CredentialStore,
 ) -> Result<AgentDefinition> {
     // 4. Pull Docker images
     let image_count = entry.capability_images.len().max(1);
@@ -225,6 +241,15 @@ async fn install_agent_inner(
     .execute(db)
     .await
     .context("Failed to insert agent into DB")?;
+
+    sync_dynamic_tools_for_agent(
+        db,
+        capabilities,
+        cred_store,
+        &entry.id,
+        &agent_def.capability_manifests,
+    )
+    .await;
 
     // 6. Add to in-memory map (only if setup is complete / no steps needed)
     if !has_steps {
@@ -321,8 +346,19 @@ pub async fn update_agent(
     agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
     capabilities: &CapabilityEngine,
+    cred_store: &CredentialStore,
 ) -> Result<AgentDefinition> {
-    update_agent_with_progress(entry, installed_dir, db, agents, docker, capabilities, None).await
+    update_agent_with_progress(
+        entry,
+        installed_dir,
+        db,
+        agents,
+        docker,
+        capabilities,
+        cred_store,
+        None,
+    )
+    .await
 }
 
 pub async fn update_agent_with_progress(
@@ -332,6 +368,7 @@ pub async fn update_agent_with_progress(
     agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
     capabilities: &CapabilityEngine,
+    cred_store: &CredentialStore,
     progress_tx: Option<tokio::sync::mpsc::UnboundedSender<PullProgress>>,
 ) -> Result<AgentDefinition> {
     let agent_dir = Path::new(installed_dir).join(&entry.id);
@@ -394,7 +431,18 @@ pub async fn update_agent_with_progress(
     extract_archive(&archive_bytes, installed_dir, &entry.id)?;
 
     // 7. Pull Docker images + update DB + reload into memory
-    match update_agent_inner(entry, &agent_dir, db, agents, docker, progress_tx).await {
+    match update_agent_inner(
+        entry,
+        &agent_dir,
+        db,
+        agents,
+        docker,
+        capabilities,
+        cred_store,
+        progress_tx,
+    )
+    .await
+    {
         Ok(agent_def) => Ok(agent_def),
         Err(e) => {
             warn!(agent = %entry.id, "Update failed after extraction: {e}");
@@ -414,6 +462,8 @@ async fn update_agent_inner(
     db: &SqlitePool,
     agents: &Arc<ArcSwap<AgentMap>>,
     docker: &bollard::Docker,
+    capabilities: &CapabilityEngine,
+    cred_store: &CredentialStore,
     progress_tx: Option<tokio::sync::mpsc::UnboundedSender<PullProgress>>,
 ) -> Result<AgentDefinition> {
     // Pull Docker images
@@ -454,6 +504,15 @@ async fn update_agent_inner(
     .await
     .context("Failed to update agent in DB")?;
 
+    sync_dynamic_tools_for_agent(
+        db,
+        capabilities,
+        cred_store,
+        &entry.id,
+        &agent_def.capability_manifests,
+    )
+    .await;
+
     // Add to in-memory map (only if setup is complete)
     if !has_steps {
         let current = agents.load();
@@ -475,6 +534,7 @@ pub async fn auto_update_agents(
     db: &SqlitePool,
     agents: &Arc<ArcSwap<AgentMap>>,
     capabilities: &CapabilityEngine,
+    cred_store: &CredentialStore,
 ) -> Result<usize> {
     // Fetch the current catalogue
     let catalogue = fetch_catalogue(marketplace_url).await?;
@@ -509,7 +569,17 @@ pub async fn auto_update_agents(
 
         info!(agent = %agent_id, from = %installed_version, to = %entry.version, "Auto-updating agent");
 
-        match update_agent(entry, installed_dir, db, agents, &docker, capabilities).await {
+        match update_agent(
+            entry,
+            installed_dir,
+            db,
+            agents,
+            &docker,
+            capabilities,
+            cred_store,
+        )
+        .await
+        {
             Ok(_) => {
                 updated += 1;
                 info!(agent = %agent_id, version = %entry.version, "Auto-update completed");

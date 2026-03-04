@@ -106,6 +106,21 @@ async fn main() -> Result<()> {
         event_bus,
     );
 
+    // Best-effort dynamic capability tool sync at startup.
+    {
+        let sync_state = state.clone();
+        tokio::spawn(async move {
+            let agents_snapshot = sync_state.agents.load();
+            capabilities::discovery::sync_dynamic_tools_for_all_agents(
+                &sync_state.db,
+                &sync_state.capabilities,
+                &sync_state.credentials,
+                &agents_snapshot,
+            )
+            .await;
+        });
+    }
+
     // Start fanout after state is built (needs AppState)
     fanout::start(state.clone(), fanout_rx, cfg.max_chain_depth);
 
@@ -218,6 +233,7 @@ async fn main() -> Result<()> {
                 &autoupdate_state.db,
                 &autoupdate_state.agents,
                 &autoupdate_state.capabilities,
+                &autoupdate_state.credentials,
             )
             .await
             {

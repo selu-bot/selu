@@ -313,3 +313,52 @@ entries:
       New built-in tool: set_reminder (subject to tool policy, default: Allow).
       New slash command: /remind.
       All UI strings available in English and German.
+
+  - id: 2026-03-04-dynamic-capability-tools
+    date: "2026-03-04"
+    pr:
+    area: capabilities
+    type: added
+    audience: developers
+    summary: "Capabilities can opt into dynamic tool discovery and automatic policy reconciliation"
+    affected_files:
+      - crates/selu-orchestrator/src/capabilities/manifest.rs
+      - crates/selu-orchestrator/src/capabilities/discovery.rs
+      - crates/selu-orchestrator/src/capabilities/mod.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/marketplace.rs
+      - crates/selu-orchestrator/src/main.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/templates/agents_setup.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/migrations/0021_dynamic_tool_discovery.sql
+    docs_sections:
+      - developer-guide/capabilities/manifest-yaml
+      - developer-guide/capabilities/grpc-interface
+      - developer-guide/capabilities/container-guidelines
+      - reference/manifest-yaml-schema
+    details: |
+      Added an opt-in dynamic tool mode per capability via manifest fields:
+      `tool_source: dynamic` and optional `discovery_tool_name` (default:
+      `list_tools`). Dynamic capabilities must not statically declare `tools`.
+
+      Selu now invokes the discovery tool directly on capability containers,
+      stores discovered tool metadata in `discovered_tools`, and tracks sync
+      status in `tool_discovery_state`.
+
+      Sync runs in three lifecycle points:
+      - startup (best-effort background sync for loaded agents)
+      - install/update flows
+      - setup flow
+
+      Reconciliation behavior:
+      - added tools are upserted and get global default policies using
+        discovered `recommended_policy` or secure fallback `block`
+      - removed tools are hard-deleted from discovered metadata, global
+        policies, and per-user policy overrides
+      - failed discovery keeps prior discovered tool state unchanged and
+        records an error in `tool_discovery_state`
+
+      Runtime tool exposure now hydrates dynamic capability tools from the
+      discovered cache, so LLM tool specs and invocation resolution reflect
+      the latest synced tool set instead of static manifest declarations.
