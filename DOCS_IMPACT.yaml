@@ -255,3 +255,61 @@ entries:
       commands only requires a new module and a match arm in the
       dispatcher. Other channels (Telegram, iMessage) can integrate
       the same command dispatcher in future.
+
+  - id: 2026-03-03-one-shot-reminders
+    date: "2026-03-03"
+    pr:
+    area: agents
+    type: added
+    audience: both
+    summary: "One-shot reminders via /remind command, set_reminder built-in tool, and unified NL schedule parser"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0020_one_shot_schedules.sql
+      - crates/selu-orchestrator/src/schedules/mod.rs
+      - crates/selu-orchestrator/src/schedules/nl_to_cron.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+      - crates/selu-orchestrator/src/commands/mod.rs
+      - crates/selu-orchestrator/src/commands/remind.rs
+      - crates/selu-orchestrator/src/commands/schedule.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/permissions/tool_policy.rs
+      - crates/selu-orchestrator/src/web/schedules.rs
+      - crates/selu-orchestrator/src/i18n.rs
+      - crates/selu-orchestrator/templates/schedules.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/channels/web-chat
+      - developer-guide/built-in-tools
+    details: |
+      Users can now create one-shot reminders that fire once at a specific
+      future time, complementing the existing recurring cron schedules.
+
+      Three entry points:
+
+      1. `/remind <what + when>` slash command in chat
+         (e.g. `/remind Check the weather and email about grilling next Sunday morning`)
+      2. `set_reminder` built-in tool — agents can call this directly during
+         conversation when the user asks to be reminded of something. The LLM
+         prefers this over telling the user to use the /remind command.
+      3. The existing `/schedule add` command and web UI form now auto-detect
+         one-shot vs. recurring timing — users don't need to know the difference.
+
+      The NL parser (LLM-based) now distinguishes between recurring timing
+      ("every weekday at 8am") and one-shot timing ("next Sunday at 10am",
+      "in 20 minutes", "tomorrow at 3pm") and creates the appropriate type.
+
+      When a one-shot reminder fires, the executor runs the prompt as a new
+      agent turn on the assigned pipes — the agent can use any of its tools
+      (check weather, send emails, etc.) to complete the task.
+
+      Fired reminders are automatically cleaned up after 7 days.
+
+      The Schedules web page shows one-shot reminders with a "Fires once"
+      badge and a "Completed" status after they fire.
+
+      New database column: schedules.one_shot (INTEGER, default 0).
+      New built-in tool: set_reminder (subject to tool policy, default: Allow).
+      New slash command: /remind.
+      All UI strings available in English and German.

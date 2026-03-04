@@ -1,87 +1,147 @@
-/// Natural language to cron expression translator.
+/// Natural language to schedule translator.
 ///
 /// Uses an LLM provider to parse human-readable scheduling descriptions
-/// (e.g. "at 06:45 from monday to friday") into cron expressions.
-/// Also extracts a short schedule name from the full prompt.
+/// into either recurring cron expressions or one-shot timestamps.
+/// Handles both recurring patterns ("every weekday at 8am") and
+/// one-time reminders ("next Sunday at 10am", "in 20 minutes").
 use anyhow::Result;
 use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::llm::provider::{ChatMessage, LlmProvider, LlmResponse};
 
+/// The type of schedule parsed from natural language.
+#[derive(Debug, Clone)]
+pub enum ScheduleType {
+    /// A recurring schedule with a cron expression.
+    Recurring {
+        cron_expression: String,
+        cron_description: String,
+    },
+    /// A one-shot reminder with a specific fire time (ISO 8601 UTC).
+    OneShot {
+        fire_at: String,
+        description: String,
+    },
+}
+
 /// Result of parsing a natural language schedule description.
 #[derive(Debug, Clone)]
 pub struct ParsedSchedule {
-    /// Standard 6-field cron expression (sec min hour dom month dow)
-    pub cron_expression: String,
-    /// Human-readable description of the timing (e.g. "Weekdays at 6:45 AM")
-    pub cron_description: String,
     /// Auto-generated short name for the schedule
     pub name: String,
     /// The prompt portion (what the agent should do), separated from timing
     pub prompt: String,
+    /// Whether this is recurring or one-shot, with the relevant timing data
+    pub schedule_type: ScheduleType,
 }
 
 /// Intermediate JSON structure returned by the LLM.
 #[derive(Debug, Deserialize)]
 struct LlmParseResult {
-    cron: String,
+    #[serde(rename = "type")]
+    schedule_type: String,
+    #[serde(default)]
+    cron: Option<String>,
     description: String,
     name: String,
     prompt: String,
+    #[serde(default)]
+    fire_at: Option<String>,
 }
 
-/// Parse a combined "/schedule add" input into structured schedule data.
+/// The type of timing parsed from the web UI "when" field.
+#[derive(Debug, Clone)]
+pub enum TimingResult {
+    Recurring {
+        cron_expression: String,
+        description: String,
+    },
+    OneShot {
+        fire_at: String,
+        description: String,
+    },
+}
+
+/// Parse a combined "/schedule add" or "/remind" input into structured schedule data.
 ///
-/// The input is the full text after "/schedule add", which mixes the prompt
-/// with timing info. The LLM separates them and generates the cron expression.
+/// The input is the full text after the command, which mixes the prompt
+/// with timing info. The LLM separates them and determines whether this
+/// is a recurring schedule or a one-shot reminder.
 ///
-/// Uses the standard cron 6-field format: sec min hour dom month dow
+/// `now_utc` and `user_timezone` are provided so the LLM can resolve
+/// relative times like "in 20 minutes" or "next Sunday".
 pub async fn parse_schedule(
     input: &str,
     provider: &Arc<dyn LlmProvider>,
+    now_utc: &str,
+    user_timezone: &str,
 ) -> Result<ParsedSchedule> {
-    let system_prompt = r#"You are a scheduling assistant. Your job is to parse a user's scheduling request into structured data.
+    let system_prompt = format!(
+        r#"You are a scheduling assistant. Your job is to parse a user's scheduling request into structured data.
 
 The user will provide a combined message like:
 "Give me a morning summary of what's in my calendar today, emails received over night and weather at 06:45 from monday to friday"
+or
+"Check the weather and email about meat for grilling next Sunday morning"
 
-You must separate the PROMPT (what should happen) from the TIMING (when it should happen), generate a cron expression, and create a short name.
+You must:
+1. Separate the PROMPT (what should happen) from the TIMING (when it should happen)
+2. Determine if this is RECURRING or ONE-SHOT
+3. Generate the appropriate timing data and a short name
 
-CRITICAL: Use 6-field cron format: second minute hour day-of-month month day-of-week
+Current UTC time: {now_utc}
+User timezone: {user_timezone}
+
+RECURRING schedules — use 6-field cron format: second minute hour day-of-month month day-of-week
 - Seconds must always be 0
 - Day-of-week: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
 - Use * for "any"
+- Examples: "every day at 8am", "weekdays at 6:45", "every hour"
 
-Examples:
-- "at 06:45 from monday to friday" → "0 45 6 * * 1-5"
-- "every day at 8am" → "0 0 8 * * *"
-- "every hour" → "0 0 * * * *"
-- "every 30 minutes" → "0 */30 * * * *"
-- "at 9pm on sundays" → "0 0 21 * * 0"
-- "twice a day at 8am and 6pm" → "0 0 8,18 * * *"
+ONE-SHOT reminders — for things that happen once at a specific time:
+- "next Sunday at 10am", "in 20 minutes", "tomorrow at 3pm", "on March 15 at noon"
+- Return an ISO 8601 datetime in UTC (convert from user's timezone)
 
-Return ONLY a JSON object with these fields (no markdown, no backticks, no explanation):
-{
+Return ONLY a JSON object (no markdown, no backticks, no explanation):
+
+For RECURRING:
+{{
+  "type": "recurring",
   "cron": "0 45 6 * * 1-5",
   "description": "Weekdays at 6:45 AM",
   "name": "morning-summary",
-  "prompt": "Give me a morning summary of what's in my calendar today, emails received over night and weather"
-}
+  "prompt": "Give me a morning summary of what's in my calendar today"
+}}
+
+For ONE-SHOT:
+{{
+  "type": "one_shot",
+  "fire_at": "2026-03-08T09:00:00Z",
+  "description": "Next Sunday at 10:00 AM (Europe/Berlin)",
+  "name": "check-weather-sunday",
+  "prompt": "Check the weather and email about meat for grilling"
+}}
 
 Rules for the name:
 - Lowercase, kebab-case, max 30 characters
 - Descriptive of the task, not the timing
 
 Rules for the description:
-- Short, human-readable timing in English (e.g. "Weekdays at 6:45 AM", "Every day at 8:00 AM")
+- Short, human-readable timing (e.g. "Weekdays at 6:45 AM", "Next Sunday at 10:00 AM")
 
 Rules for the prompt:
 - The full task description WITHOUT any timing information
-- Keep the user's original wording"#;
+- Keep the user's original wording
+
+Rules for determining type:
+- Words like "every", "daily", "weekly", "weekdays", "on mondays" → recurring
+- Words like "next", "tomorrow", "in X minutes/hours", "on [specific date]", "this Sunday" → one_shot
+- If ambiguous, prefer recurring"#
+    );
 
     let msgs = vec![
-        ChatMessage::system(system_prompt),
+        ChatMessage::system(&system_prompt),
         ChatMessage::user(format!("Parse this scheduling request: {}", input)),
     ];
 
@@ -111,41 +171,73 @@ Rules for the prompt:
         )
     })?;
 
-    // Validate the cron expression
-    super::validate_cron(&parsed.cron)?;
+    let schedule_type = if parsed.schedule_type == "one_shot" {
+        let fire_at = parsed
+            .fire_at
+            .ok_or_else(|| anyhow::anyhow!("LLM returned one_shot type but no fire_at"))?;
+        ScheduleType::OneShot {
+            fire_at,
+            description: parsed.description,
+        }
+    } else {
+        let cron = parsed
+            .cron
+            .ok_or_else(|| anyhow::anyhow!("LLM returned recurring type but no cron"))?;
+        // Validate the cron expression
+        super::validate_cron(&cron)?;
+        ScheduleType::Recurring {
+            cron_expression: cron,
+            cron_description: parsed.description,
+        }
+    };
 
     Ok(ParsedSchedule {
-        cron_expression: parsed.cron,
-        cron_description: parsed.description,
         name: parsed.name,
         prompt: parsed.prompt,
+        schedule_type,
     })
 }
 
 /// Parse just the timing portion from a web UI "when" field.
-/// Returns (cron_expression, human_description).
+///
+/// Returns either a recurring cron result or a one-shot timestamp.
+/// `now_utc` and `user_timezone` are provided for resolving relative times.
 pub async fn parse_timing(
     timing_text: &str,
     provider: &Arc<dyn LlmProvider>,
-) -> Result<(String, String)> {
-    let system_prompt = r#"You are a scheduling assistant. Convert a human-readable timing description to a cron expression.
+    now_utc: &str,
+    user_timezone: &str,
+) -> Result<TimingResult> {
+    let system_prompt = format!(
+        r#"You are a scheduling assistant. Convert a human-readable timing description to either a cron expression (for recurring) or an ISO 8601 UTC timestamp (for one-shot).
 
-CRITICAL: Use 6-field cron format: second minute hour day-of-month month day-of-week
+Current UTC time: {now_utc}
+User timezone: {user_timezone}
+
+RECURRING — use 6-field cron format: second minute hour day-of-month month day-of-week
 - Seconds must always be 0
 - Day-of-week: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
 - Use * for "any"
 
-Examples:
-- "at 06:45 from monday to friday" → cron: "0 45 6 * * 1-5", description: "Weekdays at 6:45 AM"
-- "every day at 8am" → cron: "0 0 8 * * *", description: "Every day at 8:00 AM"
-- "every hour" → cron: "0 0 * * * *", description: "Every hour"
-- "every 30 minutes" → cron: "0 */30 * * * *", description: "Every 30 minutes"
+ONE-SHOT — for things that happen once:
+- Convert from user's timezone to UTC
 
 Return ONLY a JSON object (no markdown, no backticks):
-{"cron": "0 45 6 * * 1-5", "description": "Weekdays at 6:45 AM"}"#;
+
+For RECURRING:
+{{"type": "recurring", "cron": "0 45 6 * * 1-5", "description": "Weekdays at 6:45 AM"}}
+
+For ONE-SHOT:
+{{"type": "one_shot", "fire_at": "2026-03-08T09:00:00Z", "description": "Next Sunday at 10:00 AM"}}
+
+Rules for determining type:
+- Words like "every", "daily", "weekly", "weekdays", "on mondays" → recurring
+- Words like "next", "tomorrow", "in X minutes/hours", "on [specific date]", "this Sunday" → one_shot
+- If ambiguous, prefer recurring"#
+    );
 
     let msgs = vec![
-        ChatMessage::system(system_prompt),
+        ChatMessage::system(&system_prompt),
         ChatMessage::user(format!("Convert this timing: {}", timing_text)),
     ];
 
@@ -167,15 +259,35 @@ Return ONLY a JSON object (no markdown, no backticks):
         .trim();
 
     #[derive(Deserialize)]
-    struct TimingResult {
-        cron: String,
+    struct RawTimingResult {
+        #[serde(rename = "type")]
+        timing_type: String,
+        #[serde(default)]
+        cron: Option<String>,
         description: String,
+        #[serde(default)]
+        fire_at: Option<String>,
     }
 
-    let parsed: TimingResult = serde_json::from_str(json_str)
+    let parsed: RawTimingResult = serde_json::from_str(json_str)
         .map_err(|e| anyhow::anyhow!("Failed to parse timing response: {}. Raw: {}", e, text))?;
 
-    super::validate_cron(&parsed.cron)?;
-
-    Ok((parsed.cron, parsed.description))
+    if parsed.timing_type == "one_shot" {
+        let fire_at = parsed
+            .fire_at
+            .ok_or_else(|| anyhow::anyhow!("LLM returned one_shot type but no fire_at"))?;
+        Ok(TimingResult::OneShot {
+            fire_at,
+            description: parsed.description,
+        })
+    } else {
+        let cron = parsed
+            .cron
+            .ok_or_else(|| anyhow::anyhow!("LLM returned recurring type but no cron"))?;
+        super::validate_cron(&cron)?;
+        Ok(TimingResult::Recurring {
+            cron_expression: cron,
+            description: parsed.description,
+        })
+    }
 }

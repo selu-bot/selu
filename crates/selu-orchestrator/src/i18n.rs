@@ -38,7 +38,7 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
         // ── Schedule commands ────────────────────────────────────────
         en.insert(
             "cmd.unknown",
-            "Unknown command: `{cmd}`\n\nAvailable commands:\n- `/schedule add <what to do + when>` — Create a schedule\n- `/schedule list` — List your schedules\n- `/schedule delete <name>` — Delete a schedule",
+            "Unknown command: `{cmd}`\n\nAvailable commands:\n- `/schedule add <what to do + when>` — Create a recurring schedule\n- `/schedule list` — List your schedules and reminders\n- `/schedule delete <name>` — Delete a schedule or reminder\n- `/remind <what to do + when>` — Set a one-time reminder",
         );
         en.insert(
             "cmd.schedule.created",
@@ -87,6 +87,31 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
             "Something went wrong while deleting the schedule.",
         );
         en.insert("schedule.run_label", "Scheduled run");
+        en.insert("schedule.reminder_label", "Reminder");
+
+        // ── Remind commands ──────────────────────────────────────
+        en.insert(
+            "cmd.remind.created",
+            "Reminder set!\n\n**{name}** — {timing}\n> {prompt}",
+        );
+        en.insert(
+            "cmd.remind.create_error",
+            "Something went wrong while creating the reminder. Please try again.",
+        );
+        en.insert(
+            "cmd.remind.parse_error",
+            "Couldn't understand that reminder. Please try something like:\n`/remind Check the weather next Sunday at 10am`\n`/remind Call the dentist tomorrow at 3pm`",
+        );
+        en.insert(
+            "cmd.remind.use_schedule",
+            "That sounds like a recurring task. Try `/schedule add {input}` instead.",
+        );
+
+        // ── Schedule list extras ─────────────────────────────────
+        en.insert("cmd.schedule.status_completed", "Completed");
+        en.insert("cmd.schedule.kind_reminder", "Reminder");
+        en.insert("cmd.schedule.kind_schedule", "Schedule");
+
         m.insert("en", en);
 
         // ── German ───────────────────────────────────────────────────────
@@ -112,7 +137,7 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
         // ── Schedule commands ────────────────────────────────────────
         de.insert(
             "cmd.unknown",
-            "Unbekannter Befehl: `{cmd}`\n\nVerf\u{00fc}gbare Befehle:\n- `/schedule add <was + wann>` — Zeitplan erstellen\n- `/schedule list` — Zeitpl\u{00e4}ne anzeigen\n- `/schedule delete <Name>` — Zeitplan l\u{00f6}schen",
+            "Unbekannter Befehl: `{cmd}`\n\nVerf\u{00fc}gbare Befehle:\n- `/schedule add <was + wann>` — Wiederkehrenden Zeitplan erstellen\n- `/schedule list` — Zeitpl\u{00e4}ne und Erinnerungen anzeigen\n- `/schedule delete <Name>` — Zeitplan oder Erinnerung l\u{00f6}schen\n- `/remind <was + wann>` — Einmalige Erinnerung setzen",
         );
         de.insert(
             "cmd.schedule.created",
@@ -164,6 +189,31 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
             "Beim L\u{00f6}schen des Zeitplans ist etwas schiefgelaufen.",
         );
         de.insert("schedule.run_label", "Geplanter Lauf");
+        de.insert("schedule.reminder_label", "Erinnerung");
+
+        // ── Remind commands ──────────────────────────────────────
+        de.insert(
+            "cmd.remind.created",
+            "Erinnerung gesetzt!\n\n**{name}** — {timing}\n> {prompt}",
+        );
+        de.insert(
+            "cmd.remind.create_error",
+            "Beim Erstellen der Erinnerung ist etwas schiefgelaufen. Bitte versuche es erneut.",
+        );
+        de.insert(
+            "cmd.remind.parse_error",
+            "Konnte die Erinnerung nicht verstehen. Versuch es zum Beispiel so:\n`/remind Wetter pr\u{00fc}fen n\u{00e4}chsten Sonntag um 10 Uhr`\n`/remind Zahnarzt anrufen morgen um 15 Uhr`",
+        );
+        de.insert(
+            "cmd.remind.use_schedule",
+            "Das klingt nach einer wiederkehrenden Aufgabe. Versuch `/schedule add {input}` stattdessen.",
+        );
+
+        // ── Schedule list extras ─────────────────────────────────
+        de.insert("cmd.schedule.status_completed", "Abgeschlossen");
+        de.insert("cmd.schedule.kind_reminder", "Erinnerung");
+        de.insert("cmd.schedule.kind_schedule", "Zeitplan");
+
         m.insert("de", de);
 
         m

@@ -226,13 +226,25 @@ pub async fn run_loop(
                 .into_iter()
                 .filter(|(_, name, _)| !name.is_empty())
                 .map(|(id, name, args_json)| {
-                    let arguments: serde_json::Value = serde_json::from_str(&args_json)
-                        .unwrap_or_else(|_| {
-                            warn!(tool = %name, "Failed to parse streamed tool args, wrapping as object");
+                    let arguments: serde_json::Value = if args_json.trim().is_empty() {
+                        // Tool calls with no arguments (e.g. tools that take no params):
+                        // the LLM may emit contentBlockStart but no contentBlockDelta,
+                        // leaving the accumulated string empty. Default to `{}`.
+                        serde_json::json!({})
+                    } else {
+                        serde_json::from_str(&args_json).unwrap_or_else(|e| {
+                            warn!(
+                                tool = %name,
+                                raw_len = args_json.len(),
+                                error = %e,
+                                raw_start = &args_json[..args_json.len().min(200)],
+                                "Failed to parse streamed tool args, wrapping as object"
+                            );
                             // Wrap in an object so providers that require JSON objects
                             // (e.g. Bedrock's toolUse.input) don't reject the message.
                             serde_json::json!({ "raw_input": args_json })
-                        });
+                        })
+                    };
                     ToolCall {
                         id: if id.is_empty() {
                             format!("call_{}", uuid::Uuid::new_v4())

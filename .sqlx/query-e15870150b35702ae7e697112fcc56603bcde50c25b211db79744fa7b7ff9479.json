@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT s.id, s.user_id, s.prompt, s.cron_expression, u.timezone\n           FROM schedules s\n           LEFT JOIN users u ON s.user_id = u.id\n           WHERE s.active = 1 AND s.next_run_at <= ?",
+  "query": "SELECT s.id, s.user_id, s.prompt, s.cron_expression, s.one_shot, u.timezone\n           FROM schedules s\n           LEFT JOIN users u ON s.user_id = u.id\n           WHERE s.active = 1 AND s.next_run_at <= ?",
   "describe": {
     "columns": [
       {
@@ -24,8 +24,13 @@
         "type_info": "Text"
       },
       {
-        "name": "timezone",
+        "name": "one_shot",
         "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "timezone",
+        "ordinal": 5,
         "type_info": "Text"
       }
     ],
@@ -37,8 +42,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "6cf1950f8c037462ffb8ad4c1de6b08b3c1bc43e2057570a94631a7ae5c26ffa"
+  "hash": "e15870150b35702ae7e697112fcc56603bcde50c25b211db79744fa7b7ff9479"
 }

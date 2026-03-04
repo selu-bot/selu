@@ -49,8 +49,13 @@
           </thead>
           <tbody class="divide-y divide-edge">
             {% for s in schedules %}
-            <tr class="hover:bg-sidebar-hover transition-colors">
-              <td class="px-5 py-3.5 font-medium text-txt-heading">{{ s.name }}</td>
+            <tr class="hover:bg-sidebar-hover transition-colors{% if s.one_shot && !s.active %} opacity-60{% endif %}">
+              <td class="px-5 py-3.5 font-medium text-txt-heading">
+                {{ s.name }}
+                {% if s.one_shot %}
+                <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber/15 text-amber border border-amber/20" data-i18n="schedules.one_shot">Fires once</span>
+                {% endif %}
+              </td>
               <td class="px-5 py-3.5 text-txt-muted max-w-[200px] truncate" title="{{ s.prompt }}">{{ s.prompt }}</td>
               <td class="px-5 py-3.5 text-txt-muted whitespace-nowrap">
                 <span title="{{ s.cron_expression }}">{{ s.cron_description }}</span>
@@ -63,6 +68,11 @@
               <td class="px-5 py-3.5 font-mono text-xs text-txt-muted whitespace-nowrap">{{ s.next_run_at }}</td>
               <td class="px-5 py-3.5 font-mono text-xs text-txt-muted whitespace-nowrap">{{ s.last_run_at }}</td>
               <td class="px-5 py-3.5">
+                {% if s.one_shot && !s.active %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-txt-muted/10 text-txt-muted border border-txt-muted/20">
+                  <span data-i18n="schedules.completed">Completed</span>
+                </span>
+                {% else %}
                 <button hx-post="{{ base_path }}/schedules/{{ s.id }}/toggle"
                         hx-target="closest td"
                         hx-swap="innerHTML"
@@ -78,6 +88,7 @@
                   </span>
                   {% endif %}
                 </button>
+                {% endif %}
               </td>
               <td class="px-5 py-3.5 text-right">
                 <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
@@ -124,7 +135,7 @@
               <input name="when_text" type="text" required {% if pipes.is_empty() %}disabled{% endif %}
                      data-i18n-placeholder="schedules.form.when.placeholder" placeholder="e.g. Every weekday at 6:45 AM"
                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
-              <p class="text-[11px] text-txt-faint mt-1" data-i18n="schedules.form.when.hint">Natural language is fine. Selu will figure out the timing.</p>
+              <p class="text-[11px] text-txt-faint mt-1" data-i18n="schedules.form.when.hint">Natural language is fine — recurring or one-time. Selu will figure it out.</p>
             </div>
           </div>
           <div>
@@ -158,7 +169,7 @@
 
     <!-- Chat command hint -->
     <div class="text-center text-xs text-txt-faint py-2" data-i18n="schedules.chat.hint">
-      Tip: You can also manage schedules from Chat with /schedule add, /schedule list, and /schedule delete.
+      Tip: You can also manage schedules from Chat with /schedule add, /schedule list, /schedule delete, and /remind.
     </div>
   </div>
 </div>

@@ -3,6 +3,7 @@
 /// Intercepts messages starting with `/` and routes them to command handlers
 /// instead of the agent engine. Extensible — new commands just need a new
 /// module and a match arm in `dispatch`.
+pub mod remind;
 pub mod schedule;
 
 use crate::i18n::t;
@@ -27,6 +28,7 @@ pub enum Command {
     ScheduleAdd(String), // everything after "/schedule add "
     ScheduleList,
     ScheduleDelete(String), // everything after "/schedule delete "
+    Remind(String),         // everything after "/remind "
     Unknown(String),        // the full command text
 }
 
@@ -66,6 +68,14 @@ pub fn parse_command(text: &str) -> Option<Command> {
         return Some(Command::ScheduleDelete(rest));
     }
 
+    if lower.starts_with("/remind ") {
+        let rest = trimmed["/remind ".len()..].trim().to_string();
+        if rest.is_empty() {
+            return Some(Command::Unknown(trimmed.to_string()));
+        }
+        return Some(Command::Remind(rest));
+    }
+
     Some(Command::Unknown(trimmed.to_string()))
 }
 
@@ -75,6 +85,7 @@ pub async fn dispatch(cmd: Command, ctx: CommandContext<'_>) -> CommandResult {
         Command::ScheduleAdd(input) => schedule::handle_add(&input, &ctx).await,
         Command::ScheduleList => schedule::handle_list(&ctx).await,
         Command::ScheduleDelete(name) => schedule::handle_delete(&name, &ctx).await,
+        Command::Remind(input) => remind::handle_add(&input, &ctx).await,
         Command::Unknown(text) => CommandResult {
             text: t(ctx.language, "cmd.unknown").replace("{cmd}", &text),
         },

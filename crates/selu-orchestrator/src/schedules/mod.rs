@@ -26,6 +26,7 @@ pub struct ScheduleRow {
     pub cron_expression: String,
     pub cron_description: String,
     pub active: bool,
+    pub one_shot: bool,
     pub last_run_at: Option<String>,
     pub next_run_at: String,
     pub created_at: String,
@@ -40,6 +41,7 @@ pub struct DueSchedule {
     pub prompt: String,
     pub cron_expression: String,
     pub timezone: String,
+    pub one_shot: bool,
     pub pipe_ids: Vec<String>,
 }
 
@@ -127,11 +129,57 @@ pub async fn create_schedule(
     Ok(id)
 }
 
+/// Create a one-shot reminder that fires once at a specific time.
+///
+/// Unlike recurring schedules, reminders use a direct `fire_at` timestamp
+/// instead of a cron expression. After firing, the executor deactivates them.
+/// Fired reminders are automatically cleaned up after 7 days.
+pub async fn create_reminder(
+    db: &SqlitePool,
+    user_id: &str,
+    name: &str,
+    prompt: &str,
+    fire_at: DateTime<Utc>,
+    description: &str,
+    pipe_ids: &[String],
+) -> Result<String> {
+    let fire_at_str = fire_at.format("%Y-%m-%d %H:%M:%S").to_string();
+    let id = Uuid::new_v4().to_string();
+
+    sqlx::query!(
+        r#"INSERT INTO schedules (id, user_id, name, prompt, cron_expression, cron_description, next_run_at, one_shot)
+           VALUES (?, ?, ?, ?, '', ?, ?, 1)"#,
+        id,
+        user_id,
+        name,
+        prompt,
+        description,
+        fire_at_str,
+    )
+    .execute(db)
+    .await
+    .context("Failed to insert reminder")?;
+
+    // Insert pipe associations
+    for pipe_id in pipe_ids {
+        sqlx::query!(
+            "INSERT INTO schedule_pipes (schedule_id, pipe_id) VALUES (?, ?)",
+            id,
+            pipe_id,
+        )
+        .execute(db)
+        .await
+        .context("Failed to insert reminder pipe association")?;
+    }
+
+    Ok(id)
+}
+
 /// List all schedules for a user, with their associated pipe names.
 pub async fn list_schedules(db: &SqlitePool, user_id: &str) -> Result<Vec<ScheduleRow>> {
     let rows = sqlx::query!(
         r#"SELECT id, user_id, name, prompt, cron_expression, cron_description,
-                  active, last_run_at, next_run_at, created_at
+                  active, one_shot, last_run_at, next_run_at, created_at
            FROM schedules
            WHERE user_id = ?
            ORDER BY created_at DESC"#,
@@ -167,6 +215,7 @@ pub async fn list_schedules(db: &SqlitePool, user_id: &str) -> Result<Vec<Schedu
             cron_expression: r.cron_expression,
             cron_description: r.cron_description,
             active: r.active != 0,
+            one_shot: r.one_shot != 0,
             last_run_at: r.last_run_at,
             next_run_at: r.next_run_at,
             created_at: r.created_at,
@@ -211,14 +260,16 @@ pub async fn toggle_schedule(db: &SqlitePool, schedule_id: &str, user_id: &str) 
 
     // If re-activated, recompute next_run_at
     let row = sqlx::query!(
-        "SELECT active, cron_expression FROM schedules WHERE id = ?",
+        "SELECT active, cron_expression, one_shot FROM schedules WHERE id = ?",
         schedule_id,
     )
     .fetch_optional(db)
     .await?;
 
     if let Some(r) = row {
-        if r.active != 0 {
+        if r.active != 0 && r.one_shot == 0 {
+            // Only recompute for recurring schedules (one-shot reminders
+            // should not be re-activated since their fire time has passed)
             // Look up user timezone
             let tz = sqlx::query_scalar!("SELECT timezone FROM users WHERE id = ?", user_id)
                 .fetch_optional(db)
@@ -294,7 +345,7 @@ pub async fn find_by_name(
     let pattern = format!("%{}%", name_query);
     let row = sqlx::query!(
         r#"SELECT id, user_id, name, prompt, cron_expression, cron_description,
-                  active, last_run_at, next_run_at, created_at
+                  active, one_shot, last_run_at, next_run_at, created_at
            FROM schedules
            WHERE user_id = ? AND name LIKE ?
            LIMIT 1"#,
@@ -323,6 +374,7 @@ pub async fn find_by_name(
                 cron_expression: r.cron_expression,
                 cron_description: r.cron_description,
                 active: r.active != 0,
+                one_shot: r.one_shot != 0,
                 last_run_at: r.last_run_at,
                 next_run_at: r.next_run_at,
                 created_at: r.created_at,
@@ -338,7 +390,7 @@ pub async fn find_by_name(
 pub async fn fetch_due_schedules(db: &SqlitePool) -> Result<Vec<DueSchedule>> {
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let rows = sqlx::query!(
-        r#"SELECT s.id, s.user_id, s.prompt, s.cron_expression, u.timezone
+        r#"SELECT s.id, s.user_id, s.prompt, s.cron_expression, s.one_shot, u.timezone
            FROM schedules s
            LEFT JOIN users u ON s.user_id = u.id
            WHERE s.active = 1 AND s.next_run_at <= ?"#,
@@ -365,6 +417,7 @@ pub async fn fetch_due_schedules(db: &SqlitePool) -> Result<Vec<DueSchedule>> {
             prompt: r.prompt,
             cron_expression: r.cron_expression,
             timezone: r.timezone,
+            one_shot: r.one_shot != 0,
             pipe_ids: pipe_rows,
         });
     }
@@ -372,10 +425,28 @@ pub async fn fetch_due_schedules(db: &SqlitePool) -> Result<Vec<DueSchedule>> {
     Ok(schedules)
 }
 
-/// Mark a schedule as just-run and advance next_run_at.
-pub async fn mark_executed(db: &SqlitePool, schedule_id: &str, timezone: &str, cron_expr: &str) {
+/// Mark a schedule as just-run and advance next_run_at (or deactivate if one-shot).
+pub async fn mark_executed(
+    db: &SqlitePool,
+    schedule_id: &str,
+    timezone: &str,
+    cron_expr: &str,
+    one_shot: bool,
+) {
     let now = Utc::now();
     let now_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
+
+    // One-shot reminders: just deactivate, no next run to compute.
+    if one_shot {
+        let _ = sqlx::query!(
+            "UPDATE schedules SET active = 0, last_run_at = ? WHERE id = ?",
+            now_str,
+            schedule_id,
+        )
+        .execute(db)
+        .await;
+        return;
+    }
 
     let next_run_str = match compute_next_run(cron_expr, timezone, now) {
         Ok(next) => next.format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -404,6 +475,131 @@ pub async fn mark_executed(db: &SqlitePool, schedule_id: &str, timezone: &str, c
     )
     .execute(db)
     .await;
+}
+
+/// Delete fired one-shot reminders older than 7 days.
+///
+/// Called periodically from the executor tick to prevent unbounded growth
+/// of stale reminder rows.
+pub async fn cleanup_fired_reminders(db: &SqlitePool) {
+    let result = sqlx::query!(
+        "DELETE FROM schedules WHERE one_shot = 1 AND active = 0 AND last_run_at < datetime('now', '-7 days')"
+    )
+    .execute(db)
+    .await;
+
+    match result {
+        Ok(r) if r.rows_affected() > 0 => {
+            tracing::info!("Cleaned up {} fired reminder(s)", r.rows_affected());
+        }
+        Err(e) => {
+            error!("Failed to clean up fired reminders: {e}");
+        }
+        _ => {}
+    }
+}
+
+// ── Built-in tool: set_reminder ──────────────────────────────────────────────
+
+use crate::llm::provider::ToolSpec;
+
+/// Tool spec for `set_reminder` — schedule a one-time future agent action.
+pub fn set_reminder_tool_spec() -> ToolSpec {
+    ToolSpec {
+        name: "set_reminder".to_string(),
+        description: "Set a one-time reminder that fires at a specific time. \
+             When the reminder fires, the prompt is executed as a new agent turn — \
+             the agent can then use any of its tools (check weather, send emails, etc.). \
+             Use this when the user wants something to happen at a specific future time. \
+             The fire_at must be an ISO 8601 datetime string in UTC (e.g. 2026-03-08T10:00:00Z). \
+             Convert the user's local time to UTC before calling this tool."
+            .to_string(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "What the agent should do when the reminder fires"
+                },
+                "fire_at": {
+                    "type": "string",
+                    "description": "ISO 8601 datetime in UTC for when the reminder should fire (e.g. 2026-03-08T10:00:00Z)"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Short name for the reminder (kebab-case, max 30 characters, e.g. 'check-weather-sunday')"
+                }
+            },
+            "required": ["prompt", "fire_at", "name"]
+        }),
+    }
+}
+
+/// Handle a `set_reminder` tool call from an agent.
+pub async fn dispatch_set_reminder(
+    db: &SqlitePool,
+    user_id: &str,
+    pipe_id: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
+    let prompt = args
+        .get("prompt")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing required parameter: prompt"))?;
+
+    let fire_at_str = args
+        .get("fire_at")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing required parameter: fire_at"))?;
+
+    let name = args
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing required parameter: name"))?;
+
+    // Parse the ISO 8601 datetime
+    let fire_at = chrono::DateTime::parse_from_rfc3339(fire_at_str)
+        .or_else(|_| {
+            // Also try without timezone suffix (assume UTC)
+            chrono::NaiveDateTime::parse_from_str(fire_at_str, "%Y-%m-%dT%H:%M:%S")
+                .map(|dt| dt.and_utc().fixed_offset())
+        })
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Invalid fire_at datetime '{}': {}. Expected ISO 8601 format like 2026-03-08T10:00:00Z",
+                fire_at_str,
+                e
+            )
+        })?
+        .with_timezone(&Utc);
+
+    // Validate the time is in the future
+    if fire_at <= Utc::now() {
+        return Ok(serde_json::json!({
+            "error": "The reminder time must be in the future."
+        })
+        .to_string());
+    }
+
+    let id = create_reminder(
+        db,
+        user_id,
+        name,
+        prompt,
+        fire_at,
+        &format!("Reminder for {}", fire_at.format("%Y-%m-%d %H:%M UTC")),
+        &[pipe_id.to_string()],
+    )
+    .await?;
+
+    Ok(serde_json::json!({
+        "status": "created",
+        "id": id,
+        "name": name,
+        "fire_at": fire_at.to_rfc3339(),
+        "prompt": prompt
+    })
+    .to_string())
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

@@ -415,6 +415,10 @@ pub async fn has_all_policies(
         BUILTIN_CAPABILITY_ID.to_string(),
         BUILTIN_STORE_LIST.to_string(),
     ));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_SET_REMINDER.to_string(),
+    ));
 
     if required.is_empty() {
         return Ok(true);
@@ -451,3 +455,6 @@ pub const BUILTIN_STORE_DELETE: &str = "store_delete";
 
 /// Tool name for the store_list built-in (persistent agent storage).
 pub const BUILTIN_STORE_LIST: &str = "store_list";
+
+/// Tool name for the set_reminder built-in (one-shot schedule reminders).
+pub const BUILTIN_SET_REMINDER: &str = "set_reminder";

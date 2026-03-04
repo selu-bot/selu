@@ -2,6 +2,7 @@
 ///
 /// Handles add, list, and delete subcommands for the schedule system.
 /// All user-facing strings go through the server-side i18n system.
+use chrono::Utc;
 use tracing::error;
 
 use super::{CommandContext, CommandResult};
@@ -22,8 +23,18 @@ pub async fn handle_add(input: &str, ctx: &CommandContext<'_>) -> CommandResult 
         Err(msg) => return CommandResult { text: msg },
     };
 
+    // Look up user's timezone
+    let timezone = sqlx::query_scalar!("SELECT timezone FROM users WHERE id = ?", ctx.user_id)
+        .fetch_optional(&ctx.state.db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "UTC".to_string());
+
+    let now_utc = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
     // Parse the natural language schedule
-    let parsed = match nl_to_cron::parse_schedule(input, &provider).await {
+    let parsed = match nl_to_cron::parse_schedule(input, &provider, &now_utc, &timezone).await {
         Ok(p) => p,
         Err(e) => {
             error!("Failed to parse schedule: {e}");
@@ -33,39 +44,85 @@ pub async fn handle_add(input: &str, ctx: &CommandContext<'_>) -> CommandResult 
         }
     };
 
-    // Look up user's timezone
-    let timezone = sqlx::query_scalar!("SELECT timezone FROM users WHERE id = ?", ctx.user_id)
-        .fetch_optional(&ctx.state.db)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "UTC".to_string());
+    match parsed.schedule_type {
+        nl_to_cron::ScheduleType::Recurring {
+            cron_expression,
+            cron_description,
+        } => {
+            // Create the recurring schedule with the current pipe
+            match schedules::create_schedule(
+                &ctx.state.db,
+                ctx.user_id,
+                &parsed.name,
+                &parsed.prompt,
+                &cron_expression,
+                &cron_description,
+                &timezone,
+                &[ctx.pipe_id.to_string()],
+            )
+            .await
+            {
+                Ok(_id) => CommandResult {
+                    text: t(lang, "cmd.schedule.created")
+                        .replace("{name}", &parsed.name)
+                        .replace("{timing}", &cron_description)
+                        .replace("{prompt}", &parsed.prompt)
+                        .replace("{timezone}", &timezone)
+                        .replace("{cron}", &cron_expression),
+                },
+                Err(e) => {
+                    error!("Failed to create schedule: {e}");
+                    CommandResult {
+                        text: t(lang, "cmd.schedule.create_error").to_string(),
+                    }
+                }
+            }
+        }
+        nl_to_cron::ScheduleType::OneShot {
+            fire_at,
+            description,
+        } => {
+            // The user asked for a one-shot via /schedule — create it as a reminder
+            let fire_at_dt = match chrono::DateTime::parse_from_rfc3339(&fire_at)
+                .or_else(|_| {
+                    chrono::NaiveDateTime::parse_from_str(&fire_at, "%Y-%m-%dT%H:%M:%S")
+                        .map(|dt| dt.and_utc().fixed_offset())
+                })
+                .map(|dt| dt.with_timezone(&Utc))
+            {
+                Ok(dt) => dt,
+                Err(e) => {
+                    error!("Failed to parse fire_at '{}': {e}", fire_at);
+                    return CommandResult {
+                        text: t(lang, "cmd.schedule.parse_error")
+                            .replace("{error}", &e.to_string()),
+                    };
+                }
+            };
 
-    // Create the schedule with the current pipe
-    match schedules::create_schedule(
-        &ctx.state.db,
-        ctx.user_id,
-        &parsed.name,
-        &parsed.prompt,
-        &parsed.cron_expression,
-        &parsed.cron_description,
-        &timezone,
-        &[ctx.pipe_id.to_string()],
-    )
-    .await
-    {
-        Ok(_id) => CommandResult {
-            text: t(lang, "cmd.schedule.created")
-                .replace("{name}", &parsed.name)
-                .replace("{timing}", &parsed.cron_description)
-                .replace("{prompt}", &parsed.prompt)
-                .replace("{timezone}", &timezone)
-                .replace("{cron}", &parsed.cron_expression),
-        },
-        Err(e) => {
-            error!("Failed to create schedule: {e}");
-            CommandResult {
-                text: t(lang, "cmd.schedule.create_error").to_string(),
+            match schedules::create_reminder(
+                &ctx.state.db,
+                ctx.user_id,
+                &parsed.name,
+                &parsed.prompt,
+                fire_at_dt,
+                &description,
+                &[ctx.pipe_id.to_string()],
+            )
+            .await
+            {
+                Ok(_id) => CommandResult {
+                    text: t(lang, "cmd.remind.created")
+                        .replace("{name}", &parsed.name)
+                        .replace("{timing}", &description)
+                        .replace("{prompt}", &parsed.prompt),
+                },
+                Err(e) => {
+                    error!("Failed to create reminder: {e}");
+                    CommandResult {
+                        text: t(lang, "cmd.remind.create_error").to_string(),
+                    }
+                }
             }
         }
     }
@@ -87,8 +144,15 @@ pub async fn handle_list(ctx: &CommandContext<'_>) -> CommandResult {
             for s in &schedules {
                 let status = if s.active {
                     t(lang, "cmd.schedule.status_on")
+                } else if s.one_shot {
+                    t(lang, "cmd.schedule.status_completed")
                 } else {
                     t(lang, "cmd.schedule.status_off")
+                };
+                let kind = if s.one_shot {
+                    t(lang, "cmd.schedule.kind_reminder")
+                } else {
+                    t(lang, "cmd.schedule.kind_schedule")
                 };
                 let pipes = if s.pipe_names.is_empty() {
                     t(lang, "cmd.schedule.no_pipes").to_string()
@@ -96,8 +160,9 @@ pub async fn handle_list(ctx: &CommandContext<'_>) -> CommandResult {
                     s.pipe_names.join(", ")
                 };
                 lines.push(format!(
-                    "- **{}** — {} [{}]\n  > {}\n  Pipes: {} | {}: {}",
+                    "- **{}** ({}) — {} [{}]\n  > {}\n  Pipes: {} | {}: {}",
                     s.name,
+                    kind,
                     s.cron_description,
                     status,
                     truncate(&s.prompt, 80),

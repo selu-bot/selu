@@ -5,6 +5,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
 };
+use chrono::Utc;
 use serde::Deserialize;
 use tracing::error;
 
@@ -25,6 +26,7 @@ pub struct ScheduleView {
     pub cron_description: String,
     pub cron_expression: String,
     pub active: bool,
+    pub one_shot: bool,
     pub last_run_at: String,
     pub next_run_at: String,
     pub pipe_names: Vec<String>,
@@ -132,6 +134,7 @@ pub async fn schedules_index(
             cron_description: s.cron_description,
             cron_expression: s.cron_expression,
             active: s.active,
+            one_shot: s.one_shot,
             last_run_at: s.last_run_at.unwrap_or_else(|| "Never".to_string()),
             next_run_at: s.next_run_at,
             pipe_names: s.pipe_names,
@@ -233,22 +236,6 @@ pub async fn schedules_create(
         }
     };
 
-    let (cron_expr, cron_desc) = match nl_to_cron::parse_timing(&form.when_text, &provider).await {
-        Ok(result) => result,
-        Err(e) => {
-            error!("Failed to parse timing '{}': {e}", form.when_text);
-            return Redirect::to(&format!(
-                "{}/schedules?error={}",
-                base_path,
-                urlencoding::encode(&format!(
-                    "Couldn't understand the timing. Try something like \"every day at 8am\" or \"weekdays at 6:45\".\n{}",
-                    e
-                ))
-            ))
-            .into_response();
-        }
-    };
-
     // Get user timezone
     let timezone = sqlx::query_scalar!("SELECT timezone FROM users WHERE id = ?", user.user_id)
         .fetch_optional(&state.db)
@@ -257,30 +244,111 @@ pub async fn schedules_create(
         .flatten()
         .unwrap_or_else(|| "UTC".to_string());
 
-    match schedules::create_schedule(
-        &state.db,
-        &user.user_id,
-        form.name.trim(),
-        form.prompt.trim(),
-        &cron_expr,
-        &cron_desc,
+    let now_utc = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+    let timing_result = match nl_to_cron::parse_timing(
+        &form.when_text,
+        &provider,
+        &now_utc,
         &timezone,
-        &pipe_ids,
     )
     .await
     {
-        Ok(_) => Redirect::to(&format!(
-            "{}/schedules?success=Schedule+created.",
-            base_path
-        ))
-        .into_response(),
+        Ok(result) => result,
         Err(e) => {
-            error!("Failed to create schedule: {e}");
-            Redirect::to(&format!(
-                "{}/schedules?error=Failed+to+create+schedule.+Please+try+again.",
-                base_path
-            ))
-            .into_response()
+            error!("Failed to parse timing '{}': {e}", form.when_text);
+            return Redirect::to(&format!(
+                    "{}/schedules?error={}",
+                    base_path,
+                    urlencoding::encode(&format!(
+                    "Couldn't understand the timing. Try something like \"every day at 8am\" or \"next Sunday at 10am\".\n{}",
+                    e
+                ))
+                ))
+                .into_response();
+        }
+    };
+
+    match timing_result {
+        nl_to_cron::TimingResult::Recurring {
+            cron_expression,
+            description,
+        } => {
+            match schedules::create_schedule(
+                &state.db,
+                &user.user_id,
+                form.name.trim(),
+                form.prompt.trim(),
+                &cron_expression,
+                &description,
+                &timezone,
+                &pipe_ids,
+            )
+            .await
+            {
+                Ok(_) => Redirect::to(&format!(
+                    "{}/schedules?success=Schedule+created.",
+                    base_path
+                ))
+                .into_response(),
+                Err(e) => {
+                    error!("Failed to create schedule: {e}");
+                    Redirect::to(&format!(
+                        "{}/schedules?error=Failed+to+create+schedule.+Please+try+again.",
+                        base_path
+                    ))
+                    .into_response()
+                }
+            }
+        }
+        nl_to_cron::TimingResult::OneShot {
+            fire_at,
+            description,
+        } => {
+            let fire_at_dt = match chrono::DateTime::parse_from_rfc3339(&fire_at)
+                .or_else(|_| {
+                    chrono::NaiveDateTime::parse_from_str(&fire_at, "%Y-%m-%dT%H:%M:%S")
+                        .map(|dt| dt.and_utc().fixed_offset())
+                })
+                .map(|dt| dt.with_timezone(&Utc))
+            {
+                Ok(dt) => dt,
+                Err(e) => {
+                    error!("Failed to parse fire_at '{}': {e}", fire_at);
+                    return Redirect::to(&format!(
+                        "{}/schedules?error={}",
+                        base_path,
+                        urlencoding::encode(&format!("Couldn't understand the timing: {}", e))
+                    ))
+                    .into_response();
+                }
+            };
+
+            match schedules::create_reminder(
+                &state.db,
+                &user.user_id,
+                form.name.trim(),
+                form.prompt.trim(),
+                fire_at_dt,
+                &description,
+                &pipe_ids,
+            )
+            .await
+            {
+                Ok(_) => Redirect::to(&format!(
+                    "{}/schedules?success=Reminder+created.",
+                    base_path
+                ))
+                .into_response(),
+                Err(e) => {
+                    error!("Failed to create reminder: {e}");
+                    Redirect::to(&format!(
+                        "{}/schedules?error=Failed+to+create+reminder.+Please+try+again.",
+                        base_path
+                    ))
+                    .into_response()
+                }
+            }
         }
     }
 }

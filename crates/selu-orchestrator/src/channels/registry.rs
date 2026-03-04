@@ -98,7 +98,6 @@ impl ChannelRegistry {
     }
 
     /// Check whether a sender is registered for a given pipe.
-    #[allow(dead_code)]
     pub async fn has_sender(&self, pipe_id: &str) -> bool {
         self.senders.read().await.contains_key(pipe_id)
     }

@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use aws_smithy_eventstream::frame::{DecodedFrame, MessageFrameDecoder};
 use aws_smithy_types::event_stream::HeaderValue;
 use bytes::BytesMut;
-use futures::StreamExt;
+use futures::{StreamExt, stream};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -289,20 +289,22 @@ impl LlmProvider for BedrockProvider {
         let mut buf = BytesMut::new();
         let mut tool_call_index: usize = 0;
 
-        let stream = resp.bytes_stream().filter_map(move |chunk| {
+        let stream = resp.bytes_stream().flat_map(move |chunk| {
             let chunk = match chunk {
                 Ok(c) => c,
                 Err(e) => {
                     warn!("Bedrock stream chunk error: {e}");
-                    return std::future::ready(None);
+                    return stream::iter(Vec::new());
                 }
             };
 
             buf.extend_from_slice(&chunk);
 
-            // Try to decode one or more complete frames from the buffer.
-            // We return the first actionable event and leave remaining data
-            // in the buffer for the next chunk.
+            // Decode ALL complete frames from the buffer and collect them.
+            // A single HTTP chunk may contain multiple event-stream frames,
+            // and we must emit every actionable event — not just the first.
+            let mut events: Vec<Result<StreamChunk>> = Vec::new();
+
             loop {
                 match decoder.decode_frame(&mut buf) {
                     Ok(DecodedFrame::Complete(msg)) => {
@@ -332,7 +334,7 @@ impl LlmProvider for BedrockProvider {
                                 event_type = ?event_type,
                                 "Bedrock stream exception: {payload_str}"
                             );
-                            return std::future::ready(None);
+                            continue;
                         }
 
                         // Parse JSON payload
@@ -348,22 +350,20 @@ impl LlmProvider for BedrockProvider {
                             Some("contentBlockDelta") => {
                                 // Text delta
                                 if let Some(text) = payload["delta"]["text"].as_str() {
-                                    return std::future::ready(Some(Ok(StreamChunk::Text(
-                                        text.to_string(),
-                                    ))));
+                                    events.push(Ok(StreamChunk::Text(text.to_string())));
+                                    continue;
                                 }
                                 // Tool-use input delta (JSON fragment)
                                 if let Some(input_frag) =
                                     payload["delta"]["toolUse"]["input"].as_str()
                                 {
-                                    return std::future::ready(Some(Ok(
-                                        StreamChunk::ToolCallDelta {
-                                            index: tool_call_index.saturating_sub(1),
-                                            id: None,
-                                            name: None,
-                                            arguments_delta: input_frag.to_string(),
-                                        },
-                                    )));
+                                    events.push(Ok(StreamChunk::ToolCallDelta {
+                                        index: tool_call_index.saturating_sub(1),
+                                        id: None,
+                                        name: None,
+                                        arguments_delta: input_frag.to_string(),
+                                    }));
+                                    continue;
                                 }
                                 continue;
                             }
@@ -374,20 +374,19 @@ impl LlmProvider for BedrockProvider {
                                     if name.is_some() {
                                         let idx = tool_call_index;
                                         tool_call_index += 1;
-                                        return std::future::ready(Some(Ok(
-                                            StreamChunk::ToolCallDelta {
-                                                index: idx,
-                                                id,
-                                                name,
-                                                arguments_delta: String::new(),
-                                            },
-                                        )));
+                                        events.push(Ok(StreamChunk::ToolCallDelta {
+                                            index: idx,
+                                            id,
+                                            name,
+                                            arguments_delta: String::new(),
+                                        }));
                                     }
                                 }
                                 continue;
                             }
                             Some("messageStop") => {
-                                return std::future::ready(Some(Ok(StreamChunk::Done)));
+                                events.push(Ok(StreamChunk::Done));
+                                break;
                             }
                             _ => {
                                 // messageStart, contentBlockStop, metadata, etc. — skip
@@ -397,14 +396,16 @@ impl LlmProvider for BedrockProvider {
                     }
                     Ok(DecodedFrame::Incomplete) => {
                         // Need more data — wait for next chunk
-                        return std::future::ready(None);
+                        break;
                     }
                     Err(e) => {
                         warn!("Bedrock event stream decode error: {e}");
-                        return std::future::ready(None);
+                        break;
                     }
                 }
             }
+
+            stream::iter(events)
         });
 
         Ok(Box::pin(stream))
