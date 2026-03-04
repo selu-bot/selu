@@ -30,7 +30,8 @@ use crate::llm::tool_loop::{LoopEvent, LoopSender, ToolDispatchResult, run_loop}
 use crate::permissions::approval_queue;
 use crate::permissions::tool_policy::{
     self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_SET_REMINDER,
-    BUILTIN_STORE_DELETE, BUILTIN_STORE_GET, BUILTIN_STORE_LIST, BUILTIN_STORE_SET, ToolPolicy,
+    BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET, BUILTIN_STORE_LIST,
+    BUILTIN_STORE_SET, ToolPolicy,
 };
 use crate::state::AppState;
 
@@ -268,6 +269,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     tool_specs.push(storage::store_set_tool_spec());
     tool_specs.push(storage::store_delete_tool_spec());
     tool_specs.push(storage::store_list_tool_spec());
+    tool_specs.push(crate::schedules::set_schedule_tool_spec());
     tool_specs.push(crate::schedules::set_reminder_tool_spec());
 
     // Only add delegation tool if there are agents that still need delegation
@@ -409,6 +411,35 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                                     }
                                     _ => unreachable!(),
                                 }
+                            })
+                        },
+                    )
+                    .await;
+                    return result;
+                }
+
+                // ── Built-in tool: set_schedule ─────────────────────
+                if name == "set_schedule" {
+                    let result = check_policy_and_dispatch(
+                        &state,
+                        &user,
+                        BUILTIN_CAPABILITY_ID,
+                        BUILTIN_SET_SCHEDULE,
+                        &name,
+                        &args,
+                        &channel,
+                        &session,
+                        &pipe,
+                        &agent_id_copy,
+                        approved,
+                        || {
+                            let db = state.db.clone();
+                            let user = user.clone();
+                            let pipe = pipe.clone();
+                            let args = invoke_args.clone();
+                            Box::pin(async move {
+                                crate::schedules::dispatch_set_schedule(&db, &user, &pipe, &args)
+                                    .await
                             })
                         },
                     )

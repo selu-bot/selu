@@ -396,3 +396,39 @@ entries:
       `_approval_message` field in tool arguments, and Selu will use it as the
       headline text in the approval request. This field is internal-only and
       is stripped before actual tool invocation.
+
+  - id: 2026-03-04-natural-language-schedule-intent
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Agents can now create recurring schedules via a new built-in tool (`set_schedule`) in natural-language conversations"
+    affected_files:
+      - crates/selu-orchestrator/src/schedules/mod.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/permissions/tool_policy.rs
+      - crates/selu-orchestrator/src/agents/bundled.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/channels/web-chat
+      - developer-guide/built-in-tools
+      - user-guide/security/tool-policies
+    details: |
+      Added a new built-in tool `set_schedule` for recurring schedules, similar
+      to the existing `set_reminder` one-shot tool.
+
+      This enables natural-language chat requests like "every weekday at 06:45..."
+      to be handled by the agent through tool invocation instead of relying on
+      special text parsing at the chat transport layer.
+
+      Slash commands remain supported (`/schedule`, `/remind`) for users who
+      prefer explicit commands.
+
+      Tool policy updates:
+      - `set_schedule` is now part of built-in tool policy completeness checks
+      - bundled/default agent policies seed and backfill now include `set_schedule`
+      - Agent detail UI now lists both `set_schedule` and `set_reminder` under
+        built-in tools with English/German labels

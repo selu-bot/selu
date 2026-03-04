@@ -1153,8 +1153,9 @@ pub async fn agent_detail(
 
     // Build built-in tool policy views
     use crate::permissions::tool_policy::{
-        BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_STORE_DELETE,
-        BUILTIN_STORE_GET, BUILTIN_STORE_LIST, BUILTIN_STORE_SET,
+        BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_SET_REMINDER,
+        BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET, BUILTIN_STORE_LIST,
+        BUILTIN_STORE_SET,
     };
     let builtin_tools = [
         (
@@ -1186,6 +1187,16 @@ pub async fn agent_detail(
             BUILTIN_STORE_LIST,
             "Store List",
             "Allows the agent to list all persistently stored key-value pairs.",
+        ),
+        (
+            BUILTIN_SET_SCHEDULE,
+            "Set Schedule",
+            "Allows the agent to create recurring schedules from natural-language user requests.",
+        ),
+        (
+            BUILTIN_SET_REMINDER,
+            "Set Reminder",
+            "Allows the agent to create one-time reminders for future actions.",
         ),
     ];
     let builtin_policies: Vec<BuiltinPolicyView> = builtin_tools

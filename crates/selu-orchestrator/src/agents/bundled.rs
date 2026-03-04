@@ -6,7 +6,8 @@
 use crate::agents::loader::AgentDefinition;
 use crate::permissions::tool_policy::{
     self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_SET_REMINDER,
-    BUILTIN_STORE_DELETE, BUILTIN_STORE_GET, BUILTIN_STORE_LIST, BUILTIN_STORE_SET, ToolPolicy,
+    BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET, BUILTIN_STORE_LIST,
+    BUILTIN_STORE_SET, ToolPolicy,
 };
 
 const DEFAULT_AGENT_YAML: &str = include_str!("../../../../agents/default/agent.yaml");
@@ -80,6 +81,11 @@ pub async fn ensure_global_policies(db: &sqlx::SqlitePool) -> anyhow::Result<()>
         ),
         (
             BUILTIN_CAPABILITY_ID.to_string(),
+            BUILTIN_SET_SCHEDULE.to_string(),
+            ToolPolicy::Allow,
+        ),
+        (
+            BUILTIN_CAPABILITY_ID.to_string(),
             BUILTIN_SET_REMINDER.to_string(),
             ToolPolicy::Allow,
         ),
@@ -130,6 +136,7 @@ pub async fn backfill_builtin_policies(db: &sqlx::SqlitePool) -> anyhow::Result<
         (BUILTIN_CAPABILITY_ID, BUILTIN_STORE_SET),
         (BUILTIN_CAPABILITY_ID, BUILTIN_STORE_DELETE),
         (BUILTIN_CAPABILITY_ID, BUILTIN_STORE_LIST),
+        (BUILTIN_CAPABILITY_ID, BUILTIN_SET_SCHEDULE),
         (BUILTIN_CAPABILITY_ID, BUILTIN_SET_REMINDER),
     ];
 

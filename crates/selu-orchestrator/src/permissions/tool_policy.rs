@@ -417,6 +417,10 @@ pub async fn has_all_policies(
     ));
     required.push((
         BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_SET_SCHEDULE.to_string(),
+    ));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
         BUILTIN_SET_REMINDER.to_string(),
     ));
 
@@ -458,3 +462,6 @@ pub const BUILTIN_STORE_LIST: &str = "store_list";
 
 /// Tool name for the set_reminder built-in (one-shot schedule reminders).
 pub const BUILTIN_SET_REMINDER: &str = "set_reminder";
+
+/// Tool name for the set_schedule built-in (recurring schedules).
+pub const BUILTIN_SET_SCHEDULE: &str = "set_schedule";

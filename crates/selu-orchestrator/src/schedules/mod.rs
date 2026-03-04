@@ -503,6 +503,111 @@ pub async fn cleanup_fired_reminders(db: &SqlitePool) {
 
 use crate::llm::provider::ToolSpec;
 
+/// Tool spec for `set_schedule` — schedule a recurring future agent action.
+pub fn set_schedule_tool_spec() -> ToolSpec {
+    ToolSpec {
+        name: "set_schedule".to_string(),
+        description: "Set a recurring schedule using a 6-field cron expression. \
+             Use this when the user asks for repeating tasks (daily, weekdays, every Monday, etc.). \
+             The schedule runs the prompt as a new agent turn each time. \
+             Cron format is: second minute hour day-of-month month day-of-week (0=Sunday..6=Saturday)."
+            .to_string(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "What the agent should do on each run"
+                },
+                "cron_expression": {
+                    "type": "string",
+                    "description": "6-field cron expression (e.g. 0 45 6 * * 1-5 for weekdays at 06:45)"
+                },
+                "cron_description": {
+                    "type": "string",
+                    "description": "Short human-readable timing description (e.g. Weekdays at 6:45 AM)"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Short name for the schedule (kebab-case, max 30 characters, e.g. 'morning-summary')"
+                },
+                "timezone": {
+                    "type": "string",
+                    "description": "IANA timezone for interpreting cron times (e.g. Europe/Berlin, America/New_York). Defaults to UTC."
+                }
+            },
+            "required": ["prompt", "cron_expression", "cron_description", "name"]
+        }),
+    }
+}
+
+/// Handle a `set_schedule` tool call from an agent.
+pub async fn dispatch_set_schedule(
+    db: &SqlitePool,
+    user_id: &str,
+    pipe_id: &str,
+    args: &serde_json::Value,
+) -> anyhow::Result<String> {
+    let prompt = args
+        .get("prompt")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing required parameter: prompt"))?;
+
+    let cron_expression = args
+        .get("cron_expression")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing required parameter: cron_expression"))?;
+
+    let cron_description = args
+        .get("cron_description")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing required parameter: cron_description"))?;
+
+    let name = args
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing required parameter: name"))?;
+
+    let timezone = match args
+        .get("timezone")
+        .and_then(|v| v.as_str())
+        .filter(|tz| !tz.trim().is_empty())
+    {
+        Some(tz) => tz.to_string(),
+        None => sqlx::query_scalar::<_, String>("SELECT timezone FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "UTC".to_string()),
+    };
+
+    validate_cron(cron_expression)?;
+    let id = create_schedule(
+        db,
+        user_id,
+        name,
+        prompt,
+        cron_expression,
+        cron_description,
+        &timezone,
+        &[pipe_id.to_string()],
+    )
+    .await?;
+
+    Ok(serde_json::json!({
+        "status": "created",
+        "id": id,
+        "name": name,
+        "cron_expression": cron_expression,
+        "cron_description": cron_description,
+        "timezone": timezone,
+        "prompt": prompt
+    })
+    .to_string())
+}
+
 /// Tool spec for `set_reminder` — schedule a one-time future agent action.
 pub fn set_reminder_tool_spec() -> ToolSpec {
     ToolSpec {
