@@ -221,40 +221,73 @@ pub async fn run_loop(
         // ── Build ToolCall objects from stream deltas (or fall back) ─────
 
         let calls: Vec<ToolCall> = if !pending_tool_calls.is_empty() {
-            pending_tool_calls
+            let mut parsed_calls: Vec<ToolCall> = Vec::new();
+            let mut parse_failed = false;
+
+            for (id, name, args_json) in pending_tool_calls
                 .into_iter()
                 .filter(|(_, name, _)| !name.is_empty())
-                .map(|(id, name, args_json)| {
-                    let arguments: serde_json::Value = if args_json.trim().is_empty() {
-                        // Tool calls with no arguments (e.g. tools that take no params):
-                        // the LLM may emit contentBlockStart but no contentBlockDelta,
-                        // leaving the accumulated string empty. Default to `{}`.
-                        serde_json::json!({})
-                    } else {
-                        serde_json::from_str(&args_json).unwrap_or_else(|e| {
+            {
+                let arguments: serde_json::Value = if args_json.trim().is_empty() {
+                    // Tool calls with no arguments (e.g. tools that take no params):
+                    // the LLM may emit contentBlockStart but no contentBlockDelta,
+                    // leaving the accumulated string empty. Default to `{}`.
+                    serde_json::json!({})
+                } else {
+                    match serde_json::from_str(&args_json) {
+                        Ok(v) => v,
+                        Err(e) => {
                             warn!(
                                 tool = %name,
                                 raw_len = args_json.len(),
                                 error = %e,
                                 raw_start = &args_json[..args_json.len().min(200)],
-                                "Failed to parse streamed tool args, wrapping as object"
+                                "Failed to parse streamed tool args, retrying with non-streaming call"
                             );
-                            // Wrap in an object so providers that require JSON objects
-                            // (e.g. Bedrock's toolUse.input) don't reject the message.
-                            serde_json::json!({ "raw_input": args_json })
-                        })
-                    };
-                    ToolCall {
-                        id: if id.is_empty() {
-                            format!("call_{}", uuid::Uuid::new_v4())
-                        } else {
-                            id
-                        },
-                        name,
-                        arguments,
+                            parse_failed = true;
+                            break;
+                        }
                     }
-                })
-                .collect()
+                };
+
+                parsed_calls.push(ToolCall {
+                    id: if id.is_empty() {
+                        format!("call_{}", uuid::Uuid::new_v4())
+                    } else {
+                        id
+                    },
+                    name,
+                    arguments,
+                });
+            }
+
+            if !parse_failed {
+                parsed_calls
+            } else {
+                // Streamed tool-call args can arrive incomplete with some providers.
+                // Fall back to one non-streaming round rather than dispatching malformed args.
+                let llm_start = Instant::now();
+                let response = provider.chat(&messages, &tools, temperature).await?;
+                debug!(
+                    iteration,
+                    elapsed_ms = llm_start.elapsed().as_millis(),
+                    "LLM non-streaming fallback completed"
+                );
+
+                match response {
+                    LlmResponse::Text(text) => {
+                        let _ = tx.send(LoopEvent::Token(text.clone())).await;
+                        let _ = tx.send(LoopEvent::Done).await;
+                        debug!(
+                            total_ms = loop_start.elapsed().as_millis(),
+                            iterations = iteration + 1,
+                            "Tool loop complete (non-streaming fallback)"
+                        );
+                        return Ok(text);
+                    }
+                    LlmResponse::ToolCalls(c) => c,
+                }
+            }
         } else {
             // Fallback: streaming failed entirely or returned nothing useful.
             // Use a non-streaming call as last resort.
