@@ -11,7 +11,7 @@
 /// On startup, existing configs that lack a `bb_webhook_id` are automatically
 /// upgraded by registering the webhook with BlueBubbles (seamless migration
 /// from the old polling approach).
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use axum::{
     Router,
     extract::{Path, Query, State},
@@ -790,7 +790,7 @@ async fn dispatch_message(
         // Send a brief acknowledgment in the user's language
         let lang = crate::i18n::user_language(&state.db, &user_id).await;
         let ack_text = crate::i18n::t(&lang, "approval.approved_processing");
-        let _ = send_bb_reply(
+        if let Err(e) = send_bb_reply(
             &http,
             &server_url,
             &server_password,
@@ -799,7 +799,10 @@ async fn dispatch_message(
             message_guid.as_deref(),
             &sent_guids,
         )
-        .await;
+        .await
+        {
+            error!("Failed to send BlueBubbles approval ack: {e}");
+        }
         return;
     }
 
@@ -832,7 +835,7 @@ async fn dispatch_message(
             warn!("Agent turn returned empty reply");
             let lang = crate::i18n::user_language(&state.db, &user_id).await;
             let error_text = crate::i18n::t(&lang, "error.agent_turn_failed");
-            let _ = send_bb_reply(
+            if let Err(e) = send_bb_reply(
                 &http,
                 &server_url,
                 &server_password,
@@ -841,7 +844,10 @@ async fn dispatch_message(
                 message_guid.as_deref(),
                 &sent_guids,
             )
-            .await;
+            .await
+            {
+                error!("Failed to send BlueBubbles empty-turn error reply: {e}");
+            }
             return;
         }
         Err(e) => {
@@ -851,7 +857,7 @@ async fn dispatch_message(
             // staring at silence.
             let lang = crate::i18n::user_language(&state.db, &user_id).await;
             let error_text = crate::i18n::t(&lang, "error.agent_turn_failed");
-            let _ = send_bb_reply(
+            if let Err(e) = send_bb_reply(
                 &http,
                 &server_url,
                 &server_password,
@@ -860,7 +866,10 @@ async fn dispatch_message(
                 message_guid.as_deref(),
                 &sent_guids,
             )
-            .await;
+            .await
+            {
+                error!("Failed to send BlueBubbles agent-turn error reply: {e}");
+            }
             return;
         }
     };
@@ -872,7 +881,7 @@ async fn dispatch_message(
         reply_to_guid = ?message_guid,
         "Sending BB reply"
     );
-    let sent_guid = send_bb_reply(
+    let sent_guid = match send_bb_reply(
         &http,
         &server_url,
         &server_password,
@@ -881,7 +890,14 @@ async fn dispatch_message(
         message_guid.as_deref(), // reply to the original message
         &sent_guids,
     )
-    .await;
+    .await
+    {
+        Ok(guid) => guid,
+        Err(e) => {
+            error!(thread_id = %thread_id, "Failed to send BlueBubbles reply: {e}");
+            None
+        }
+    };
 
     // Store Selu's reply GUID so future incoming replies can be matched
     // back to this thread.
@@ -914,56 +930,65 @@ async fn send_bb_reply(
     text: &str,
     reply_to_guid: Option<&str>,
     sent_guids: &SentGuids,
-) -> Option<String> {
+) -> Result<Option<String>> {
     let url = format!("{}/api/v1/message/text", server_url);
+    let methods = ["private-api", "apple-script"];
+    let mut last_error: Option<String> = None;
 
-    let temp_guid = format!("selu-{}", current_epoch_ms());
+    for method in methods {
+        let temp_guid = format!("selu-{}", current_epoch_ms());
+        let body = BbSendTextRequest {
+            chat_guid: chat_guid.to_string(),
+            message: text.to_string(),
+            method: method.to_string(),
+            temp_guid,
+            selected_message_guid: reply_to_guid.map(|s| s.to_string()),
+        };
 
-    let body = BbSendTextRequest {
-        chat_guid: chat_guid.to_string(),
-        message: text.to_string(),
-        method: "apple-script".into(),
-        temp_guid,
-        selected_message_guid: reply_to_guid.map(|s| s.to_string()),
-    };
+        let resp = http
+            .post(&url)
+            .query(&[("password", server_password)])
+            .json(&body)
+            .send()
+            .await;
 
-    let resp = http
-        .post(&url)
-        .query(&[("password", server_password)])
-        .json(&body)
-        .send()
-        .await;
-
-    match resp {
-        Ok(r) if r.status().is_success() => {
-            if let Ok(bb_resp) = r.json::<BbSendResponse>().await {
-                if let Some(guid) = bb_resp.data.and_then(|d| d.guid) {
-                    let mut sent = sent_guids.write().await;
-                    sent.insert(guid.clone());
-                    info!(guid = %guid, "Sent via BlueBubbles");
-
-                    // Prune if set gets too large
-                    if sent.len() > 500 {
-                        sent.clear();
+        match resp {
+            Ok(r) if r.status().is_success() => {
+                if let Ok(bb_resp) = r.json::<BbSendResponse>().await {
+                    if let Some(guid) = bb_resp.data.and_then(|d| d.guid) {
+                        let mut sent = sent_guids.write().await;
                         sent.insert(guid.clone());
-                    }
+                        info!(method = method, guid = %guid, "Sent via BlueBubbles");
 
-                    return Some(guid);
+                        // Prune if set gets too large
+                        if sent.len() > 500 {
+                            sent.clear();
+                            sent.insert(guid.clone());
+                        }
+
+                        return Ok(Some(guid));
+                    }
                 }
+                info!(method = method, "Sent via BlueBubbles (no GUID returned)");
+                return Ok(None);
             }
-            None
-        }
-        Ok(r) => {
-            let status = r.status();
-            let body = r.text().await.unwrap_or_default();
-            error!(%status, %body, "BlueBubbles rejected send");
-            None
-        }
-        Err(e) => {
-            error!("Failed to reach BlueBubbles: {e}");
-            None
+            Ok(r) => {
+                let status = r.status();
+                let body = r.text().await.unwrap_or_default();
+                warn!(method = method, %status, %body, "BlueBubbles rejected send, trying fallback if available");
+                last_error = Some(format!("method={method} status={status} body={body}"));
+            }
+            Err(e) => {
+                warn!(method = method, error = %e, "Failed to reach BlueBubbles, trying fallback if available");
+                last_error = Some(format!("method={method} error={e}"));
+            }
         }
     }
+
+    Err(anyhow!(
+        "BlueBubbles send failed after all methods: {}",
+        last_error.unwrap_or_else(|| "unknown error".to_string())
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -1051,7 +1076,7 @@ impl crate::channels::ChannelSender for BlueBubblesSender {
         reply_to_guid: Option<&str>,
     ) -> Result<Option<String>> {
         let clean_text = strip_markdown(text);
-        let guid = send_bb_reply(
+        send_bb_reply(
             &self.http,
             &self.server_url,
             &self.server_password,
@@ -1060,8 +1085,7 @@ impl crate::channels::ChannelSender for BlueBubblesSender {
             reply_to_guid,
             &self.sent_guids,
         )
-        .await;
-        Ok(guid)
+        .await
     }
 }
 
@@ -1111,7 +1135,8 @@ pub async fn send_outbound(
         envelope.reply_to_message_ref.as_deref(),
         &sent_guids,
     )
-    .await;
+    .await
+    .context("BlueBubbles outbound send failed")?;
 
     Ok(())
 }
