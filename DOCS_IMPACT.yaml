@@ -554,3 +554,54 @@ entries:
       provider from the active list.
 
       New/updated UI copy is fully translated in English and German.
+
+  - id: 2026-03-04-coding-github-agent-and-workspace-lifecycle
+    date: "2026-03-04"
+    pr:
+    area: capabilities
+    type: added
+    audience: both
+    summary: "Added a GitHub coding agent package and activated workspace lifecycle tracking for environment capabilities"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/session.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/main.rs
+      - crates/selu-orchestrator/src/capabilities/mod.rs
+      - crates/selu-orchestrator/src/capabilities/manifest.rs
+      - crates/selu-orchestrator/src/capabilities/runner.rs
+      - crates/selu-orchestrator/migrations/0022_workspace_activity.sql
+      - agents/coding-github/agent.yaml
+      - agents/coding-github/agent.md
+      - agents/coding-github/capabilities/coding-github/manifest.yaml
+      - agents/coding-github/capabilities/coding-github/prompt.md
+      - agents/coding-github/capabilities/coding-github/container/server.py
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/credentials
+      - developer-guide/agent-format
+      - developer-guide/capabilities/container-guidelines
+      - reference/manifest-yaml-schema
+    details: |
+      New coding agent package:
+      - Added `coding-github` agent definition with a GitHub-focused capability.
+      - Capability runs as `class: environment` with `filesystem: workspace`.
+      - Requires user credential `GITHUB_TOKEN`.
+      - Provides tools for repo checkout/branching, file edits/search, checks,
+        commit/push, and pull-request creation.
+      - `push_branch` and `create_pull_request` default to Ask policy.
+
+      Core lifecycle changes:
+      - Session idle cleanup now respects each agent's individual
+        `idle_timeout_minutes` instead of using a global minimum timeout.
+      - Session opening is now thread-aware: threaded turns attempt to resume
+        that thread's prior session (including idle sessions), and rebind the
+        thread to a new session when the previous one cannot be resumed.
+      - Workspace lifecycle is now active in runtime: environment capability
+        invocations touch/create workspace rows, and TTL cleanup uses
+        `last_active_at` activity timestamps.
+
+      Manifest and runtime hardening:
+      - `filesystem: workspace` is now validated to be allowed only for
+        `class: environment`.
+      - Environment capabilities no longer get implicit workspace mounts unless
+        they explicitly request `filesystem: workspace`.

@@ -2,7 +2,7 @@ use anyhow::Result;
 use futures::StreamExt;
 use futures::future::join_all;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, info, warn};
 
@@ -35,7 +35,6 @@ pub enum ToolDispatchResult {
     Queued {
         approval_id: String,
         receiver: oneshot::Receiver<bool>,
-        timeout: Duration,
     },
 }
 
@@ -329,7 +328,6 @@ pub async fn run_loop(
             call: &'a ToolCall,
             approval_id: String,
             receiver: oneshot::Receiver<bool>,
-            timeout: Duration,
         }
         let mut deferred_confirmations: Vec<DeferredConfirmation<'_>> = Vec::new();
         let mut deferred_queued: Vec<DeferredQueued<'_>> = Vec::new();
@@ -361,13 +359,11 @@ pub async fn run_loop(
                 ToolDispatchResult::Queued {
                     approval_id,
                     receiver,
-                    timeout,
                 } => {
                     deferred_queued.push(DeferredQueued {
                         call,
                         approval_id,
                         receiver,
-                        timeout,
                     });
                 }
             }
@@ -433,24 +429,19 @@ pub async fn run_loop(
             info!(
                 tool = %call.name,
                 approval_id = %deferred.approval_id,
-                timeout_secs = deferred.timeout.as_secs(),
                 "Waiting for async tool approval"
             );
 
-            let approved = match tokio::time::timeout(deferred.timeout, deferred.receiver).await {
-                Ok(Ok(v)) => v,
-                Ok(Err(_)) => false, // sender dropped
-                Err(_) => {
-                    warn!(tool = %call.name, "Async approval timed out");
-                    false
-                }
+            let approved = match deferred.receiver.await {
+                Ok(v) => v,
+                Err(_) => false, // sender dropped
             };
 
             if !approved {
                 warn!(tool = %call.name, "Tool call denied (async approval)");
                 messages.push(ChatMessage::tool_result(
                     &call.id,
-                    "The user did not approve this action in time. Do NOT retry it. \
+                    "The user did not approve this action. Do NOT retry it. \
                      Acknowledge that the action was not approved and ask how they'd like to proceed."
                         .to_string(),
                 ));

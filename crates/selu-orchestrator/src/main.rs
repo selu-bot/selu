@@ -143,22 +143,18 @@ async fn main() -> Result<()> {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
         loop {
             interval.tick().await;
-            // Get the minimum idle timeout across all agents (or use 30 as default)
+            // Resolve per-agent idle timeout values.
             let agents = cleanup_state.agents.load();
-            let min_idle = agents
-                .values()
-                .map(|a| a.session.idle_timeout_minutes)
-                .min()
-                .unwrap_or(30);
+            let mut idle_by_agent = std::collections::HashMap::new();
+            for (agent_id, def) in agents.iter() {
+                idle_by_agent.insert(agent_id.clone(), def.session.idle_timeout_minutes);
+            }
             drop(agents);
 
-            match agents::session::close_idle_sessions(&cleanup_state.db, min_idle).await {
+            match agents::session::close_idle_sessions(&cleanup_state.db, &idle_by_agent, 30).await
+            {
                 Ok(ref idled) if !idled.is_empty() => {
-                    info!(
-                        "Closed {} idle session(s) (threshold: {} min)",
-                        idled.len(),
-                        min_idle
-                    );
+                    info!("Closed {} idle session(s)", idled.len());
                     // Stop capability containers for each session that was just idled
                     for session_id in idled {
                         cleanup_state.capabilities.close_session(session_id).await;
@@ -206,18 +202,6 @@ async fn main() -> Result<()> {
                 }
                 Err(e) => tracing::error!("Thread idle cleanup error: {e}"),
                 _ => {}
-            }
-        }
-    });
-
-    // Pending tool approval expiry: runs every 30 seconds
-    let approval_state = state.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
-        loop {
-            interval.tick().await;
-            if let Err(e) = permissions::approval_queue::expire_pending(&approval_state).await {
-                tracing::error!("Approval expiry error: {e}");
             }
         }
     });

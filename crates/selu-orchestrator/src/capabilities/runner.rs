@@ -359,7 +359,9 @@ impl CapabilityRunner {
             m
         };
 
-        if manifest.class == CapabilityClass::Environment {
+        if manifest.class == CapabilityClass::Environment
+            && manifest.filesystem == crate::capabilities::manifest::FilesystemPolicy::Workspace
+        {
             // Named Docker volume for the workspace
             let volume_name = format!("selu-workspace-{}", session_id);
             binds.push(format!("{}:/workspace:rw", volume_name));
