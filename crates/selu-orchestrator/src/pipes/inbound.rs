@@ -199,7 +199,14 @@ async fn handle_inbound(
         // ── Approval interception ─────────────────────────────────────────────
         // If this thread has a pending tool approval, the user's reply resolves
         // it instead of starting a new agent turn.
-        if approval_queue::try_resolve_pending(&state, &thread_id).await {
+        if approval_queue::try_resolve_pending(&state, &thread_id).await
+            || approval_queue::try_resolve_pending_for_user_pipe(
+                &state,
+                &resolved_user_id,
+                &pipe_id_str,
+            )
+            .await
+        {
             info!(thread_id = %thread_id, "Message consumed as tool approval response (webhook)");
             return;
         }

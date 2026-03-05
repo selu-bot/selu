@@ -112,3 +112,75 @@ pub async fn try_resolve_pending(state: &AppState, thread_id: &str) -> bool {
         false
     }
 }
+
+/// Try to resolve a pending approval by user+pipe when thread correlation
+/// metadata is unavailable (e.g. plain "yes" reply without inline threading).
+///
+/// Safety rule: only auto-resolve when there is exactly one pending approval
+/// for this user on this pipe. If there are multiple pending approvals, do
+/// nothing to avoid approving the wrong action.
+pub async fn try_resolve_pending_for_user_pipe(
+    state: &AppState,
+    user_id: &str,
+    pipe_id: &str,
+) -> bool {
+    let rows = match sqlx::query(
+        "SELECT id FROM pending_tool_approvals
+         WHERE user_id = ? AND pipe_id = ? AND status = 'pending'
+         ORDER BY created_at ASC LIMIT 2",
+    )
+    .bind(user_id)
+    .bind(pipe_id)
+    .fetch_all(&state.db)
+    .await
+    {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+
+    if rows.is_empty() {
+        return false;
+    }
+
+    if rows.len() > 1 {
+        warn!(
+            user_id = %user_id,
+            pipe_id = %pipe_id,
+            count = rows.len(),
+            "Multiple pending approvals for user+pipe; not auto-resolving"
+        );
+        return false;
+    }
+
+    let approval_id = match rows[0].try_get::<String, _>("id") {
+        Ok(id) => id,
+        Err(_) => return false,
+    };
+
+    let _ = sqlx::query("UPDATE pending_tool_approvals SET status = 'approved' WHERE id = ?")
+        .bind(&approval_id)
+        .execute(&state.db)
+        .await;
+
+    let sender = {
+        let mut pending = state.pending_approvals.lock().await;
+        pending.remove(&approval_id)
+    };
+
+    if let Some(tx) = sender {
+        let _ = tx.send(true);
+        info!(
+            approval_id = %approval_id,
+            user_id = %user_id,
+            pipe_id = %pipe_id,
+            "Tool approval resolved via user+pipe fallback"
+        );
+        true
+    } else {
+        warn!(
+            approval_id = %approval_id,
+            "Pending approval found for user+pipe but no in-memory oneshot"
+        );
+        false
+    }
+}
