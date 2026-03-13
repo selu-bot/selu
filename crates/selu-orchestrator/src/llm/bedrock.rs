@@ -72,6 +72,24 @@ impl BedrockProvider {
     }
 }
 
+fn sanitize_bedrock_input_schema(schema: &Value) -> Value {
+    let mut out = schema.clone();
+    if let Some(obj) = out.as_object_mut() {
+        let had_any_of = obj.remove("anyOf").is_some();
+        let had_one_of = obj.remove("oneOf").is_some();
+        let had_all_of = obj.remove("allOf").is_some();
+        if had_any_of || had_one_of || had_all_of {
+            warn!(
+                had_any_of,
+                had_one_of,
+                had_all_of,
+                "Bedrock tool input schema does not support top-level anyOf/oneOf/allOf; stripped unsupported keys"
+            );
+        }
+    }
+    out
+}
+
 /// Build the Bedrock Converse request body from our internal message types.
 fn build_converse_body(messages: &[ChatMessage], tools: &[ToolSpec], temperature: f32) -> Value {
     // Extract system prompts
@@ -162,7 +180,7 @@ fn build_converse_body(messages: &[ChatMessage], tools: &[ToolSpec], temperature
                         "name": t.name,
                         "description": t.description,
                         "inputSchema": {
-                            "json": t.parameters
+                            "json": sanitize_bedrock_input_schema(&t.parameters)
                         }
                     }
                 })
