@@ -1014,7 +1014,9 @@ async fn dispatch_message(
     let thread_id = thread.id.to_string();
 
     // Approval interception
-    if approval_queue::try_resolve_pending(&state, &thread_id).await {
+    if approval_queue::try_resolve_pending(&state, &thread_id).await
+        || approval_queue::try_resolve_pending_for_user_pipe(&state, &user_id, &pipe_id).await
+    {
         info!(thread_id = %thread_id, "Message consumed as tool approval response (Telegram)");
         let lang = crate::i18n::user_language(&state.db, &user_id).await;
         let ack_text = crate::i18n::t(&lang, "approval.approved_processing");

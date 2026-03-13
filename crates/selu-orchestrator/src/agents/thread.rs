@@ -20,7 +20,7 @@ pub async fn create_thread(
     origin_message_ref: Option<&str>,
 ) -> Result<Thread> {
     // First, ensure we have a session for this user + agent
-    let session = session_mgr::open_session(db, pipe_id, user_id, agent_id).await?;
+    let session = session_mgr::open_session(db, pipe_id, user_id, agent_id, None).await?;
     let session_id = session.id.to_string();
 
     let thread_id = Uuid::new_v4().to_string();

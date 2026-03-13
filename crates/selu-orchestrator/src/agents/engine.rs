@@ -145,7 +145,13 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
 
     // Open session and persist user message in parallel.
     // Both are independent operations that hit the DB.
-    let session_fut = session_mgr::open_session(&state.db, &pipe_id, &user_id, &agent.id);
+    let session_fut = session_mgr::open_session(
+        &state.db,
+        &pipe_id,
+        &user_id,
+        &agent.id,
+        thread_id.as_deref(),
+    );
 
     let session = session_fut.await?;
     let session_id = session.id.to_string();
@@ -550,7 +556,23 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         let thread = thread.clone();
                         let user = user.clone();
                         let store = store.clone();
+                        let db = state.db.clone();
+                        let cap_id_for_touch = cap_id.clone();
                         Box::pin(async move {
+                            if let Some(manifest) = manifests.get(&cap_id_for_touch) {
+                                if let Err(e) = crate::capabilities::touch_workspace_activity(
+                                    &db, manifest, &session,
+                                )
+                                .await
+                                {
+                                    warn!(
+                                        capability_id = %cap_id_for_touch,
+                                        session_id = %session,
+                                        "Failed to touch workspace activity: {e}"
+                                    );
+                                }
+                            }
+
                             engine
                                 .invoke(&manifests, &name, args, &session, &thread, &user, &store)
                                 .await
@@ -816,9 +838,6 @@ where
                     Ok(ToolDispatchResult::Queued {
                         approval_id,
                         receiver: orx,
-                        timeout: std::time::Duration::from_secs(
-                            approval_queue::APPROVAL_TIMEOUT_SECS as u64,
-                        ),
                     })
                 }
 

@@ -12,9 +12,6 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-/// Default timeout for pending approvals (5 minutes).
-pub const APPROVAL_TIMEOUT_SECS: i64 = 300;
-
 /// Create a pending approval in the database.
 ///
 /// Returns the approval ID. The caller is responsible for also inserting
@@ -38,7 +35,7 @@ pub async fn create_pending(
             (id, user_id, session_id, thread_id, pipe_id, agent_id,
              capability_id, tool_name, args_json, tool_call_id, status, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending',
-                 datetime('now', '+' || ? || ' seconds'))",
+                 '9999-12-31 23:59:59')",
     )
     .bind(&id)
     .bind(user_id)
@@ -50,7 +47,6 @@ pub async fn create_pending(
     .bind(tool_name)
     .bind(args_json)
     .bind(tool_call_id)
-    .bind(APPROVAL_TIMEOUT_SECS)
     .execute(db)
     .await?;
 
@@ -76,7 +72,7 @@ pub async fn try_resolve_pending(state: &AppState, thread_id: &str) -> bool {
     // Check DB for a pending approval on this thread
     let pending = sqlx::query(
         "SELECT id FROM pending_tool_approvals
-         WHERE thread_id = ? AND status = 'pending' AND expires_at > datetime('now')
+         WHERE thread_id = ? AND status = 'pending'
          ORDER BY created_at ASC LIMIT 1",
     )
     .bind(thread_id)
@@ -108,56 +104,83 @@ pub async fn try_resolve_pending(state: &AppState, thread_id: &str) -> bool {
         info!(approval_id = %approval_id, thread_id = %thread_id, "Tool approval resolved via thread reply");
         true
     } else {
-        // Oneshot already gone (timed out or resolved another way)
+        // Oneshot already gone (likely process restart or resolved another way)
         warn!(
             approval_id = %approval_id,
-            "Pending approval found in DB but no in-memory oneshot (likely expired)"
+            "Pending approval found in DB but no in-memory oneshot"
         );
         false
     }
 }
 
-/// Expire all pending approvals whose deadline has passed.
+/// Try to resolve a pending approval by user+pipe when thread correlation
+/// metadata is unavailable (e.g. plain "yes" reply without inline threading).
 ///
-/// For each expired approval, the in-memory oneshot is sent `false`
-/// (denied) so the suspended tool loop resumes with a denial.
-pub async fn expire_pending(state: &AppState) -> Result<()> {
-    let expired = sqlx::query(
+/// Safety rule: only auto-resolve when there is exactly one pending approval
+/// for this user on this pipe. If there are multiple pending approvals, do
+/// nothing to avoid approving the wrong action.
+pub async fn try_resolve_pending_for_user_pipe(
+    state: &AppState,
+    user_id: &str,
+    pipe_id: &str,
+) -> bool {
+    let rows = match sqlx::query(
         "SELECT id FROM pending_tool_approvals
-         WHERE status = 'pending' AND expires_at <= datetime('now')",
+         WHERE user_id = ? AND pipe_id = ? AND status = 'pending'
+         ORDER BY created_at ASC LIMIT 2",
     )
+    .bind(user_id)
+    .bind(pipe_id)
     .fetch_all(&state.db)
-    .await?;
+    .await
+    {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
 
-    if expired.is_empty() {
-        return Ok(());
+    if rows.is_empty() {
+        return false;
     }
 
-    let count = expired.len();
-
-    for row in &expired {
-        let id: String = match row.try_get("id") {
-            Ok(id) => id,
-            Err(_) => continue,
-        };
-
-        // Mark expired in DB
-        let _ = sqlx::query("UPDATE pending_tool_approvals SET status = 'expired' WHERE id = ?")
-            .bind(&id)
-            .execute(&state.db)
-            .await;
-
-        // Signal the oneshot as denied
-        let sender = {
-            let mut pending = state.pending_approvals.lock().await;
-            pending.remove(&id)
-        };
-
-        if let Some(tx) = sender {
-            let _ = tx.send(false);
-        }
+    if rows.len() > 1 {
+        warn!(
+            user_id = %user_id,
+            pipe_id = %pipe_id,
+            count = rows.len(),
+            "Multiple pending approvals for user+pipe; not auto-resolving"
+        );
+        return false;
     }
 
-    info!(count = count, "Expired pending tool approvals");
-    Ok(())
+    let approval_id = match rows[0].try_get::<String, _>("id") {
+        Ok(id) => id,
+        Err(_) => return false,
+    };
+
+    let _ = sqlx::query("UPDATE pending_tool_approvals SET status = 'approved' WHERE id = ?")
+        .bind(&approval_id)
+        .execute(&state.db)
+        .await;
+
+    let sender = {
+        let mut pending = state.pending_approvals.lock().await;
+        pending.remove(&approval_id)
+    };
+
+    if let Some(tx) = sender {
+        let _ = tx.send(true);
+        info!(
+            approval_id = %approval_id,
+            user_id = %user_id,
+            pipe_id = %pipe_id,
+            "Tool approval resolved via user+pipe fallback"
+        );
+        true
+    } else {
+        warn!(
+            approval_id = %approval_id,
+            "Pending approval found for user+pipe but no in-memory oneshot"
+        );
+        false
+    }
 }

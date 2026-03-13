@@ -6,10 +6,12 @@ pub mod runner;
 
 use anyhow::{Result, anyhow};
 use serde_json::Value;
+use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
+use uuid::Uuid;
 
 use grpc::CapabilityGrpcClient;
 use manifest::CapabilityManifest;
@@ -255,31 +257,94 @@ pub fn build_tool_specs(
     specs
 }
 
+/// Mark workspace activity for an environment capability invocation.
+///
+/// Only capabilities with `class: environment` and `filesystem: workspace`
+/// are tracked. A row is created in `workspaces` on first use and touched
+/// (`last_active_at`) on every subsequent invocation.
+pub async fn touch_workspace_activity(
+    db: &sqlx::SqlitePool,
+    manifest: &CapabilityManifest,
+    session_id: &str,
+) -> Result<()> {
+    use crate::capabilities::manifest::{CapabilityClass, FilesystemPolicy};
+
+    if manifest.class != CapabilityClass::Environment
+        || manifest.filesystem != FilesystemPolicy::Workspace
+    {
+        return Ok(());
+    }
+
+    let existing = sqlx::query(
+        "SELECT id
+         FROM workspaces
+         WHERE session_id = ? AND capability_id = ? AND status != 'destroyed'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(session_id)
+    .bind(&manifest.id)
+    .fetch_optional(db)
+    .await?;
+
+    if let Some(row) = existing {
+        let ws_id: String = row.get("id");
+        sqlx::query(
+            "UPDATE workspaces
+             SET status = 'active',
+                 suspended_at = NULL,
+                 last_active_at = datetime('now')
+             WHERE id = ?",
+        )
+        .bind(ws_id)
+        .execute(db)
+        .await?;
+        return Ok(());
+    }
+
+    let ws_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO workspaces (id, session_id, capability_id, status, last_active_at)
+         VALUES (?, ?, ?, 'active', datetime('now'))",
+    )
+    .bind(ws_id)
+    .bind(session_id)
+    .bind(&manifest.id)
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
 /// Clean up expired workspace volumes.
 /// Checks the `workspaces` table for entries whose TTL has expired and
 /// removes the corresponding Docker volumes.
 pub async fn cleanup_expired_workspaces(state: &AppState) -> Result<()> {
-    // Find workspaces that have exceeded their TTL
-    let expired = sqlx::query!(
-        r#"SELECT id, session_id, capability_id FROM workspaces
+    // Workspace volumes are keyed by session_id. Expire sessions where all
+    // active workspace rows for that session are beyond TTL.
+    let expired_sessions = sqlx::query(
+        r#"SELECT session_id
+           FROM workspaces
            WHERE status = 'active'
-             AND datetime(created_at, '+' || ttl_hours || ' hours') < datetime('now')"#
+           GROUP BY session_id
+           HAVING MAX(datetime(COALESCE(last_active_at, created_at), '+' || ttl_hours || ' hours')) < datetime('now')"#,
     )
     .fetch_all(&state.db)
     .await?;
 
-    if expired.is_empty() {
+    if expired_sessions.is_empty() {
         return Ok(());
     }
 
-    info!("Found {} expired workspace(s) to clean up", expired.len());
+    info!(
+        "Found {} expired workspace session(s) to clean up",
+        expired_sessions.len()
+    );
 
-    for ws in &expired {
-        let session_id = &ws.session_id;
-        let ws_id = ws.id.as_deref().unwrap_or("?");
-
+    for row in &expired_sessions {
+        let session_id: String = row.get("session_id");
         // Close capability containers for this session
-        state.capabilities.close_session(session_id).await;
+        state.capabilities.close_session(&session_id).await;
 
         // Remove the Docker volume
         let volume_name = format!("selu-workspace-{}", session_id);
@@ -296,14 +361,108 @@ pub async fn cleanup_expired_workspaces(state: &AppState) -> Result<()> {
             }
         }
 
-        // Mark workspace as destroyed
-        let _ = sqlx::query!(
-            "UPDATE workspaces SET status = 'destroyed' WHERE id = ?",
-            ws_id
+        // Mark all active workspaces for this session as destroyed.
+        let _ = sqlx::query(
+            "UPDATE workspaces
+             SET status = 'destroyed'
+             WHERE session_id = ? AND status = 'active'",
         )
+        .bind(&session_id)
         .execute(&state.db)
         .await;
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::capabilities::manifest::{
+        CapabilityClass, CredentialDeclaration, FilesystemPolicy, NetworkPolicy, ResourceLimits,
+        ToolSource,
+    };
+    use sqlx::SqlitePool;
+
+    fn env_manifest(cap_id: &str, filesystem: FilesystemPolicy) -> CapabilityManifest {
+        CapabilityManifest {
+            id: cap_id.to_string(),
+            class: CapabilityClass::Environment,
+            image: "test:latest".to_string(),
+            tool_source: ToolSource::Manifest,
+            discovery_tool_name: "list_tools".to_string(),
+            tools: vec![],
+            network: NetworkPolicy::default(),
+            filesystem,
+            credentials: Vec::<CredentialDeclaration>::new(),
+            resources: ResourceLimits::default(),
+            prompt: String::new(),
+        }
+    }
+
+    async fn setup_db() -> SqlitePool {
+        let db = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE workspaces (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                capability_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                ttl_hours INTEGER NOT NULL DEFAULT 24,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                suspended_at TEXT,
+                last_active_at TEXT
+            )",
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        db
+    }
+
+    #[tokio::test]
+    async fn touch_workspace_activity_creates_and_reuses_workspace_row() {
+        let db = setup_db().await;
+        let session_id = "session-1";
+        let manifest = env_manifest("coding", FilesystemPolicy::Workspace);
+
+        touch_workspace_activity(&db, &manifest, session_id)
+            .await
+            .unwrap();
+        touch_workspace_activity(&db, &manifest, session_id)
+            .await
+            .unwrap();
+
+        let count: i64 = sqlx::query(
+            "SELECT COUNT(*) AS cnt
+             FROM workspaces
+             WHERE session_id = ? AND capability_id = ? AND status = 'active'",
+        )
+        .bind(session_id)
+        .bind("coding")
+        .fetch_one(&db)
+        .await
+        .unwrap()
+        .get("cnt");
+
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn touch_workspace_activity_skips_non_workspace_filesystem() {
+        let db = setup_db().await;
+        let manifest = env_manifest("coding", FilesystemPolicy::Temp);
+
+        touch_workspace_activity(&db, &manifest, "session-1")
+            .await
+            .unwrap();
+
+        let count: i64 = sqlx::query("SELECT COUNT(*) AS cnt FROM workspaces")
+            .fetch_one(&db)
+            .await
+            .unwrap()
+            .get("cnt");
+
+        assert_eq!(count, 0);
+    }
 }

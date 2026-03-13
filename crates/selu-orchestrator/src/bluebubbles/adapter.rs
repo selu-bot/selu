@@ -785,7 +785,9 @@ async fn dispatch_message(
     // If this thread has a pending tool approval, the user's reply (inline
     // reply to the approval prompt) resolves it instead of starting a new
     // agent turn.
-    if approval_queue::try_resolve_pending(&state, &thread_id).await {
+    if approval_queue::try_resolve_pending(&state, &thread_id).await
+        || approval_queue::try_resolve_pending_for_user_pipe(&state, &user_id, &pipe_id).await
+    {
         info!(thread_id = %thread_id, "Message consumed as tool approval response");
         // Send a brief acknowledgment in the user's language
         let lang = crate::i18n::user_language(&state.db, &user_id).await;

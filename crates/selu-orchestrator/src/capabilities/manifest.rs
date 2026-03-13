@@ -197,6 +197,15 @@ pub async fn load_from_dir(dir: &Path) -> Result<CapabilityManifest> {
         );
     }
 
+    if manifest.filesystem == FilesystemPolicy::Workspace
+        && manifest.class != CapabilityClass::Environment
+    {
+        anyhow::bail!(
+            "Invalid manifest.yaml in {}: `filesystem: workspace` is only allowed for `class: environment`",
+            dir.display()
+        );
+    }
+
     if prompt_path.exists() {
         manifest.prompt = fs::read_to_string(&prompt_path)
             .await
@@ -234,4 +243,56 @@ pub async fn load_for_agent(agent_dir: &Path) -> Result<Vec<CapabilityManifest>>
     }
 
     Ok(caps)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::fs;
+
+    async fn make_manifest_dir(yaml: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("selu-manifest-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).await.unwrap();
+        fs::write(dir.join("manifest.yaml"), yaml).await.unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn rejects_workspace_filesystem_for_tool_class() {
+        let dir = make_manifest_dir(
+            r#"
+id: bad-cap
+class: tool
+image: bad:latest
+filesystem: workspace
+tools: []
+"#,
+        )
+        .await;
+
+        let err = load_from_dir(&dir).await.err().unwrap().to_string();
+        assert!(err.contains("filesystem: workspace"));
+
+        let _ = fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn allows_workspace_filesystem_for_environment_class() {
+        let dir = make_manifest_dir(
+            r#"
+id: good-cap
+class: environment
+image: good:latest
+filesystem: workspace
+tools: []
+"#,
+        )
+        .await;
+
+        let loaded = load_from_dir(&dir).await.unwrap();
+        assert_eq!(loaded.class, CapabilityClass::Environment);
+        assert_eq!(loaded.filesystem, FilesystemPolicy::Workspace);
+
+        let _ = fs::remove_dir_all(&dir).await;
+    }
 }
