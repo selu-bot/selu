@@ -330,7 +330,31 @@ pub async fn run_loop(
 
         // Send all status events upfront so the UI shows activity immediately
         for call in &calls {
-            info!(tool = %call.name, "LLM requesting tool call");
+            let mut arg_keys: Vec<String> = call
+                .arguments
+                .as_object()
+                .map(|o| o.keys().cloned().collect())
+                .unwrap_or_default();
+            arg_keys.sort();
+            let content_len = call
+                .arguments
+                .get("content")
+                .and_then(|v| v.as_str())
+                .map(|s| s.len())
+                .unwrap_or(0);
+            let files_count = call
+                .arguments
+                .get("files")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            info!(
+                tool = %call.name,
+                arg_keys = ?arg_keys,
+                content_len,
+                files_count,
+                "LLM requesting tool call"
+            );
             let status = format!("Using {}...", call.name);
             let _ = tx.send(LoopEvent::CapabilityStatus(status)).await;
         }
