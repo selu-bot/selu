@@ -354,14 +354,21 @@ impl LlmProvider for BedrockProvider {
                                     continue;
                                 }
                                 // Tool-use input delta (JSON fragment)
-                                if let Some(input_frag) =
-                                    payload["delta"]["toolUse"]["input"].as_str()
+                                if let Some(input_val) =
+                                    payload["delta"]["toolUse"].get("input")
                                 {
+                                    let input_frag = match input_val {
+                                        Value::String(s) => s.clone(),
+                                        // Some Bedrock models/providers emit tool input
+                                        // as structured JSON instead of a string fragment.
+                                        // Serialize to preserve content for the tool loop.
+                                        other => other.to_string(),
+                                    };
                                     events.push(Ok(StreamChunk::ToolCallDelta {
                                         index: tool_call_index.saturating_sub(1),
                                         id: None,
                                         name: None,
-                                        arguments_delta: input_frag.to_string(),
+                                        arguments_delta: input_frag,
                                     }));
                                     continue;
                                 }
