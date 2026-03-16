@@ -113,6 +113,9 @@ pub async fn build(
 
     system.push_str(
         "\n\n## Long-term memory tools\n\
+         Use `store_*` for keyed, mutable state you'll look up by exact key \
+         (e.g. task checkpoints, sync timestamps, workflow state). \
+         Use `memory_*` for prose notes about the user or project that should surface contextually in future conversations.\n\n\
          Use `memory_remember` to save non-personality information that may help in future interactions. \
          Examples: recurring project context, preferred report formats for this agent, and stable workflow notes. \
          Use `memory_search` or `memory_list` when you need to inspect memory explicitly, and `memory_forget` when asked to remove a memory.",
