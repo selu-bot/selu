@@ -28,6 +28,36 @@
 #     the user or developer experience.
 
 entries:
+  - id: 2026-03-16-mobile-chat-thread-selection
+    date: "2026-03-16"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Mobile users can now open and select chat threads via a slide-in drawer"
+    affected_files:
+      - crates/selu-orchestrator/templates/chat.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/channels/web-chat
+    details: |
+      On mobile devices (below the md breakpoint), the chat thread sidebar was
+      previously hidden off-screen with no accessible entry point, making it
+      impossible to select or switch conversations.
+
+      The fix introduces a right-side slide-in drawer pattern for mobile:
+      - A chat-bubble icon button in the mobile top bar (always visible on the
+        Chat page) opens the thread drawer.
+      - A hamburger-style button in the chat header (visible when a thread is
+        open) also opens the drawer.
+      - When a pipe is selected but no thread is active, an "Open conversations"
+        button is shown instead of the desktop-only sidebar hint text.
+      - Tapping a thread in the drawer auto-dismisses it.
+      - A close (×) button and backdrop tap also dismiss the drawer.
+
+      The desktop two-column layout (always-visible sidebar) is unchanged.
+      All new strings are available in English and German.
+
   - id: 2026-03-16-agent-session-isolation-mode
     date: "2026-03-16"
     pr:

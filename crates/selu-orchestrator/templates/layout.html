@@ -277,7 +277,8 @@
             class="p-1.5 rounded-lg hover:bg-sidebar-hover transition-colors" aria-label="Open menu">
       <svg class="w-6 h-6 text-txt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
-    <span class="font-heading text-lg font-black text-txt-heading tracking-tight">selu<span class="text-coral">.</span></span>
+    <span class="font-heading text-lg font-black text-txt-heading tracking-tight flex-1">selu<span class="text-coral">.</span></span>
+    {% block mobile_topbar_extra %}{% endblock %}
   </div>
   <!-- Mobile backdrop -->
   <div id="sidebar-backdrop" class="hidden md:hidden fixed inset-0 z-40 bg-black/50"
@@ -458,6 +459,7 @@
         'chat.start': 'Start a conversation',
         'chat.select': 'Select a conversation from the sidebar',
         'chat.selectpipe': 'Select a conversation to start chatting',
+        'chat.openconversations': 'Open conversations',
         'chat.placeholder': 'Message... (Shift+Enter for newline)',
         'chat.send': 'Send',
         'chat.confirm.title': 'Confirmation required',
@@ -925,6 +927,7 @@
         'chat.start': 'Unterhaltung starten',
         'chat.select': 'Unterhaltung aus der Seitenleiste ausw\u00e4hlen',
         'chat.selectpipe': 'W\u00e4hle eine Unterhaltung zum Chatten',
+        'chat.openconversations': 'Unterhaltungen \u00f6ffnen',
         'chat.placeholder': 'Nachricht... (Shift+Enter f\u00fcr Zeilenumbruch)',
         'chat.send': 'Senden',
         'chat.confirm.title': 'Best\u00e4tigung erforderlich',

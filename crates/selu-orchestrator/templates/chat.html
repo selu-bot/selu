@@ -2,14 +2,23 @@
 
 {% block title %}Chat{% endblock %}
 
+{% block mobile_topbar_extra %}
+<button onclick="openChatSidebar()" class="md:hidden p-1.5 rounded-lg hover:bg-sidebar-hover transition-colors" aria-label="Open conversations">
+  <svg class="w-5 h-5 text-txt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+</button>
+{% endblock %}
+
 {% block body %}
 <!-- Chat has its own inner sidebar for pipe + thread list -->
 <div class="flex flex-1 overflow-hidden">
 
-  <!-- Pipe + Thread sidebar -->
-  <aside id="chat-sidebar" class="w-60 bg-surface-alt border-r border-edge flex flex-col flex-shrink-0 fixed md:relative z-30 h-full md:h-auto -translate-x-full md:translate-x-0 transition-transform duration-200 top-14 md:top-0">
-    <div class="px-4 py-3 border-b border-edge">
+  <!-- Pipe + Thread sidebar (desktop: always visible; mobile: slides in from right as a drawer) -->
+  <aside id="chat-sidebar" class="w-60 bg-surface-alt border-r border-edge flex flex-col flex-shrink-0 fixed md:relative z-30 h-full md:h-auto translate-x-full md:translate-x-0 transition-transform duration-200 top-14 md:top-0 right-0 md:right-auto md:left-auto">
+    <div class="px-4 py-3 border-b border-edge flex items-center justify-between">
       <span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-muted" data-i18n="chat.conversations">Conversations</span>
+      <button onclick="closeChatSidebar()" class="md:hidden p-1 rounded hover:bg-sidebar-hover transition-colors text-txt-muted hover:text-txt-heading" aria-label="Close">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
     <div class="flex-1 overflow-y-auto py-1">
       {% for pipe in pipes %}
@@ -27,6 +36,7 @@
         <div class="{% if pipes.len() > 1 %}ml-3 border-l border-edge{% endif %}">
           {% for thread in threads %}
           <a href="{{ base_path }}/chat/{{ pipe.id }}/t/{{ thread.id }}"
+             onclick="closeChatSidebar()"
              class="block pl-4 pr-3 py-2 text-xs transition-all {% if selected_thread_id == thread.id %}text-txt-heading bg-coral/10{% else %}text-txt-muted hover:text-txt hover:bg-sidebar-hover{% endif %} truncate">
             {% if thread.status == "completed" %}
             <span class="text-emerald-400 mr-1">&#x2713;</span>
@@ -57,7 +67,7 @@
       {% endif %}
     </div>
   </aside>
-  <div id="chat-sidebar-backdrop" class="hidden md:hidden fixed inset-0 z-20 bg-black/30" onclick="document.getElementById('chat-sidebar').classList.add('-translate-x-full');this.classList.add('hidden')"></div>
+  <div id="chat-sidebar-backdrop" class="hidden md:hidden fixed inset-0 z-20 bg-black/30" onclick="closeChatSidebar()"></div>
 
   {% if !selected_thread_id.is_empty() %}
   {% if let Some(pipe) = selected_pipe %}
@@ -65,7 +75,7 @@
   <div class="flex-1 flex flex-col overflow-hidden">
     <!-- Chat header -->
     <div class="h-14 px-5 flex items-center gap-3 border-b border-edge bg-surface-alt flex-shrink-0">
-      <button onclick="document.getElementById('chat-sidebar').classList.remove('-translate-x-full');document.getElementById('chat-sidebar-backdrop').classList.remove('hidden')" class="md:hidden p-1 rounded-lg hover:bg-sidebar-hover transition-colors mr-1" aria-label="Show conversations">
+      <button onclick="openChatSidebar()" class="md:hidden p-1 rounded-lg hover:bg-sidebar-hover transition-colors mr-1" aria-label="Show conversations">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
       </button>
       <div>
@@ -155,7 +165,10 @@
       </button>
     </form>
     {% else %}
-    <p class="text-sm text-txt-muted" data-i18n="chat.select">Select a conversation from the sidebar</p>
+    <p class="text-sm text-txt-muted hidden md:block" data-i18n="chat.select">Select a conversation from the sidebar</p>
+    <button onclick="openChatSidebar()" class="md:hidden bg-gradient-to-r from-coral to-amber text-white rounded-xl px-5 py-2 text-sm font-medium transition-all cursor-pointer shadow-lg shadow-coral/20 hover:shadow-coral/30">
+      <span data-i18n="chat.openconversations">Open conversations</span>
+    </button>
     {% endif %}
   </div>
   {% else %}
@@ -186,4 +199,19 @@
   {% endif %}
 
 </div>
+
+<script>
+  function openChatSidebar() {
+    var sidebar = document.getElementById('chat-sidebar');
+    var backdrop = document.getElementById('chat-sidebar-backdrop');
+    if (sidebar) sidebar.classList.remove('translate-x-full');
+    if (backdrop) backdrop.classList.remove('hidden');
+  }
+  function closeChatSidebar() {
+    var sidebar = document.getElementById('chat-sidebar');
+    var backdrop = document.getElementById('chat-sidebar-backdrop');
+    if (sidebar) sidebar.classList.add('translate-x-full');
+    if (backdrop) backdrop.classList.add('hidden');
+  }
+</script>
 {% endblock %}
