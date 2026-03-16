@@ -26,6 +26,7 @@
     <div class="flex flex-wrap gap-2 p-1 rounded-xl bg-surface-raised border border-edge">
       <a href="{{ base_path }}/agents/{{ agent_id }}" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "overview" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.overview">Overview</a>
       <a href="{{ base_path }}/agents/{{ agent_id }}/storage" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "storage" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.storage">Storage</a>
+      <a href="{{ base_path }}/agents/{{ agent_id }}/memory" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "memory" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.memory">Memory</a>
       <a href="{{ base_path }}/agents/{{ agent_id }}/secrets" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "secrets" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.secrets">Secrets</a>
       <a href="{{ base_path }}/agents/{{ agent_id }}/network" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "network" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.network">Network</a>
       <a href="{{ base_path }}/agents/{{ agent_id }}/permissions" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "permissions" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.permissions">Permissions</a>
@@ -57,7 +58,7 @@
         <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.overview.desc">A quick status snapshot. Use tabs for full details.</p>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
         <div class="bg-surface-raised border border-edge rounded-xl p-4">
           <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.capabilities">Capabilities</p>
           <p class="mt-2 text-2xl font-bold text-txt-heading">{{ overview.capability_count }}</p>
@@ -65,6 +66,10 @@
         <div class="bg-surface-raised border border-edge rounded-xl p-4">
           <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.storage_entries">Stored Entries</p>
           <p class="mt-2 text-2xl font-bold text-txt-heading">{{ overview.storage_count }}</p>
+        </div>
+        <div class="bg-surface-raised border border-edge rounded-xl p-4">
+          <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.memory_entries">Memory Entries</p>
+          <p class="mt-2 text-2xl font-bold text-txt-heading">{{ overview.memory_count }}</p>
         </div>
         <div class="bg-surface-raised border border-edge rounded-xl p-4">
           <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.network_requests">Network Requests</p>
@@ -85,6 +90,7 @@
         </div>
         <div class="pt-2 flex flex-wrap gap-2">
           <a href="{{ base_path }}/agents/{{ agent_id }}/storage" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_storage">Open Storage</a>
+          <a href="{{ base_path }}/agents/{{ agent_id }}/memory" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_memory">Open Memory</a>
           <a href="{{ base_path }}/agents/{{ agent_id }}/network" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_network">Open Network</a>
           <a href="{{ base_path }}/agents/{{ agent_id }}/secrets" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_secrets">Open Secrets</a>
           <a href="{{ base_path }}/agents/{{ agent_id }}/permissions" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_permissions">Open Permissions</a>
@@ -157,6 +163,66 @@
                     data-i18n="agents.detail.storage.delete"
                     hx-post="{{ base_path }}/agents/{{ agent_id }}/storage/delete"
                     hx-vals='{"entry_id": "{{ entry.id }}"}'
+                    hx-target="closest tr"
+                    hx-swap="delete">Delete</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if active_tab == "memory" %}
+    <section class="space-y-4">
+      <div>
+        <h2 class="text-base font-bold text-txt-heading" data-i18n="agents.detail.section.memory">Memory</h2>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.section.memory_desc">Long-term notes the agent saved with memory_remember and retrieves via BM25.</p>
+      </div>
+
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.section.memory">Memory</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.detail.memory.last500">Last 500 entries</span>
+        </div>
+        {% if memory_entries.is_empty() %}
+        <div class="p-5">
+          <p class="text-sm text-txt-muted text-center py-6" data-i18n="agents.detail.memory.empty">No memory entries yet.</p>
+        </div>
+        {% else %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="border-b border-edge text-left">
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.updated">Updated</th>
+                {% if is_admin %}
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.user">User</th>
+                {% endif %}
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.note">Memory</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.tags">Tags</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.source">Source</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in memory_entries %}
+              <tr class="border-b border-edge/50 hover:bg-surface-alt/20">
+                <td class="px-5 py-2 text-txt-muted whitespace-nowrap">{{ entry.updated_at }}</td>
+                {% if is_admin %}
+                <td class="px-5 py-2 text-txt-muted font-mono">{{ entry.user_id }}</td>
+                {% endif %}
+                <td class="px-5 py-2 text-txt align-top break-words">{{ entry.memory }}</td>
+                <td class="px-5 py-2 text-txt-muted align-top">{% if entry.tags.is_empty() %}-{% else %}{{ entry.tags }}{% endif %}</td>
+                <td class="px-5 py-2 text-txt-muted align-top">{{ entry.source }}</td>
+                <td class="px-5 py-2">
+                  <button
+                    class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-3 py-1.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                    data-i18n="agents.detail.memory.delete"
+                    hx-post="{{ base_path }}/agents/{{ agent_id }}/memory/delete"
+                    hx-vals='{"memory_id": "{{ entry.id }}"}'
                     hx-target="closest tr"
                     hx-swap="delete">Delete</button>
                 </td>

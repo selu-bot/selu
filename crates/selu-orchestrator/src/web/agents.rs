@@ -188,6 +188,16 @@ pub struct StorageEntryView {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct MemoryEntryView {
+    pub id: String,
+    pub user_id: String,
+    pub memory: String,
+    pub tags: String,
+    pub source: String,
+    pub updated_at: String,
+}
+
 /// A built-in tool (delegate_to_agent, emit_event) with its current policy.
 #[derive(Debug, Clone)]
 pub struct BuiltinPolicyView {
@@ -212,6 +222,7 @@ struct AgentDetailTemplate {
     overview: AgentOverviewStats,
     capabilities: Vec<CapabilityView>,
     storage_entries: Vec<StorageEntryView>,
+    memory_entries: Vec<MemoryEntryView>,
     builtin_policies: Vec<BuiltinPolicyView>,
     egress_entries: Vec<EgressEntryView>,
     error: Option<String>,
@@ -222,6 +233,7 @@ struct AgentDetailTemplate {
 pub struct AgentOverviewStats {
     pub capability_count: usize,
     pub storage_count: i64,
+    pub memory_count: i64,
     pub network_request_count: i64,
     pub permissions_allow_count: usize,
     pub permissions_ask_count: usize,
@@ -282,6 +294,11 @@ pub struct AgentDetailQuery {
 #[derive(Debug, Deserialize)]
 pub struct DeleteStorageForm {
     pub entry_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteMemoryForm {
+    pub memory_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -687,6 +704,39 @@ pub async fn setup_wizard(
         description: "Allows the agent to hand off tasks to other specialist agents.".to_string(),
         recommended: "ask".to_string(),
     });
+    tool_policies.push(ToolPolicyView {
+        key: "__builtin___memory_remember".to_string(),
+        capability_id: "__builtin__".to_string(),
+        tool_name: "memory_remember".to_string(),
+        display_name: "Memory Remember".to_string(),
+        description: "Allows the agent to save long-term memory notes for future conversations."
+            .to_string(),
+        recommended: "allow".to_string(),
+    });
+    tool_policies.push(ToolPolicyView {
+        key: "__builtin___memory_forget".to_string(),
+        capability_id: "__builtin__".to_string(),
+        tool_name: "memory_forget".to_string(),
+        display_name: "Memory Forget".to_string(),
+        description: "Allows the agent to remove stored memory notes.".to_string(),
+        recommended: "allow".to_string(),
+    });
+    tool_policies.push(ToolPolicyView {
+        key: "__builtin___memory_search".to_string(),
+        capability_id: "__builtin__".to_string(),
+        tool_name: "memory_search".to_string(),
+        display_name: "Memory Search".to_string(),
+        description: "Allows the agent to search saved memory using BM25 relevance.".to_string(),
+        recommended: "allow".to_string(),
+    });
+    tool_policies.push(ToolPolicyView {
+        key: "__builtin___memory_list".to_string(),
+        capability_id: "__builtin__".to_string(),
+        tool_name: "memory_list".to_string(),
+        display_name: "Memory List".to_string(),
+        description: "Allows the agent to list saved memory notes.".to_string(),
+        recommended: "allow".to_string(),
+    });
 
     let name = sqlx::query_as::<_, (String,)>("SELECT display_name FROM agents WHERE id = ?")
         .bind(&agent_id)
@@ -978,6 +1028,16 @@ pub async fn agent_detail_storage(
     BasePath(base_path): BasePath,
 ) -> Response {
     render_agent_detail_page(user, agent_id, q, state, base_path, "storage").await
+}
+
+pub async fn agent_detail_memory(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    Query(q): Query<AgentDetailQuery>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
+    render_agent_detail_page(user, agent_id, q, state, base_path, "memory").await
 }
 
 pub async fn agent_detail_network(
@@ -1321,9 +1381,86 @@ async fn render_agent_detail_page(
         })
         .unwrap_or(0);
 
+    let memory_entries = if user.is_admin {
+        let rows = sqlx::query(
+            "SELECT id, user_id, memory_text, tags, source, updated_at
+             FROM agent_memories
+             WHERE agent_id = ?
+             ORDER BY updated_at DESC
+             LIMIT 500",
+        )
+        .bind(&agent_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter()
+            .map(|row| {
+                use sqlx::Row;
+                MemoryEntryView {
+                    id: row.get("id"),
+                    user_id: row.get("user_id"),
+                    memory: row.get("memory_text"),
+                    tags: row.get("tags"),
+                    source: row.get("source"),
+                    updated_at: row.try_get::<String, _>("updated_at").unwrap_or_default(),
+                }
+            })
+            .collect()
+    } else {
+        let rows = sqlx::query(
+            "SELECT id, user_id, memory_text, tags, source, updated_at
+             FROM agent_memories
+             WHERE agent_id = ? AND user_id = ?
+             ORDER BY updated_at DESC
+             LIMIT 500",
+        )
+        .bind(&agent_id)
+        .bind(&user.user_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter()
+            .map(|row| {
+                use sqlx::Row;
+                MemoryEntryView {
+                    id: row.get("id"),
+                    user_id: row.get("user_id"),
+                    memory: row.get("memory_text"),
+                    tags: row.get("tags"),
+                    source: row.get("source"),
+                    updated_at: row.try_get::<String, _>("updated_at").unwrap_or_default(),
+                }
+            })
+            .collect()
+    };
+
+    let memory_count_row = if user.is_admin {
+        sqlx::query("SELECT COUNT(*) AS c FROM agent_memories WHERE agent_id = ?")
+            .bind(&agent_id)
+            .fetch_one(&state.db)
+            .await
+            .ok()
+    } else {
+        sqlx::query("SELECT COUNT(*) AS c FROM agent_memories WHERE agent_id = ? AND user_id = ?")
+            .bind(&agent_id)
+            .bind(&user.user_id)
+            .fetch_one(&state.db)
+            .await
+            .ok()
+    };
+    let memory_count = memory_count_row
+        .and_then(|row| {
+            use sqlx::Row;
+            row.try_get::<i64, _>("c").ok()
+        })
+        .unwrap_or(0);
+
     // Build built-in tool policy views
     use crate::permissions::tool_policy::{
-        BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_SET_REMINDER,
+        BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_MEMORY_FORGET,
+        BUILTIN_MEMORY_LIST, BUILTIN_MEMORY_REMEMBER, BUILTIN_MEMORY_SEARCH, BUILTIN_SET_REMINDER,
         BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET, BUILTIN_STORE_LIST,
         BUILTIN_STORE_SET,
     };
@@ -1357,6 +1494,26 @@ async fn render_agent_detail_page(
             BUILTIN_STORE_LIST,
             "Store List",
             "Allows the agent to list all persistently stored key-value pairs.",
+        ),
+        (
+            BUILTIN_MEMORY_REMEMBER,
+            "Memory Remember",
+            "Allows the agent to save long-term memory notes for future conversations.",
+        ),
+        (
+            BUILTIN_MEMORY_FORGET,
+            "Memory Forget",
+            "Allows the agent to remove stored memory notes.",
+        ),
+        (
+            BUILTIN_MEMORY_SEARCH,
+            "Memory Search",
+            "Allows the agent to search saved memory using BM25 relevance.",
+        ),
+        (
+            BUILTIN_MEMORY_LIST,
+            "Memory List",
+            "Allows the agent to list saved memory notes.",
         ),
         (
             BUILTIN_SET_SCHEDULE,
@@ -1435,6 +1592,7 @@ async fn render_agent_detail_page(
         overview: AgentOverviewStats {
             capability_count: capabilities.len(),
             storage_count,
+            memory_count,
             network_request_count,
             permissions_allow_count,
             permissions_ask_count,
@@ -1444,6 +1602,7 @@ async fn render_agent_detail_page(
         },
         capabilities,
         storage_entries,
+        memory_entries,
         builtin_policies,
         egress_entries,
         error: q.error,
@@ -1579,6 +1738,38 @@ pub async fn agent_storage_delete(
             .await
     {
         error!("Failed to delete agent storage entry (user): {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    StatusCode::OK.into_response()
+}
+
+/// Delete one persistent memory entry for the current agent.
+pub async fn agent_memory_delete(
+    user: AuthUser,
+    Path(agent_id): Path<String>,
+    State(state): State<AppState>,
+    Form(form): Form<DeleteMemoryForm>,
+) -> Response {
+    if user.is_admin {
+        if let Err(e) = sqlx::query("DELETE FROM agent_memories WHERE id = ? AND agent_id = ?")
+            .bind(&form.memory_id)
+            .bind(&agent_id)
+            .execute(&state.db)
+            .await
+        {
+            error!("Failed to delete agent memory entry (admin): {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    } else if let Err(e) =
+        sqlx::query("DELETE FROM agent_memories WHERE id = ? AND agent_id = ? AND user_id = ?")
+            .bind(&form.memory_id)
+            .bind(&agent_id)
+            .bind(&user.user_id)
+            .execute(&state.db)
+            .await
+    {
+        error!("Failed to delete agent memory entry (user): {e}");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 

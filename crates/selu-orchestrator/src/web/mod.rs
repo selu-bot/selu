@@ -317,6 +317,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             get(agents::agent_detail_storage),
         )
         .route(
+            "/agents/{agent_id}/memory",
+            get(agents::agent_detail_memory),
+        )
+        .route(
             "/agents/{agent_id}/network",
             get(agents::agent_detail_network),
         )
@@ -368,6 +372,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route(
             "/agents/{agent_id}/storage/delete",
             post(agents::agent_storage_delete),
+        )
+        .route(
+            "/agents/{agent_id}/memory/delete",
+            post(agents::agent_memory_delete),
         )
         .route(
             "/agents/models/{provider_id}",

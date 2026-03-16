@@ -4,6 +4,7 @@ pub mod delegation;
 pub mod engine;
 pub mod loader;
 pub mod marketplace;
+pub mod memory;
 pub mod model;
 pub mod personality;
 pub mod router;

@@ -664,3 +664,48 @@ entries:
         `class: environment`.
       - Environment capabilities no longer get implicit workspace mounts unless
         they explicitly request `filesystem: workspace`.
+
+  - id: 2026-03-16-agent-bm25-memory-and-ui
+    date: "2026-03-16"
+    pr:
+    area: agents
+    type: added
+    audience: both
+    summary: "Added per-agent BM25 long-term memory with built-in tools, context retrieval, and a memory inspection UI"
+    affected_files:
+      - crates/selu-core/src/types.rs
+      - crates/selu-orchestrator/src/agents/memory.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/permissions/tool_policy.rs
+      - crates/selu-orchestrator/src/agents/bundled.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/migrations/0023_agent_bm25_memory.sql
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/tool-policies
+      - developer-guide/agent-format
+      - reference
+    details: |
+      Selu now supports a separate long-term memory system for agents that is
+      distinct from user personality facts.
+
+      Runtime behavior:
+      - Added a new per-agent, per-user memory store indexed with SQLite FTS5.
+      - Added BM25 retrieval for relevant memory injection into each turn's
+        context based on the latest user message.
+      - Added built-in tools for memory management:
+        `memory_remember`, `memory_forget`, `memory_search`, and `memory_list`.
+
+      Security/policies:
+      - Memory tools are integrated into the existing built-in tool policy
+        system (`Allow`/`Ask`/`Block`) and backfilled for existing agents.
+
+      UI:
+      - Agent detail pages now include a dedicated Memory tab where users can
+        inspect and delete stored memory entries.
+      - Overview cards now include memory entry counts.
+      - New UI copy and labels were added for both English and German.

@@ -240,3 +240,26 @@ pub enum WorkspaceStatus {
     Suspended,
     Destroyed,
 }
+
+// ── Agent BM25 Memory ────────────────────────────────────────────────────────
+
+/// Per-agent, per-user long-term memory note.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMemory {
+    pub id: Uuid,
+    pub agent_id: String,
+    pub user_id: Uuid,
+    pub memory_text: String,
+    pub tags: String,
+    pub source: AgentMemorySource,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum AgentMemorySource {
+    Agent,
+    Manual,
+}

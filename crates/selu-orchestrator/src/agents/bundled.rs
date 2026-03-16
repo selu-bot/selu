@@ -5,7 +5,8 @@
 /// directory.
 use crate::agents::loader::AgentDefinition;
 use crate::permissions::tool_policy::{
-    self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_SET_REMINDER,
+    self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_MEMORY_FORGET,
+    BUILTIN_MEMORY_LIST, BUILTIN_MEMORY_REMEMBER, BUILTIN_MEMORY_SEARCH, BUILTIN_SET_REMINDER,
     BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET, BUILTIN_STORE_LIST,
     BUILTIN_STORE_SET, ToolPolicy,
 };
@@ -89,6 +90,26 @@ pub async fn ensure_global_policies(db: &sqlx::SqlitePool) -> anyhow::Result<()>
             BUILTIN_SET_REMINDER.to_string(),
             ToolPolicy::Allow,
         ),
+        (
+            BUILTIN_CAPABILITY_ID.to_string(),
+            BUILTIN_MEMORY_REMEMBER.to_string(),
+            ToolPolicy::Allow,
+        ),
+        (
+            BUILTIN_CAPABILITY_ID.to_string(),
+            BUILTIN_MEMORY_FORGET.to_string(),
+            ToolPolicy::Allow,
+        ),
+        (
+            BUILTIN_CAPABILITY_ID.to_string(),
+            BUILTIN_MEMORY_SEARCH.to_string(),
+            ToolPolicy::Allow,
+        ),
+        (
+            BUILTIN_CAPABILITY_ID.to_string(),
+            BUILTIN_MEMORY_LIST.to_string(),
+            ToolPolicy::Allow,
+        ),
     ];
 
     // Check which built-in tools are missing from the default agent's policies
@@ -138,6 +159,10 @@ pub async fn backfill_builtin_policies(db: &sqlx::SqlitePool) -> anyhow::Result<
         (BUILTIN_CAPABILITY_ID, BUILTIN_STORE_LIST),
         (BUILTIN_CAPABILITY_ID, BUILTIN_SET_SCHEDULE),
         (BUILTIN_CAPABILITY_ID, BUILTIN_SET_REMINDER),
+        (BUILTIN_CAPABILITY_ID, BUILTIN_MEMORY_REMEMBER),
+        (BUILTIN_CAPABILITY_ID, BUILTIN_MEMORY_FORGET),
+        (BUILTIN_CAPABILITY_ID, BUILTIN_MEMORY_SEARCH),
+        (BUILTIN_CAPABILITY_ID, BUILTIN_MEMORY_LIST),
     ];
 
     for agent_id in &agent_ids {

@@ -18,7 +18,7 @@ use selu_core::types::Role;
 
 use crate::agents::loader::{AgentDefinition, RoutingMode};
 use crate::agents::{
-    context, delegation, router as agent_router, session as session_mgr, storage,
+    context, delegation, memory, router as agent_router, session as session_mgr, storage,
     thread as thread_mgr,
 };
 use crate::capabilities::build_tool_specs;
@@ -29,7 +29,8 @@ use crate::llm::registry::load_provider;
 use crate::llm::tool_loop::{LoopEvent, LoopSender, ToolDispatchResult, run_loop};
 use crate::permissions::approval_queue;
 use crate::permissions::tool_policy::{
-    self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_SET_REMINDER,
+    self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_EMIT_EVENT, BUILTIN_MEMORY_FORGET,
+    BUILTIN_MEMORY_LIST, BUILTIN_MEMORY_REMEMBER, BUILTIN_MEMORY_SEARCH, BUILTIN_SET_REMINDER,
     BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET, BUILTIN_STORE_LIST,
     BUILTIN_STORE_SET, ToolPolicy,
 };
@@ -275,6 +276,10 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     tool_specs.push(storage::store_set_tool_spec());
     tool_specs.push(storage::store_delete_tool_spec());
     tool_specs.push(storage::store_list_tool_spec());
+    tool_specs.push(memory::remember_tool_spec());
+    tool_specs.push(memory::forget_tool_spec());
+    tool_specs.push(memory::search_tool_spec());
+    tool_specs.push(memory::list_tool_spec());
     tool_specs.push(crate::schedules::set_schedule_tool_spec());
     tool_specs.push(crate::schedules::set_reminder_tool_spec());
 
@@ -416,6 +421,56 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                                     "store_list" => {
                                         storage::dispatch_store_list(&db, &agent_id, &user, &args)
                                             .await
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            })
+                        },
+                    )
+                    .await;
+                    return result;
+                }
+
+                // ── Built-in tools: per-agent BM25 memory ───────────────
+                if let Some(builtin_memory_name) = match name.as_str() {
+                    "memory_remember" => Some(BUILTIN_MEMORY_REMEMBER),
+                    "memory_forget" => Some(BUILTIN_MEMORY_FORGET),
+                    "memory_search" => Some(BUILTIN_MEMORY_SEARCH),
+                    "memory_list" => Some(BUILTIN_MEMORY_LIST),
+                    _ => None,
+                } {
+                    let result = check_policy_and_dispatch(
+                        &state,
+                        &user,
+                        BUILTIN_CAPABILITY_ID,
+                        builtin_memory_name,
+                        &name,
+                        &args,
+                        &channel,
+                        &session,
+                        &pipe,
+                        &agent_id_copy,
+                        approved,
+                        || {
+                            let db = state.db.clone();
+                            let agent_id = agent_id_copy.clone();
+                            let user = user.clone();
+                            let args = invoke_args.clone();
+                            let tool = name.clone();
+                            Box::pin(async move {
+                                match tool.as_str() {
+                                    "memory_remember" => {
+                                        memory::dispatch_remember(&db, &agent_id, &user, &args)
+                                            .await
+                                    }
+                                    "memory_forget" => {
+                                        memory::dispatch_forget(&db, &agent_id, &user, &args).await
+                                    }
+                                    "memory_search" => {
+                                        memory::dispatch_search(&db, &agent_id, &user, &args).await
+                                    }
+                                    "memory_list" => {
+                                        memory::dispatch_list(&db, &agent_id, &user, &args).await
                                     }
                                     _ => unreachable!(),
                                 }

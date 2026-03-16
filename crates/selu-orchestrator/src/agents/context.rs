@@ -6,6 +6,7 @@ use tracing::debug;
 
 use crate::agents::delegation;
 use crate::agents::loader::AgentDefinition;
+use crate::agents::memory;
 use crate::agents::personality;
 use crate::capabilities::manifest::CapabilityManifest;
 use crate::llm::provider::ChatMessage;
@@ -27,8 +28,6 @@ pub async fn build(
     delegated_agents: Option<&HashMap<String, Arc<AgentDefinition>>>,
 ) -> Result<Vec<ChatMessage>> {
     let mut messages = Vec::new();
-    let _ = latest_message; // reserved for future use
-
     // ── System prompt ─────────────────────────────────────────────────────────
     let mut system = agent.system_prompt.clone();
 
@@ -107,9 +106,16 @@ pub async fn build(
          user's timezone. \
          Prefer these tools over asking users to type slash commands, unless the user explicitly \
          asks for command syntax. \
-         Do NOT try to implement scheduling yourself using store_set or emit_event — \
+         Do NOT try to implement scheduling yourself using store_set, memory_remember, or emit_event — \
          the system has built-in scheduling and reminders.\n\n\
          Users can also manage schedules from the Schedules page in the web interface.",
+    );
+
+    system.push_str(
+        "\n\n## Long-term memory tools\n\
+         Use `memory_remember` to save non-personality information that may help in future interactions. \
+         Examples: recurring project context, preferred report formats for this agent, and stable workflow notes. \
+         Use `memory_search` or `memory_list` when you need to inspect memory explicitly, and `memory_forget` when asked to remove a memory.",
     );
 
     system.push_str(
@@ -161,6 +167,33 @@ pub async fn build(
         Ok(_) => {} // No personality facts yet
         Err(e) => {
             debug!("Personality loading failed (non-fatal): {e}");
+        }
+    }
+
+    // ── Agent memory (BM25 retrieval) ────────────────────────────────────────
+    match memory::search_for_context(db, &agent.id, user_id, latest_message, 5).await {
+        Ok(hits) if !hits.is_empty() => {
+            let mut ctx = String::from("## Relevant memory for this user\n\n");
+            ctx.push_str(
+                "These notes were saved for this specific agent from previous interactions. ",
+            );
+            ctx.push_str(
+                "Use them when relevant, but do not repeat them unless they help answer the user.\n\n",
+            );
+
+            for hit in hits {
+                if hit.tags.trim().is_empty() {
+                    ctx.push_str(&format!("- {}\n", hit.memory));
+                } else {
+                    ctx.push_str(&format!("- {} (tags: {})\n", hit.memory, hit.tags));
+                }
+            }
+
+            messages.push(ChatMessage::system(ctx));
+        }
+        Ok(_) => {}
+        Err(e) => {
+            debug!("Agent memory loading failed (non-fatal): {e}");
         }
     }
 
