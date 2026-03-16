@@ -107,6 +107,8 @@ pub struct SessionConfig {
     pub trigger: String,
     #[serde(default = "default_idle_timeout")]
     pub idle_timeout_minutes: u32,
+    #[serde(default)]
+    pub isolation: SessionIsolationMode,
 }
 
 fn default_trigger() -> String {
@@ -114,6 +116,23 @@ fn default_trigger() -> String {
 }
 fn default_idle_timeout() -> u32 {
     30
+}
+
+/// Controls whether sessions are shared across threads or isolated per thread.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionIsolationMode {
+    /// Reuse the most recent active session for this user+agent when possible.
+    #[default]
+    Shared,
+    /// Always create/resume a dedicated session per thread.
+    PerThread,
+}
+
+impl SessionConfig {
+    pub fn requires_thread_isolation(&self) -> bool {
+        matches!(self.isolation, SessionIsolationMode::PerThread)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -259,4 +278,25 @@ pub async fn load_one(dir: &Path) -> Result<AgentDefinition> {
     agent.capability_manifests = cap_list.into_iter().map(|m| (m.id.clone(), m)).collect();
 
     Ok(agent)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SessionConfig, SessionIsolationMode};
+
+    #[test]
+    fn session_config_defaults_to_shared_isolation() {
+        let cfg = SessionConfig::default();
+        assert_eq!(cfg.isolation, SessionIsolationMode::Shared);
+        assert!(!cfg.requires_thread_isolation());
+    }
+
+    #[test]
+    fn session_config_per_thread_isolation_is_detected() {
+        let cfg = SessionConfig {
+            isolation: SessionIsolationMode::PerThread,
+            ..SessionConfig::default()
+        };
+        assert!(cfg.requires_thread_isolation());
+    }
 }

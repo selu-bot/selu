@@ -85,9 +85,23 @@ async fn execute_on_pipe(
             .flatten();
 
     let agent_id = default_agent_id.unwrap_or_else(|| "default".to_string());
+    let force_new_session = state
+        .agents
+        .load()
+        .get(&agent_id)
+        .map(|a| a.session.requires_thread_isolation())
+        .unwrap_or(false);
 
     // Create a new thread for this schedule run
-    let thread = match thread_mgr::create_thread(&state.db, pipe_id, user_id, &agent_id, None).await
+    let thread = match thread_mgr::create_thread(
+        &state.db,
+        pipe_id,
+        user_id,
+        &agent_id,
+        force_new_session,
+        None,
+    )
+    .await
     {
         Ok(t) => t,
         Err(e) => {

@@ -372,9 +372,7 @@ impl LlmProvider for BedrockProvider {
                                     continue;
                                 }
                                 // Tool-use input delta (JSON fragment)
-                                if let Some(input_val) =
-                                    payload["delta"]["toolUse"].get("input")
-                                {
+                                if let Some(input_val) = payload["delta"]["toolUse"].get("input") {
                                     let input_frag = match input_val {
                                         Value::String(s) => s.clone(),
                                         // Some Bedrock models/providers emit tool input

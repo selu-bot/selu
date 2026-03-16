@@ -241,12 +241,19 @@ pub async fn chat_new_thread(
     .flatten()
     .and_then(|r| r.default_agent_id)
     .unwrap_or_else(|| "default".to_string());
+    let force_new_session = state
+        .agents
+        .load()
+        .get(&default_agent_id)
+        .map(|a| a.session.requires_thread_isolation())
+        .unwrap_or(false);
 
     match thread_mgr::create_thread(
         &state.db,
         &pipe_id_str,
         &user.user_id,
         &default_agent_id,
+        force_new_session,
         None,
     )
     .await

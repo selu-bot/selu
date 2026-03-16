@@ -292,6 +292,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     let mut cap_manifests = own_manifests;
     cap_manifests.extend(hydrated_inlined);
     let sid = session_id.clone();
+    let parent_thread_id = thread_id.clone();
     let tid = thread_id.clone().unwrap_or_default();
     let uid = user_id.clone();
     let src_agent_id = agent.id.clone();
@@ -330,6 +331,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             let channel = dispatcher_channel.clone();
             let pipe = dispatcher_pipe.clone();
             let del_tx = dispatcher_tx.clone();
+            let parent_thread_id = parent_thread_id.clone();
 
             Box::pin(async move {
                 let invoke_args = strip_internal_tool_args(&args);
@@ -504,6 +506,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                             let chain_depth = chain_depth;
                             let del_channel = channel.clone();
                             let del_tx = del_tx.clone();
+                            let parent_thread_id = parent_thread_id.clone();
                             Box::pin(async move {
                                 dispatch_delegation(
                                     del_state,
@@ -513,6 +516,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                                     chain_depth,
                                     del_channel,
                                     del_tx,
+                                    parent_thread_id,
                                 )
                                 .await
                             })
@@ -1089,6 +1093,7 @@ fn dispatch_delegation(
     chain_depth: i32,
     channel_kind: ChannelKind,
     parent_tx: LoopSender,
+    parent_thread_id: Option<String>,
 ) -> BoxFuture<'static, Result<String>> {
     async move {
         let (target_agent_id, message) = delegation::parse_args(&args)?;
@@ -1099,12 +1104,24 @@ fn dispatch_delegation(
             "Delegating to specialist agent"
         );
 
+        // Stateful specialists can request per-thread isolation.
+        // In that case, delegation inherits the parent thread id so the
+        // specialist session/container does not get shared across threads.
+        let delegated_thread_id = state
+            .agents
+            .load()
+            .get(&target_agent_id)
+            .map(|a| a.session.requires_thread_isolation())
+            .unwrap_or(false)
+            .then_some(parent_thread_id)
+            .flatten();
+
         let params = TurnParams {
             pipe_id,
             user_id,
             agent_id: Some(target_agent_id),
             message,
-            thread_id: None, // Delegation gets its own context, no thread
+            thread_id: delegated_thread_id,
             chain_depth: chain_depth + 1,
             channel_kind,
             skip_user_persist: false,

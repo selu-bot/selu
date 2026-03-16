@@ -157,6 +157,10 @@ async fn handle_inbound(
         pipe.default_agent_id.as_deref(),
         &agents_snapshot,
     );
+    let force_new_session = agents_snapshot
+        .get(&agent_id)
+        .map(|a| a.session.requires_thread_isolation())
+        .unwrap_or(false);
 
     let outbound_url = pipe.outbound_url.clone();
     let outbound_auth = pipe.outbound_auth.clone();
@@ -182,6 +186,7 @@ async fn handle_inbound(
             &pipe_id_str,
             &resolved_user_id,
             &agent_id,
+            force_new_session,
             origin_message_ref.as_deref(),
             reply_to_ref.as_deref(),
         )

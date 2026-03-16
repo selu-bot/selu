@@ -10,25 +10,30 @@ use crate::agents::session as session_mgr;
 /// Creates a new thread for a conversation.
 ///
 /// Threads are long-lived conversations that accumulate message history.
-/// They share the session (and therefore semantic memory / capability
-/// containers) but have independent conversation histories.
+/// They can either share a session with other threads of the same agent/user
+/// or force a dedicated session per thread, depending on agent settings.
 pub async fn create_thread(
     db: &SqlitePool,
     pipe_id: &str,
     user_id: &str,
     agent_id: &str,
+    force_new_session: bool,
     origin_message_ref: Option<&str>,
 ) -> Result<Thread> {
-    // First, ensure we have a session for this user + agent
-    let session = session_mgr::open_session(db, pipe_id, user_id, agent_id, None).await?;
-    let session_id = session.id.to_string();
-
     let thread_id = Uuid::new_v4().to_string();
+    let open_with_thread = force_new_session.then_some(thread_id.as_str());
+    // Ensure we have a session for this user + agent.
+    // For thread-isolated agents we force a fresh session by opening with the
+    // new thread id (which currently has no row yet, so `open_session` creates one).
+    let session =
+        session_mgr::open_session(db, pipe_id, user_id, agent_id, open_with_thread).await?;
+    let session_id = session.id.to_string();
 
     debug!(
         thread_id = %thread_id,
         session_id = %session_id,
         pipe_id = %pipe_id,
+        force_new_session,
         origin_ref = ?origin_message_ref,
         "Creating new thread"
     );
@@ -179,6 +184,7 @@ pub async fn find_or_create_thread(
     pipe_id: &str,
     user_id: &str,
     agent_id: &str,
+    force_new_session: bool,
     origin_message_ref: Option<&str>,
     reply_to_ref: Option<&str>,
 ) -> Result<Thread> {
@@ -229,7 +235,15 @@ pub async fn find_or_create_thread(
 
     // 3. No match — create a new thread
     debug!("find_or_create_thread: no existing thread found — creating new");
-    create_thread(db, pipe_id, user_id, agent_id, origin_message_ref).await
+    create_thread(
+        db,
+        pipe_id,
+        user_id,
+        agent_id,
+        force_new_session,
+        origin_message_ref,
+    )
+    .await
 }
 
 /// Find the most recent active thread for a user on a given pipe.

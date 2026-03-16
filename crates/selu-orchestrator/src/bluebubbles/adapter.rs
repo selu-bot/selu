@@ -735,6 +735,10 @@ async fn dispatch_message(
 
     let (agent_id, effective_text) =
         agent_router::route(&text, default_agent_id.as_deref(), &agents_snapshot);
+    let force_new_session = agents_snapshot
+        .get(&agent_id)
+        .map(|a| a.session.requires_thread_isolation())
+        .unwrap_or(false);
 
     // ── Thread resolution ─────────────────────────────────────────────────
     // For matching, we try multiple GUIDs in priority order:
@@ -759,6 +763,7 @@ async fn dispatch_message(
         &pipe_id,
         &user_id,
         &agent_id,
+        force_new_session,
         message_guid.as_deref(),
         reply_to_ref,
     )

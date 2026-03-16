@@ -28,6 +28,38 @@
 #     the user or developer experience.
 
 entries:
+  - id: 2026-03-16-agent-session-isolation-mode
+    date: "2026-03-16"
+    pr:
+    area: agents
+    type: changed
+    audience: developers
+    summary: "Agents can now opt into per-thread session isolation via agent.yaml to avoid shared capability workspaces across threads"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/loader.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/thread.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+      - crates/selu-orchestrator/src/telegram/adapter.rs
+      - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+    docs_sections:
+      - developer-guide/agent-format/agent-yaml
+      - user-guide/agents
+      - developer-guide/capabilities/container-guidelines
+    details: |
+      Added a new optional `session.isolation` setting in `agent.yaml` with
+      values:
+      - `shared` (default): existing behavior, reuses active sessions for the
+        same user+agent.
+      - `per_thread`: forces dedicated sessions per thread.
+
+      When `per_thread` is set, Selu now avoids session/container reuse across
+      threads for that agent in both direct thread creation and delegated
+      specialist turns. This is intended for stateful agents (for example
+      coding/workspace agents) to prevent cross-thread state collisions.
+
   - id: 2026-03-05-noninteractive-approval-reply-fallback
     date: "2026-03-05"
     pr:
