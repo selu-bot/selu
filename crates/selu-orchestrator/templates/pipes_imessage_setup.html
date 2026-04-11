@@ -1,0 +1,391 @@
+{% extends "layout.html" %}
+
+{% block title %}Set Up iMessage{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <!-- Back link + Header -->
+    <div>
+      <a href="{{ base_path }}/pipes/new" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <span data-i18n="pipes.back_to_add">Back to Add Pipe</span>
+      </a>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="imsg.title">Set Up iMessage</h1>
+      <p class="text-sm text-txt-muted mt-1">
+        <span data-i18n="imsg.subtitle.before_link">Connect your iMessage to Selu. You'll need a</span>
+        <a href="https://bluebubbles.app" target="_blank" class="text-coral hover:text-amber transition-colors">BlueBubbles</a>
+        <span data-i18n="imsg.subtitle.after_link">server running on your Mac.</span>
+      </p>
+    </div>
+
+    <!-- Wizard steps indicator -->
+    <div class="flex items-center gap-2">
+      <div id="ws-1" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-coral/15 text-coral border border-coral/40">
+        <span class="w-5 h-5 rounded-full gradient-coral text-white text-[10px] font-bold flex items-center justify-center">1</span>
+        <span data-i18n="imsg.step1">Connect Server</span>
+      </div>
+      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <div id="ws-2" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
+        <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">2</span>
+        <span data-i18n="imsg.step2">Pick Chat</span>
+      </div>
+      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <div id="ws-3" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
+        <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">3</span>
+        <span data-i18n="imsg.step3">Add People</span>
+      </div>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
+      {{ err }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ base_path }}/pipes/imessage/setup" id="setup-form" class="space-y-4">
+
+      <!-- Step 1: BlueBubbles Server -->
+      <div id="step-1" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="imsg.step1.title">Step 1: Connect to BlueBubbles</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-txt-muted leading-relaxed" data-i18n="imsg.step1.desc">Enter your BlueBubbles server details. You can find these in the BlueBubbles app under Settings > Connection.</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="bb-url" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.server_url">Server URL</label>
+              <input id="bb-url" name="server_url" type="text" data-i18n-placeholder="imsg.server_url.placeholder" placeholder="http://host.docker.internal:1234" required
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+              <p class="text-[11px] text-txt-faint mt-1" data-i18n="imsg.server_url.hint">If Selu runs in Docker on your Mac, use http://host.docker.internal:PORT.</p>
+            </div>
+            <div>
+              <label for="bb-pass" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.server_password">Server Password</label>
+              <input id="bb-pass" name="server_password" type="password" data-i18n-placeholder="imsg.server_password.placeholder" placeholder="Your BlueBubbles password" required
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <button type="button" id="btn-connect" onclick="testConnection()"
+                    class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    data-i18n="imsg.connect">
+              Connect to BlueBubbles
+            </button>
+            <span id="connect-status" class="text-sm"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Chat Selection -->
+      <div id="step-2" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden hidden">
+        <div class="px-5 py-3.5 border-b border-edge">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="imsg.step2.title">Step 2: Pick a Chat</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-txt-muted leading-relaxed" data-i18n="imsg.step2.desc">Choose which iMessage conversation Selu should monitor and respond in.</p>
+
+          <div id="chat-list" class="hidden">
+            <input id="chat-search" type="text" data-i18n-placeholder="imsg.chat_search.placeholder" placeholder="Search chats..."
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition mb-3" />
+            <div id="chat-items" class="max-h-72 overflow-y-auto border border-edge rounded-xl bg-surface-input">
+            </div>
+          </div>
+
+          <input type="hidden" name="chat_guid" id="chat-guid-input" value="" required />
+
+          <div id="selected-chat" class="hidden px-4 py-3 bg-coral/10 border border-coral/20 rounded-xl">
+            <div class="flex items-center justify-between">
+              <div>
+                <div id="selected-chat-name" class="text-sm font-semibold text-txt-heading"></div>
+                <div id="selected-chat-detail" class="text-xs text-txt-muted mt-0.5"></div>
+              </div>
+              <button type="button" onclick="clearChatSelection()"
+                      class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer" data-i18n="common.change">Change</button>
+            </div>
+          </div>
+
+          <div>
+            <label for="bb-name" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.pipename">Pipe Name</label>
+            <input id="bb-name" name="name" type="text" data-i18n-placeholder="imsg.pipename.placeholder" placeholder="e.g. Family Chat" required
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: People -->
+      <div id="step-3" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden hidden">
+        <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="imsg.whocan">Who Can Talk to Selu?</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-surface-alt text-txt-muted" data-i18n="common.optional">Optional</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-txt-muted leading-relaxed">
+            Restrict which people Selu responds to. If you skip this, Selu responds to <strong class="text-txt">everyone</strong> in the chat.
+          </p>
+
+          <div id="participant-suggestions" class="hidden">
+            <p class="text-xs font-medium text-txt-muted mb-2" data-i18n="imsg.people_in_chat">People in this chat:</p>
+            <div id="participant-chips" class="flex flex-wrap gap-1.5"></div>
+          </div>
+
+          <div id="people-list" class="space-y-2"></div>
+
+          <div class="flex items-end gap-3">
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.sender">Phone / Apple ID</label>
+              <input id="add-phone" type="text" data-i18n-placeholder="imsg.sender.placeholder" placeholder="+14155551234 or email@icloud.com"
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+            </div>
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.seluuser">Selu User</label>
+              <select id="add-user"
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                {% for u in users %}
+                <option value="{{ u.id }}">{{ u.display }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button type="button" onclick="addPerson()"
+                    class="text-sm font-medium text-txt border border-edge hover:border-muted px-3 py-2.5 rounded-xl transition-colors cursor-pointer whitespace-nowrap">
+              <span data-i18n="common.add">+ Add</span>
+            </button>
+          </div>
+
+          <input type="hidden" name="people" id="people-input" value="" />
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div id="submit-row" class="flex items-center justify-between pt-2 hidden">
+        <a href="{{ base_path }}/pipes/new" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
+        <button type="submit" id="btn-submit" disabled
+                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                data-i18n="imsg.setup">
+          Set Up iMessage
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block head %}
+<script>
+let allChats = [];
+let selectedChat = null;
+let people = [];
+
+async function testConnection() {
+  const btn = document.getElementById('btn-connect');
+  const status = document.getElementById('connect-status');
+  const urlInput = document.getElementById('bb-url');
+  const passInput = document.getElementById('bb-pass');
+  const serverUrl = urlInput.value.trim();
+  const password = passInput.value;
+  if (!serverUrl || !password) {
+    status.innerHTML = '<span class="text-rosie">' + t('imsg.error.missing_credentials') + '</span>';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = t('imsg.connecting');
+  btn.classList.add('opacity-60');
+   status.innerHTML = '<span class="text-txt-muted">' + t('imsg.verifying') + '</span>';
+  try {
+    const resp = await fetch(BASE_PATH + '/pipes/imessage/proxy/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ server_url: serverUrl, server_password: password }),
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      status.innerHTML = '<span class="text-rosie">' + escapeHtml(data.error || 'Connection failed') + '</span>';
+      btn.disabled = false; btn.classList.remove('opacity-60'); btn.textContent = t('common.retry');
+      return;
+    }
+    allChats = data.chats || [];
+    status.innerHTML = '<span class="text-emerald-400">' + t('imsg.connected_found').replace('{count}', allChats.length) + '</span>';
+    btn.textContent = t('imsg.connected_btn');
+    btn.style.background = 'linear-gradient(135deg, #059669, #10b981)';
+    setWizardStep(1, 'done');
+    setWizardStep(2, 'active');
+    unlockStep('step-2');
+    renderChatList();
+  } catch (e) {
+    status.innerHTML = '<span class="text-rosie">' + t('imsg.error.network') + '</span>';
+    btn.disabled = false; btn.classList.remove('opacity-60'); btn.textContent = t('common.retry');
+  }
+}
+
+function renderChatList() {
+  document.getElementById('chat-list').classList.remove('hidden');
+  renderFilteredChats('');
+  document.getElementById('chat-search').addEventListener('input', (e) => {
+    renderFilteredChats(e.target.value.toLowerCase());
+  });
+}
+
+function renderFilteredChats(query) {
+  const itemsEl = document.getElementById('chat-items');
+  const filtered = allChats.filter(c => {
+    if (!query) return true;
+    return c.display_name.toLowerCase().includes(query)
+      || c.participants.some(p => p.toLowerCase().includes(query))
+      || c.guid.toLowerCase().includes(query);
+  });
+  if (filtered.length === 0) {
+    itemsEl.innerHTML = '<div class="p-4 text-center text-sm text-txt-muted">' + t('imsg.chat_search.empty') + '</div>';
+    return;
+  }
+  itemsEl.innerHTML = filtered.map(c => `
+    <div onclick="selectChat('${escapeAttr(c.guid)}')"
+         class="px-4 py-3 cursor-pointer border-b border-edge last:border-0 hover:bg-coral/8 transition-colors">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-surface-alt flex items-center justify-center flex-shrink-0">
+          <svg class="w-4 h-4 text-txt-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>${c.is_group ? '<path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' : ''}</svg>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-medium text-txt-heading truncate">${escapeHtml(c.display_name)}</div>
+          <div class="text-xs text-txt-muted truncate">
+            ${c.participants.length > 0 ? escapeHtml(c.participants.join(', ')) : ''}
+            ${c.last_message ? ' \u2014 ' + escapeHtml(c.last_message) : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectChat(guid) {
+  selectedChat = allChats.find(c => c.guid === guid);
+  if (!selectedChat) return;
+  document.getElementById('chat-guid-input').value = guid;
+  document.getElementById('chat-list').classList.add('hidden');
+  document.getElementById('selected-chat').classList.remove('hidden');
+  document.getElementById('selected-chat-name').textContent = selectedChat.display_name;
+  document.getElementById('selected-chat-detail').textContent = selectedChat.participants.join(', ');
+  const nameInput = document.getElementById('bb-name');
+  if (!nameInput.value.trim()) nameInput.value = selectedChat.display_name;
+  setWizardStep(2, 'done');
+  setWizardStep(3, 'active');
+  unlockStep('step-3');
+  enableSubmit();
+  showParticipantSuggestions(selectedChat.participants);
+}
+
+function clearChatSelection() {
+  selectedChat = null;
+  document.getElementById('chat-guid-input').value = '';
+  document.getElementById('selected-chat').classList.add('hidden');
+  document.getElementById('chat-list').classList.remove('hidden');
+  document.getElementById('participant-suggestions').classList.add('hidden');
+  setWizardStep(2, 'active');
+  setWizardStep(3, 'inactive');
+  lockStep('step-3');
+  disableSubmit();
+}
+
+function showParticipantSuggestions(participants) {
+  if (!participants || participants.length === 0) return;
+  const container = document.getElementById('participant-suggestions');
+  const chips = document.getElementById('participant-chips');
+  container.classList.remove('hidden');
+  chips.innerHTML = participants.map(p => `
+    <button type="button" onclick="suggestPerson('${escapeAttr(p)}')"
+            class="bg-surface-alt border border-edge hover:border-coral/40 text-txt text-xs px-2.5 py-1 rounded-full transition-colors cursor-pointer">
+      + ${escapeHtml(p)}
+    </button>
+  `).join('');
+}
+
+function suggestPerson(phone) {
+  document.getElementById('add-phone').value = phone;
+  document.getElementById('add-user').focus();
+}
+
+function addPerson() {
+  const phone = document.getElementById('add-phone');
+  const userSelect = document.getElementById('add-user');
+  const phoneVal = phone.value.trim();
+  const userId = userSelect.value;
+  const userLabel = userSelect.options[userSelect.selectedIndex]?.text || '';
+  if (!phoneVal) { phone.focus(); return; }
+  if (!userId) { userSelect.focus(); return; }
+  if (people.some(p => p.phone === phoneVal)) { phone.value = ''; return; }
+  people.push({ phone: phoneVal, userId: userId, userLabel: userLabel });
+  phone.value = '';
+  renderPeople();
+}
+
+function removePerson(idx) {
+  people.splice(idx, 1);
+  renderPeople();
+}
+
+function renderPeople() {
+  const list = document.getElementById('people-list');
+  const input = document.getElementById('people-input');
+  if (people.length === 0) { list.innerHTML = ''; input.value = ''; return; }
+  list.innerHTML = people.map((p, i) => `
+    <div class="flex items-center gap-3 bg-surface-input border border-edge rounded-xl px-4 py-3">
+      <div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+        ${p.userLabel.substring(0, 2).toUpperCase()}
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-txt-heading">${escapeHtml(p.userLabel)}</div>
+        <div class="text-xs text-txt-muted font-mono">${escapeHtml(p.phone)}</div>
+      </div>
+      <button type="button" onclick="removePerson(${i})"
+              class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2 py-1 rounded transition-colors cursor-pointer">${t('pipes.remove')}</button>
+    </div>
+  `).join('');
+  input.value = people.map(p => `${p.phone}:${p.userId}`).join(',');
+}
+
+function setWizardStep(num, state) {
+  const el = document.getElementById('ws-' + num);
+  const dot = el.querySelector('span');
+  el.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all';
+  if (state === 'active') {
+    el.classList.add('bg-coral/15', 'text-coral', 'border', 'border-coral/40');
+    dot.className = 'w-5 h-5 rounded-full gradient-coral text-white text-[10px] font-bold flex items-center justify-center';
+  } else if (state === 'done') {
+    el.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border', 'border-emerald-500/20');
+    dot.className = 'w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center justify-center';
+  } else {
+    el.classList.add('bg-surface-raised', 'text-txt-muted', 'border', 'border-edge');
+    dot.className = 'w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center';
+  }
+}
+
+function unlockStep(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('hidden');
+  el.style.opacity = '0'; el.style.transform = 'translateY(8px)';
+  el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+  requestAnimationFrame(() => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
+  setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+}
+
+function lockStep(id) { document.getElementById(id).classList.add('hidden'); }
+
+function enableSubmit() {
+  const row = document.getElementById('submit-row');
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = false;
+  if (row.classList.contains('hidden')) {
+    row.classList.remove('hidden');
+    row.style.opacity = '0'; row.style.transition = 'opacity 0.3s ease';
+    requestAnimationFrame(() => { row.style.opacity = '1'; });
+  }
+}
+
+function disableSubmit() {
+  document.getElementById('submit-row').classList.add('hidden');
+  document.getElementById('btn-submit').disabled = true;
+}
+
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function escapeAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+</script>
+{% endblock %}

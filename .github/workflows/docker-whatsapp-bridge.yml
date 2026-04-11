@@ -1,0 +1,192 @@
+name: Build & Push WhatsApp Bridge Image
+
+on:
+  push:
+    branches: ["**"]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/selu-whatsapp-bridge
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prepare:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      tags: ${{ steps.tags.outputs.tags }}
+      image: ${{ steps.tags.outputs.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute tags
+        id: tags
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref_name }}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            git fetch --prune origin 'refs/heads/release/*:refs/remotes/origin/release/*'
+            VERSION="v${BASH_REMATCH[1]}"
+            TAG_SHA=$(git rev-list -n1 "${{ github.ref_name }}")
+
+            MATCHED_RELEASE=0
+            while IFS= read -r branch; do
+              BRANCH_SHA=$(git rev-parse "${branch}")
+              if [[ "$TAG_SHA" == "$BRANCH_SHA" ]]; then
+                MATCHED_RELEASE=1
+                break
+              fi
+            done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin/release/*)
+
+            if [[ "$MATCHED_RELEASE" -ne 1 ]]; then
+              echo "Stable tags must point to a release/* branch tip (not main)."
+              echo "Tag ${VERSION} points to ${TAG_SHA}."
+              exit 1
+            fi
+
+            TAGS="${IMAGE}:${VERSION},${IMAGE}:stable,${IMAGE}:latest"
+            echo "### Stable WhatsApp bridge build: \`${VERSION}\` + \`stable\` + \`latest\`" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "${{ github.ref_name }}" =~ ^release/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            TAGS="${IMAGE}:${VERSION}-dev"
+            echo "### Dev WhatsApp bridge build: \`${VERSION}-dev\`" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "${{ github.ref_name }}" == "main" ]]; then
+            TS=$(date -u +%Y%m%d_%H%M%S)
+            TAGS="${IMAGE}:unstable,${IMAGE}:unstable_${TS}"
+            echo "### Unstable WhatsApp bridge build: \`unstable\` + \`unstable_${TS}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            BRANCH_SAFE=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            TAGS="${IMAGE}:${BRANCH_SAFE}_latest"
+            echo "### Feature WhatsApp bridge build: \`${BRANCH_SAFE}_latest\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [prepare]
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - platform: linux/arm64
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare platform vars
+        id: platform
+        run: |
+          PAIR="${{ matrix.platform }}"
+          echo "scope=${PAIR//\//-}-whatsapp-bridge" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sidecars/whatsapp-bridge
+          file: ./sidecars/whatsapp-bridge/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ steps.platform.outputs.scope }}
+          cache-to: type=gha,scope=${{ steps.platform.outputs.scope }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          DIGEST="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ steps.platform.outputs.scope }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [prepare, build]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Create and push multi-arch manifest
+        run: |
+          IMAGE="${{ needs.prepare.outputs.image }}"
+          TAGS="${{ needs.prepare.outputs.tags }}"
+
+          TAG_FLAGS=""
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          for TAG in "${TAG_ARRAY[@]}"; do
+            TAG_FLAGS="${TAG_FLAGS} --tag ${TAG}"
+          done
+
+          SOURCES=""
+          for DIGEST_FILE in /tmp/digests/*; do
+            SOURCES="${SOURCES} ${IMAGE}@sha256:$(basename ${DIGEST_FILE})"
+          done
+
+          docker buildx imagetools create ${TAG_FLAGS} ${SOURCES}
+
+      - name: Inspect manifest
+        run: |
+          TAGS="${{ needs.prepare.outputs.tags }}"
+          FIRST_TAG="${TAGS%%,*}"
+          docker buildx imagetools inspect "${FIRST_TAG}"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign published tags
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${COSIGN_PRIVATE_KEY:-}" ]]; then
+            echo "COSIGN_PRIVATE_KEY is not set. Skipping signing."
+            exit 0
+          fi
+          TAGS="${{ needs.prepare.outputs.tags }}"
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          for TAG in "${TAG_ARRAY[@]}"; do
+            cosign sign --yes --key env://COSIGN_PRIVATE_KEY "$TAG"
+          done

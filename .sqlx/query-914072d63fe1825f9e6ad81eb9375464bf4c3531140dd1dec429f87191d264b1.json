@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT pipe_id FROM whatsapp_configs WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "pipe_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "914072d63fe1825f9e6ad81eb9375464bf4c3531140dd1dec429f87191d264b1"
+}

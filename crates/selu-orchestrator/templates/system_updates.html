@@ -1,0 +1,612 @@
+{% extends "layout.html" %}
+{% block title %}Settings{% endblock %}
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-4xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+    <div>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="updates.title">Settings</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="updates.subtitle">Manage updates and core system preferences.</p>
+    </div>
+
+    {% if let Some(err_key) = error_key %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
+      {% if let Some(err_fb) = error_fallback %}
+      <span data-i18n="{{ err_key }}">{{ err_fb }}</span>
+      {% else %}
+      <span data-i18n="{{ err_key }}">Could not save your settings.</span>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if let Some(msg_key) = success_key %}
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+      {% if let Some(msg_fb) = success_fallback %}
+      <span data-i18n="{{ msg_key }}">{{ msg_fb }}</span>
+      {% else %}
+      <span data-i18n="{{ msg_key }}">Done.</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="selu-card rounded-2xl p-5 space-y-4">
+      <div>
+        <h2 class="text-base font-semibold text-txt-heading" data-i18n="updates.summary.title">Software update</h2>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="updates.summary.subtitle">Everything important in one place: current version, new version, and changes.</p>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-3">
+        <div class="rounded-xl border border-edge bg-surface-alt px-4 py-3">
+          <div class="text-xs uppercase tracking-[0.15em] text-txt-muted" data-i18n="updates.summary.current">Current version</div>
+          <div id="updates-installed-version" class="text-sm font-semibold text-txt-heading mt-1">{{ installed_display }}</div>
+        </div>
+        <div class="rounded-xl border border-edge bg-surface-alt px-4 py-3">
+          <div class="text-xs uppercase tracking-[0.15em] text-txt-muted" data-i18n="updates.summary.new">New version</div>
+          <div id="updates-available-version" class="text-sm font-semibold text-txt-heading mt-1">{{ available_display }}</div>
+        </div>
+        <div class="rounded-xl border border-edge bg-surface-alt px-4 py-3">
+          <div class="text-xs uppercase tracking-[0.15em] text-txt-muted" data-i18n="updates.summary.available">Update available</div>
+          <div id="updates-availability-label" class="text-sm font-semibold text-txt-heading mt-1" data-i18n="{% if update_available %}updates.summary.yes{% else %}updates.summary.no{% endif %}">{% if update_available %}Yes{% else %}No{% endif %}</div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-edge bg-surface-alt px-4 py-3 text-sm text-txt-heading">
+        <div class="text-xs text-txt-muted" data-i18n="updates.summary.changes">Changes</div>
+        <div id="updates-changelog-section" class="mt-2 space-y-2 {% if !update_available %}hidden{% endif %}">
+          <a id="updates-changelog-link"
+             href="{{ available_changelog_url }}"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="text-coral hover:underline text-sm {% if available_changelog_url.is_empty() %}hidden{% endif %}"
+             data-i18n="updates.status.changelog_open">
+            Open changelog
+          </a>
+          <span id="updates-changelog-empty" class="text-xs text-txt-muted {% if !available_changelog_url.is_empty() %}hidden{% endif %}" data-i18n="updates.status.changelog_missing">Not available yet</span>
+          <div id="updates-changelog-body" class="text-xs text-txt-muted whitespace-pre-wrap max-h-36 overflow-y-auto border-t border-edge pt-2 {% if available_changelog_body.is_empty() %}hidden{% endif %}">{{ available_changelog_body }}</div>
+        </div>
+        <p id="updates-no-changes" class="mt-2 text-xs text-txt-muted {% if update_available %}hidden{% endif %}" data-i18n="updates.summary.no_changes">You are already on the latest version.</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <form id="updates-check-form" method="POST" action="{{ base_path }}/system-updates/check">
+          <button type="submit" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-txt-muted border-edge hover:border-muted hover:text-txt" data-i18n="updates.check_now">Check now</button>
+        </form>
+        <button id="updates-open-action-modal" type="button" class="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-coral to-amber text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-coral/20 hover:shadow-coral/30 transition-all" data-i18n="updates.summary.manage">
+          Manage update
+        </button>
+      </div>
+    </div>
+
+    <div class="selu-card rounded-2xl p-5 space-y-5">
+      <h2 class="text-base font-semibold text-txt-heading" data-i18n="updates.settings.title">System preferences</h2>
+
+      <div class="space-y-3">
+        <h3 class="text-sm font-semibold text-txt-heading" data-i18n="updates.channel.title">Release channel</h3>
+        <form method="POST" action="{{ base_path }}/system-updates/channel" class="flex flex-col gap-3 md:flex-row md:items-center">
+          <label class="text-xs text-txt-muted" for="release_channel" data-i18n="updates.channel.label">Channel</label>
+          <select id="release_channel" name="release_channel" class="bg-surface-input border border-edge rounded-lg px-3 py-2 text-sm text-txt">
+            {% for ch in available_channels %}
+            <option value="{{ ch.value }}" {% if release_channel == ch.value %}selected{% endif %}>{{ ch.label }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-txt-muted border-edge hover:border-muted hover:text-txt">
+            <span data-i18n="updates.channel.save">Save channel</span>
+          </button>
+        </form>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="text-sm font-semibold text-txt-heading" data-i18n="updates.public_origin.title">Public web address</h3>
+        <form method="POST" action="{{ base_path }}/system-updates/public-origin" class="space-y-3">
+          <label class="block text-xs text-txt-muted" for="external_url" data-i18n="updates.public_origin.label">Web address</label>
+          <input
+            id="external_url"
+            name="external_url"
+            type="url"
+            value="{{ public_origin }}"
+            placeholder="https://selu.example.com"
+            data-i18n-placeholder="updates.public_origin.placeholder"
+            class="w-full bg-surface-input border border-edge rounded-lg px-3 py-2 text-sm text-txt"
+          />
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="submit" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-txt-muted border-edge hover:border-muted hover:text-txt">
+              <span data-i18n="updates.public_origin.save">Save web address</span>
+            </button>
+            <button formaction="{{ base_path }}/system-updates/public-origin/apply-current" type="submit" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-txt-muted border-edge hover:border-muted hover:text-txt" data-i18n="updates.public_origin.apply_current">Apply current host</button>
+          </div>
+        </form>
+        <p class="text-xs text-txt-muted">
+          <span data-i18n="updates.public_origin.current">Current host:</span>
+          <span class="font-mono">{{ current_origin_display }}</span>
+        </p>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="text-sm font-semibold text-txt-heading" data-i18n="updates.auto.title">Automatic updates</h3>
+        <form method="POST" action="{{ base_path }}/system-updates/auto-update" class="flex items-center gap-3">
+          <input type="hidden" name="auto_update" value="{% if auto_update %}0{% else %}1{% endif %}" />
+          <button type="submit" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer {% if auto_update %}text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:border-emerald-500/40{% else %}text-txt-muted border-edge hover:border-muted hover:text-txt{% endif %}">
+            {% if auto_update %}
+            <span data-i18n="updates.auto.enabled">Auto-update is on</span>
+            {% else %}
+            <span data-i18n="updates.auto.disabled">Auto-update is off</span>
+            {% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="updates-action-modal" class="fixed inset-0 z-40 hidden">
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-sm"></div>
+  <div class="relative min-h-full flex items-center justify-center px-4 py-8">
+    <div class="w-full max-w-2xl rounded-2xl border border-edge bg-surface shadow-2xl shadow-ink/30 p-6 space-y-4">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-black text-txt-heading font-heading" data-i18n="updates.summary.manage_title">Manage update</h2>
+          <p class="text-sm text-txt-muted mt-1" data-i18n="updates.summary.manage_subtitle">Review changes and start the update when you are ready.</p>
+        </div>
+        <button id="updates-action-modal-close" type="button" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-txt-muted border-edge hover:border-muted hover:text-txt" data-i18n="updates.modal.close">Close</button>
+      </div>
+
+      <div id="updates-last-error-card" class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm {% if last_error.is_empty() %}hidden{% endif %}">
+        <span data-i18n="updates.last_error">Last error:</span> <span id="updates-last-error-text">{{ last_error }}</span>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <div class="rounded-xl border border-edge bg-surface-alt px-4 py-3">
+          <div class="text-xs uppercase tracking-[0.15em] text-txt-muted" data-i18n="updates.summary.current">Current version</div>
+          <div class="text-sm font-semibold text-txt-heading mt-1" id="updates-modal-current-version">{{ installed_display }}</div>
+        </div>
+        <div class="rounded-xl border border-edge bg-surface-alt px-4 py-3">
+          <div class="text-xs uppercase tracking-[0.15em] text-txt-muted" data-i18n="updates.summary.new">New version</div>
+          <div class="text-sm font-semibold text-txt-heading mt-1" id="updates-modal-new-version">{{ available_display }}</div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-edge bg-surface-alt px-4 py-3 text-sm text-txt-heading">
+        <div class="flex items-center gap-2">
+          <span id="updates-status-pill" class="inline-flex items-center rounded-full border border-edge px-2 py-0.5 text-xs text-txt-muted" data-i18n="{{ status_key }}">{{ status_fallback }}</span>
+          <span id="updates-progress-text" class="text-xs text-txt-muted" data-i18n="{{ progress_key }}">{{ progress_fallback }}</span>
+        </div>
+        <p class="mt-2 text-xs text-txt-muted">
+          <span data-i18n="updates.status.checked">Last checked:</span>
+          <span id="updates-last-checked-value">
+            {% if last_checked_at.is_empty() %}
+            <span data-i18n="updates.status.never">Never</span>
+            {% else %}
+            {{ last_checked_at }}
+            {% endif %}
+          </span>
+        </p>
+        <p class="text-xs text-txt-muted">
+          <span data-i18n="updates.status.attempt">Last update attempt:</span>
+          <span id="updates-last-attempt-value">
+            {% if last_attempt_at.is_empty() %}
+            <span data-i18n="updates.status.never">Never</span>
+            {% else %}
+            {{ last_attempt_at }}
+            {% endif %}
+          </span>
+        </p>
+        <p id="updates-active-job-row" class="text-xs text-txt-muted {% if active_job_id.is_empty() %}hidden{% endif %}">
+          <span data-i18n="updates.status.active_job">Active job:</span>
+          <span id="updates-active-job-id" class="font-mono">{{ active_job_id }}</span>
+        </p>
+      </div>
+
+      <div id="updates-banner-available" class="px-3 py-2 rounded-lg border border-amber/30 bg-amber/10 text-amber text-sm {% if !update_available %}hidden{% endif %}" data-i18n="updates.banner.available">
+        A new version is ready.
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <form id="updates-apply-form" method="POST" action="{{ base_path }}/system-updates/apply" class="{% if !update_available %}hidden{% endif %}">
+          <button id="updates-apply-button" type="submit" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:border-emerald-500/40" data-i18n="updates.update_now">Update now</button>
+        </form>
+        <form id="updates-rollback-form" method="POST" action="{{ base_path }}/system-updates/rollback" class="{% if !rollback_available %}hidden{% endif %}">
+          <button id="updates-rollback-button" type="submit" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-amber border-amber/40 bg-amber/10 hover:border-amber/60" data-i18n="updates.rollback_now">Rollback</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="updates-modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-sm"></div>
+  <div class="relative min-h-full flex items-center justify-center px-4 py-8">
+    <div class="w-full max-w-lg rounded-[28px] border border-edge bg-surface shadow-2xl shadow-ink/30 overflow-hidden">
+      <div class="bg-gradient-to-r from-coral/20 via-amber/10 to-emerald-500/10 px-6 py-5 border-b border-edge">
+        <p class="text-[11px] uppercase tracking-[0.22em] text-txt-muted" data-i18n="updates.modal.eyebrow">System update</p>
+        <h2 id="updates-modal-title" class="mt-2 text-xl font-black text-txt-heading font-heading" data-i18n="updates.modal.title.update">Updating Selu</h2>
+        <p id="updates-modal-description" class="mt-2 text-sm text-txt-muted" data-i18n="updates.modal.description">Keep this page open. Selu will refresh this page when everything is ready.</p>
+      </div>
+      <div class="px-6 py-5 space-y-4">
+        <div class="rounded-2xl border border-edge bg-surface-alt px-4 py-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p id="updates-modal-step" class="text-sm font-semibold text-txt-heading" data-i18n="updates.progress.preparing">Preparing update settings.</p>
+              <p id="updates-modal-status" class="mt-1 text-xs text-txt-muted" data-i18n="updates.modal.status.working">This can take a minute.</p>
+            </div>
+            <div id="updates-modal-percent" class="text-sm font-semibold text-coral">12%</div>
+          </div>
+          <div class="mt-4 h-3 rounded-full bg-edge/60 overflow-hidden">
+            <div id="updates-modal-bar" class="h-full rounded-full bg-gradient-to-r from-coral via-amber to-emerald-500 transition-all duration-500 ease-out" style="width: 12%"></div>
+          </div>
+        </div>
+        <div id="updates-modal-error" class="hidden rounded-2xl border border-rosie/20 bg-rosie/10 px-4 py-3 text-sm text-rosie"></div>
+        <div class="flex items-center justify-between gap-3">
+          <p id="updates-modal-hint" class="text-xs text-txt-muted" data-i18n="updates.modal.hint">We’ll keep checking in the background.</p>
+          <button id="updates-modal-close" type="button" class="hidden text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-txt-muted border-edge hover:border-muted hover:text-txt" data-i18n="updates.modal.close">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const statusUrl = "{{ base_path }}/system-updates/job-status";
+  const applyStartUrl = "{{ base_path }}/system-updates/apply/start";
+  const rollbackStartUrl = "{{ base_path }}/system-updates/rollback/start";
+  const pageUrl = "{{ base_path }}/system-updates";
+  const pollIntervalMs = 2000;
+  const reconnectIntervalMs = 2500;
+
+  const statusKeyMap = {
+    idle: 'updates.state.idle',
+    checking: 'updates.state.checking',
+    update_available: 'updates.state.update_available',
+    updating: 'updates.state.updating',
+    rollback_available: 'updates.state.rollback_available',
+    failed: 'updates.state.failed',
+  };
+
+  const progressPercentMap = {
+    'updates.progress.preparing': 12,
+    'updates.progress.pulling': 38,
+    'updates.progress.restarting': 68,
+    'updates.progress.health_check': 88,
+    'updates.progress.apply_done': 100,
+    'updates.progress.rollback_start': 15,
+    'updates.progress.rollback_restarting': 70,
+    'updates.progress.rollback_done': 100,
+    'updates.progress.apply_failed': 100,
+    'updates.progress.rollback_ready': 100,
+  };
+
+  let modalAction = null;
+  let reconnectTimer = null;
+  let refreshAfterRecovery = false;
+  let lastKnownStatus = "{{ progress_key }}";
+
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function setTranslatedText(id, key) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('data-i18n', key);
+    el.textContent = typeof t === 'function' ? t(key) : key;
+  }
+
+  function setDateOrNever(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (!value) {
+      const key = 'updates.status.never';
+      el.innerHTML = '';
+      const span = document.createElement('span');
+      span.setAttribute('data-i18n', key);
+      span.textContent = typeof t === 'function' ? t(key) : 'Never';
+      el.appendChild(span);
+      return;
+    }
+    el.textContent = formatTimestamp(value);
+  }
+
+  function formatTimestamp(value) {
+    const raw = (value || '').trim();
+    if (!raw) return '';
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return raw;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(date);
+    } catch (_) {
+      return date.toLocaleString();
+    }
+  }
+
+  function formatInitialDates() {
+    const checked = document.getElementById('updates-last-checked-value');
+    if (checked) {
+      const checkedText = checked.textContent.trim();
+      if (checkedText && checkedText !== 'Never') {
+        checked.textContent = formatTimestamp(checkedText);
+      }
+    }
+    const attempt = document.getElementById('updates-last-attempt-value');
+    if (attempt) {
+      const attemptText = attempt.textContent.trim();
+      if (attemptText && attemptText !== 'Never') {
+        attempt.textContent = formatTimestamp(attemptText);
+      }
+    }
+  }
+
+  function toggleHidden(id, hidden) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('hidden', hidden);
+  }
+
+  function translated(key, fallback) {
+    return typeof t === 'function' ? t(key) : fallback;
+  }
+
+  function setButtonDisabled(id, disabled) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = disabled;
+    el.classList.toggle('opacity-60', disabled);
+    el.classList.toggle('cursor-not-allowed', disabled);
+  }
+
+  function setModalVisible(visible) {
+    toggleHidden('updates-modal', !visible);
+    document.body.classList.toggle('overflow-hidden', visible);
+  }
+
+  function setActionModalVisible(visible) {
+    toggleHidden('updates-action-modal', !visible);
+    document.body.classList.toggle('overflow-hidden', visible);
+  }
+
+  function updateModalProgress(progressKey, status, errorText) {
+    const percent = progressPercentMap[progressKey] || (status === 'failed' ? 100 : 20);
+    const actionKey = modalAction === 'rollback'
+      ? 'updates.modal.title.rollback'
+      : 'updates.modal.title.update';
+    const titleFallback = modalAction === 'rollback' ? 'Rolling back Selu' : 'Updating Selu';
+    const statusKey = status === 'failed'
+      ? 'updates.modal.status.failed'
+      : refreshAfterRecovery
+        ? 'updates.modal.status.reconnecting'
+        : 'updates.modal.status.working';
+
+    setTranslatedText('updates-modal-title', actionKey);
+    setText('updates-modal-title', translated(actionKey, titleFallback));
+    setTranslatedText('updates-modal-step', progressKey || 'updates.progress.preparing');
+    setTranslatedText('updates-modal-status', statusKey);
+    setText('updates-modal-percent', `${percent}%`);
+    const bar = document.getElementById('updates-modal-bar');
+    if (bar) {
+      bar.style.width = `${percent}%`;
+      bar.classList.toggle('from-rosie', status === 'failed');
+    }
+    const errorEl = document.getElementById('updates-modal-error');
+    if (errorEl) {
+      if (errorText) {
+        errorEl.textContent = errorText;
+        errorEl.classList.remove('hidden');
+      } else {
+        errorEl.classList.add('hidden');
+      }
+    }
+    toggleHidden('updates-modal-close', status !== 'failed' && percent < 100);
+  }
+
+  function openProgressModal(action) {
+    modalAction = action;
+    refreshAfterRecovery = false;
+    setActionModalVisible(false);
+    updateModalProgress(
+      action === 'rollback' ? 'updates.progress.rollback_start' : 'updates.progress.preparing',
+      'updating',
+      ''
+    );
+    setModalVisible(true);
+    setButtonDisabled('updates-apply-button', true);
+    setButtonDisabled('updates-rollback-button', true);
+  }
+
+  function finishModalWithError(errorKey) {
+    const fallback = translated(errorKey, 'Update failed.');
+    updateModalProgress('updates.progress.apply_failed', 'failed', fallback);
+    setButtonDisabled('updates-apply-button', false);
+    setButtonDisabled('updates-rollback-button', false);
+  }
+
+  async function startAction(url, action) {
+    openProgressModal(action);
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.ok) {
+        finishModalWithError(data.error_key || 'updates.error.apply_failed');
+        return;
+      }
+      updateModalProgress(
+        action === 'rollback' ? 'updates.progress.rollback_start' : 'updates.progress.preparing',
+        'updating',
+        ''
+      );
+    } catch (_) {
+      finishModalWithError(
+        action === 'rollback' ? 'updates.error.rollback_failed' : 'updates.error.apply_failed'
+      );
+    }
+  }
+
+  async function tryReconnectAndReload() {
+    if (reconnectTimer) return;
+    refreshAfterRecovery = true;
+    updateModalProgress(lastKnownStatus || 'updates.progress.restarting', 'updating', '');
+    reconnectTimer = window.setInterval(async () => {
+      try {
+        const resp = await fetch(`${statusUrl}?_=${Date.now()}`, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.status === 'failed') {
+          window.clearInterval(reconnectTimer);
+          reconnectTimer = null;
+          refreshAfterRecovery = false;
+          finishModalWithError('updates.error.apply_failed');
+          return;
+        }
+        if (data.status !== 'updating' && data.status !== 'checking') {
+          window.clearInterval(reconnectTimer);
+          reconnectTimer = null;
+          window.location.replace(
+            `${pageUrl}?success_key=${encodeURIComponent(
+              modalAction === 'rollback' ? 'updates.flash.rollback_done' : 'updates.flash.apply_done'
+            )}`
+          );
+        }
+      } catch (_) {
+        // Keep waiting for the refreshed server to come back.
+      }
+    }, reconnectIntervalMs);
+  }
+
+  async function pollStatus() {
+    try {
+      const resp = await fetch(statusUrl, { credentials: 'same-origin' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      lastKnownStatus = data.progress_key || lastKnownStatus;
+
+      setTranslatedText('updates-status-pill', statusKeyMap[data.status] || 'updates.state.idle');
+      setTranslatedText('updates-progress-text', data.progress_key || 'updates.progress.idle');
+      setDateOrNever('updates-last-checked-value', data.last_checked_at || '');
+      setDateOrNever('updates-last-attempt-value', data.last_attempt_at || '');
+
+      setText('updates-installed-version', data.installed_display || data.installed_version || '');
+      setText('updates-modal-current-version', data.installed_display || data.installed_version || '');
+      setText('updates-available-version', data.available_display || data.available_version || '');
+      setText('updates-modal-new-version', data.available_display || data.available_version || '');
+      setTranslatedText('updates-availability-label', data.update_available ? 'updates.summary.yes' : 'updates.summary.no');
+
+      const changelogUrl = (data.available_changelog_url || '').trim();
+      const changelogLink = document.getElementById('updates-changelog-link');
+      const changelogEmpty = document.getElementById('updates-changelog-empty');
+      if (changelogLink) {
+        if (changelogUrl) {
+          changelogLink.href = changelogUrl;
+          changelogLink.classList.remove('hidden');
+        } else {
+          changelogLink.classList.add('hidden');
+        }
+      }
+      if (changelogEmpty) {
+        changelogEmpty.classList.toggle('hidden', !!changelogUrl);
+      }
+
+      const changelogBody = document.getElementById('updates-changelog-body');
+      const bodyText = (data.available_changelog_body || '').trim();
+      if (changelogBody) {
+        if (bodyText) {
+          changelogBody.textContent = bodyText;
+          changelogBody.classList.remove('hidden');
+        } else {
+          changelogBody.classList.add('hidden');
+        }
+      }
+
+      toggleHidden('updates-banner-available', !data.update_available);
+      toggleHidden('updates-apply-form', !data.update_available);
+      toggleHidden('updates-changelog-section', !data.update_available);
+      toggleHidden('updates-no-changes', !!data.update_available);
+      toggleHidden('updates-rollback-form', !data.rollback_available);
+
+      const hasJob = !!(data.active_job_id && data.active_job_id.trim());
+      toggleHidden('updates-active-job-row', !hasJob);
+      if (hasJob) {
+        setText('updates-active-job-id', data.active_job_id);
+      }
+
+      const hasError = !!(data.last_error && data.last_error.trim());
+      toggleHidden('updates-last-error-card', !hasError);
+      if (hasError) {
+        setText('updates-last-error-text', data.last_error);
+      }
+
+      if (modalAction) {
+        updateModalProgress(data.progress_key || 'updates.progress.preparing', data.status, hasError ? data.last_error : '');
+        if (data.status === 'failed') {
+          refreshAfterRecovery = false;
+          setButtonDisabled('updates-apply-button', false);
+          setButtonDisabled('updates-rollback-button', false);
+        } else if (data.status !== 'updating' && data.status !== 'checking' && !hasError) {
+          window.location.replace(
+            `${pageUrl}?success_key=${encodeURIComponent(
+              modalAction === 'rollback' ? 'updates.flash.rollback_done' : 'updates.flash.apply_done'
+            )}`
+          );
+        }
+      }
+    } catch (_) {
+      if (modalAction) {
+        tryReconnectAndReload();
+      }
+    }
+  }
+
+  const applyForm = document.getElementById('updates-apply-form');
+  if (applyForm) {
+    applyForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      startAction(applyStartUrl, 'apply');
+    });
+  }
+
+  const rollbackForm = document.getElementById('updates-rollback-form');
+  if (rollbackForm) {
+    rollbackForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      startAction(rollbackStartUrl, 'rollback');
+    });
+  }
+
+  const openActionButton = document.getElementById('updates-open-action-modal');
+  if (openActionButton) {
+    openActionButton.addEventListener('click', () => setActionModalVisible(true));
+  }
+
+  const closeActionButton = document.getElementById('updates-action-modal-close');
+  if (closeActionButton) {
+    closeActionButton.addEventListener('click', () => setActionModalVisible(false));
+  }
+
+  const closeButton = document.getElementById('updates-modal-close');
+  if (closeButton) {
+    closeButton.addEventListener('click', () => {
+      modalAction = null;
+      refreshAfterRecovery = false;
+      setModalVisible(false);
+      setButtonDisabled('updates-apply-button', false);
+      setButtonDisabled('updates-rollback-button', false);
+    });
+  }
+
+  formatInitialDates();
+  pollStatus();
+  setInterval(pollStatus, pollIntervalMs);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO llm_providers (id, display_name, api_key_encrypted, base_url, active)\n           VALUES ('grok', 'xAI Grok', '', 'https://api.x.ai', 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "c1ff84764691649e4d506dcd1bac5632458e94e452a862d7c355ed5614f00eaf"
+}

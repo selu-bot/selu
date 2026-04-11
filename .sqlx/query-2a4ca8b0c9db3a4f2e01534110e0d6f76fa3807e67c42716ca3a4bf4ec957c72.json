@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO thread_artifacts (id, thread_id, user_id, filename, mime_type, size_bytes, file_path)\n         VALUES (?, ?, ?, ?, ?, ?, ?)\n         ON CONFLICT(id) DO UPDATE SET\n            thread_id = excluded.thread_id,\n            user_id = excluded.user_id,\n            filename = excluded.filename,\n            mime_type = excluded.mime_type,\n            size_bytes = excluded.size_bytes,\n            file_path = excluded.file_path",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "2a4ca8b0c9db3a4f2e01534110e0d6f76fa3807e67c42716ca3a4bf4ec957c72"
+}

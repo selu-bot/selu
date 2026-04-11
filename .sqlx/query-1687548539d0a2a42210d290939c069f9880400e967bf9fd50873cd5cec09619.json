@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT active FROM schedules WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "active",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1687548539d0a2a42210d290939c069f9880400e967bf9fd50873cd5cec09619"
+}

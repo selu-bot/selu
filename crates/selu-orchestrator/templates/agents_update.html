@@ -1,0 +1,204 @@
+{% extends "layout.html" %}
+
+{% block title %}Update: {{ agent_name }}{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-3xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+    <div>
+      <a href="{{ base_path }}/agents" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <span data-i18n="agents.back">Back to Agents</span>
+      </a>
+      <h1 class="text-2xl font-black text-txt-heading font-heading"><span data-i18n="agents.update.wizard.title">Update Agent</span>: {{ agent_name }}</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="agents.update.wizard.desc">You will review the update, wait while it installs, and only see one more step if something new needs your attention.</p>
+    </div>
+
+    <div class="grid gap-3 md:grid-cols-3">
+      <div class="rounded-2xl border border-coral/30 bg-coral/10 p-4">
+        <div class="text-[10px] uppercase tracking-[0.15em] text-coral" data-i18n="agents.update.wizard.step1.label">Step 1</div>
+        <div class="mt-1 text-sm font-semibold text-txt-heading" data-i18n="agents.update.wizard.step1.title">Review</div>
+        <p class="mt-1 text-xs text-txt-muted" data-i18n="agents.update.wizard.step1.desc">Check which version you are moving to.</p>
+      </div>
+      <div id="update-step-install" class="rounded-2xl border border-edge bg-surface-raised p-4">
+        <div class="text-[10px] uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.update.wizard.step2.label">Step 2</div>
+        <div class="mt-1 text-sm font-semibold text-txt-heading" data-i18n="agents.update.wizard.step2.title">Update</div>
+        <p id="update-step-install-desc" class="mt-1 text-xs text-txt-muted" data-i18n="agents.update.wizard.step2.desc">Selu downloads the new version and keeps your existing settings when it can.</p>
+      </div>
+      <div id="update-step-finish" class="rounded-2xl border border-edge bg-surface-raised p-4">
+        <div class="text-[10px] uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.update.wizard.step3.label">Step 3</div>
+        <div class="mt-1 text-sm font-semibold text-txt-heading" data-i18n="agents.update.wizard.step3.title">Finish</div>
+        <p id="update-step-finish-desc" class="mt-1 text-xs text-txt-muted" data-i18n="agents.update.wizard.step3.desc">If the update adds anything new, Selu will take you straight to it.</p>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-edge bg-surface-raised p-5 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div class="text-xs text-txt-muted" data-i18n="agents.update.wizard.from_version">Current version</div>
+          <div class="mt-1 text-lg font-semibold text-txt-heading">v{{ installed_version }}</div>
+        </div>
+        <div class="text-coral text-2xl leading-none mt-4 md:mt-6">→</div>
+        <div>
+          <div class="text-xs text-txt-muted" data-i18n="agents.update.wizard.to_version">New version</div>
+          <div class="mt-1 text-lg font-semibold text-txt-heading">v{{ target_version }}</div>
+        </div>
+      </div>
+      <p class="text-sm text-txt-muted" data-i18n="agents.update.wizard.note">Your saved secrets and tool decisions stay in place. You will only be asked about new things the updated version needs.</p>
+      <div class="flex items-center justify-end gap-3">
+        <a href="{{ base_path }}/agents" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
+        <button type="button" id="agent-update-start"
+                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                data-i18n="agents.update.confirm_action">Start update</button>
+      </div>
+    </div>
+
+    <div id="agent-update-progress" class="hidden rounded-2xl border border-edge bg-surface-raised p-5 space-y-4">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <div class="text-xs text-txt-muted" data-i18n="agents.update.progress.title">Updating agent</div>
+          <div class="mt-1 text-base font-semibold text-txt-heading">{{ agent_name }}</div>
+          <div id="agent-update-progress-message" class="mt-1 text-sm text-txt-muted" data-i18n="agents.update.phase.preparing">Preparing update...</div>
+        </div>
+        <div id="agent-update-progress-percent" class="text-sm font-semibold text-coral">0%</div>
+      </div>
+      <div class="h-2 w-full rounded-full bg-surface-input overflow-hidden">
+        <div id="agent-update-progress-bar" class="h-full bg-gradient-to-r from-coral to-amber transition-all duration-500" style="width:0%"></div>
+      </div>
+      <p id="agent-update-progress-hint" class="text-xs text-txt-muted" data-i18n="agents.update.wizard.progress_hint">Please keep this page open until the update finishes.</p>
+    </div>
+
+    <div id="agent-update-finish" class="hidden rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 space-y-3">
+      <h2 class="text-base font-semibold text-txt-heading" data-i18n="agents.update.wizard.complete_title">Update complete</h2>
+      <p id="agent-update-finish-message" class="text-sm text-emerald-400" data-i18n="agents.update.success.updated">Update complete.</p>
+      <div class="flex items-center justify-end gap-3">
+        <a id="agent-update-finish-link" href="{{ base_path }}/agents"
+           class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+           data-i18n="agents.update.wizard.done">Back to Agents</a>
+      </div>
+    </div>
+
+    <div id="agent-update-error" class="hidden rounded-2xl border border-rosie/30 bg-rosie/10 p-5 space-y-3">
+      <h2 class="text-base font-semibold text-txt-heading" data-i18n="agents.update.wizard.error_title">Update failed</h2>
+      <p id="agent-update-error-message" class="text-sm text-rosie" data-i18n="agents.update.error.failed">Update failed. Please try again.</p>
+    </div>
+  </div>
+</div>
+
+<input type="hidden" id="agent-update-entry-json" value="{{ entry_json }}" />
+
+<script>
+var updateEntryJson = document.getElementById('agent-update-entry-json').value;
+var updateJobId = null;
+var updatePollInterval = null;
+
+function setWizardStepState(stepId, active, done) {
+  var card = document.getElementById(stepId);
+  if (!card) return;
+  card.classList.remove('border-edge', 'bg-surface-raised', 'border-coral/30', 'bg-coral/10', 'border-emerald-500/30', 'bg-emerald-500/10');
+  if (done) {
+    card.classList.add('border-emerald-500/30', 'bg-emerald-500/10');
+  } else if (active) {
+    card.classList.add('border-coral/30', 'bg-coral/10');
+  } else {
+    card.classList.add('border-edge', 'bg-surface-raised');
+  }
+}
+
+function setProgress(job) {
+  var pct = Math.max(0, Math.min(100, job.progress || 0));
+  document.getElementById('agent-update-progress').classList.remove('hidden');
+  document.getElementById('agent-update-progress-message').textContent = t(job.message_key || 'agents.update.phase.preparing');
+  document.getElementById('agent-update-progress-percent').textContent = pct + '%';
+  document.getElementById('agent-update-progress-bar').style.width = pct + '%';
+  setWizardStepState('update-step-install', !job.done, job.done);
+}
+
+function showError(messageKey) {
+  var panel = document.getElementById('agent-update-error');
+  panel.classList.remove('hidden');
+  document.getElementById('agent-update-error-message').textContent = t(messageKey || 'agents.update.error.failed');
+  setWizardStepState('update-step-install', false, false);
+  window.requestAnimationFrame(function() {
+    panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
+
+function finishUpdate(job) {
+  setWizardStepState('update-step-finish', true, !!job.success);
+  if (job.redirect_to) {
+    document.getElementById('update-step-finish-desc').textContent = t('agents.update.wizard.redirecting');
+    document.getElementById('agent-update-progress-hint').textContent = t('agents.update.wizard.redirecting');
+    window.setTimeout(function() {
+      window.location.href = job.redirect_to;
+    }, 700);
+    return;
+  }
+
+  var panel = document.getElementById('agent-update-finish');
+  var link = document.getElementById('agent-update-finish-link');
+  panel.classList.remove('hidden');
+  document.getElementById('agent-update-finish-message').textContent = t(job.message_key || 'agents.update.success.updated');
+  link.href = BASE_PATH + '/agents';
+  window.requestAnimationFrame(function() {
+    panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
+
+function pollUpdateStatus() {
+  if (!updateJobId) return;
+  fetch(BASE_PATH + '/agents/update/status/' + updateJobId, { credentials: 'same-origin' })
+    .then(function(r) {
+      if (!r.ok) throw new Error('status');
+      return r.json();
+    })
+    .then(function(job) {
+      setProgress(job);
+      if (!job.done) return;
+      if (updatePollInterval) {
+        clearInterval(updatePollInterval);
+        updatePollInterval = null;
+      }
+      if (job.success) {
+        finishUpdate(job);
+      } else {
+        showError(job.error_key || job.message_key);
+      }
+    })
+    .catch(function() {
+      if (updatePollInterval) {
+        clearInterval(updatePollInterval);
+        updatePollInterval = null;
+      }
+      showError('agents.update.error.status');
+    });
+}
+
+document.getElementById('agent-update-start').addEventListener('click', function() {
+  var body = new URLSearchParams();
+  body.set('entry_json', updateEntryJson);
+  this.disabled = true;
+  this.classList.add('opacity-60', 'cursor-not-allowed');
+  setWizardStepState('update-step-install', true, false);
+  fetch(BASE_PATH + '/agents/update/start', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString()
+  })
+    .then(function(r) {
+      if (!r.ok) throw new Error('start');
+      return r.json();
+    })
+    .then(function(data) {
+      updateJobId = data.job_id;
+      setProgress({ progress: 8, done: false, message_key: 'agents.update.phase.preparing' });
+      pollUpdateStatus();
+      updatePollInterval = window.setInterval(pollUpdateStatus, 1200);
+    })
+    .catch(function() {
+      showError('agents.update.error.start');
+    });
+});
+</script>
+{% endblock %}

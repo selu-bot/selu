@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO message_embeddings\n               (id, message_id, session_id, pipe_id, content_hash, embedding, dimension)\n               VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "e480ed0e273fd8013dc38dd27037d5fef726ed109db3aaee086b84e2f8ae3fd5"
+}

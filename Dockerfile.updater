@@ -1,0 +1,46 @@
+# Selu Updater sidecar image
+
+FROM rust:1-bookworm AS builder
+
+WORKDIR /build
+
+COPY Cargo.toml Cargo.lock ./
+COPY crates/selu-core/Cargo.toml crates/selu-core/Cargo.toml
+COPY crates/selu-orchestrator/Cargo.toml crates/selu-orchestrator/Cargo.toml
+COPY crates/selu-updater/Cargo.toml crates/selu-updater/Cargo.toml
+
+RUN mkdir -p crates/selu-core/src crates/selu-orchestrator/src \
+    && printf '%s\n' 'pub fn _workspace_stub() {}' > crates/selu-core/src/lib.rs \
+    && printf '%s\n' 'fn main() {}' > crates/selu-orchestrator/src/main.rs
+
+COPY crates/selu-updater/ crates/selu-updater/
+
+RUN cargo build --release --locked -p selu-updater --bin selu-updater
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" \
+       > /etc/apt/sources.list.d/docker.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        docker-ce-cli docker-compose-plugin \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /build/target/release/selu-updater /app/selu-updater
+
+EXPOSE 8090
+
+ENV UPDATER__SERVER__HOST=0.0.0.0
+ENV UPDATER__SERVER__PORT=8090
+ENV UPDATER__COMPOSE_FILE=./docker-compose.yml
+ENV UPDATER__COMPOSE_SERVICE=selu
+ENV UPDATER__COMPOSE_ENV_FILE=./.env
+ENV UPDATER__HEALTH_URL=http://127.0.0.1:3000/api/health
+
+ENTRYPOINT ["/app/selu-updater"]

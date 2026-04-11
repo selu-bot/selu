@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT role, content, created_at FROM messages WHERE thread_id = ? ORDER BY created_at LIMIT 100",
+  "describe": {
+    "columns": [
+      {
+        "name": "role",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "content",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bf13aa72c317831fb29f6356580cc1ff2bcd7689e7966e1e4d986440e1eaef8f"
+}

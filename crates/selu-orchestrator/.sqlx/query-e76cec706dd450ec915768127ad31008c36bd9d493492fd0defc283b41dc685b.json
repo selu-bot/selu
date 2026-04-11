@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO llm_providers (id, display_name, api_key_encrypted, base_url, active)\n           VALUES ('anthropic', 'Anthropic Claude', '', '', 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "e76cec706dd450ec915768127ad31008c36bd9d493492fd0defc283b41dc685b"
+}

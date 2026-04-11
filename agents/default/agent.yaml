@@ -1,0 +1,5 @@
+id: default
+name: Selu Assistant
+session:
+  trigger: mention
+  idle_timeout_minutes: 30

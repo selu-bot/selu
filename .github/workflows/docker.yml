@@ -1,0 +1,288 @@
+name: Build & Push Docker Image
+
+on:
+  push:
+    branches: ["**"]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # ── Compute tags once, share across jobs ─────────────────────────────────
+  prepare:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+#    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.tags.outputs.tags }}
+      image: ${{ steps.tags.outputs.image }}
+      channel: ${{ steps.tags.outputs.channel }}
+      channel_tag: ${{ steps.tags.outputs.channel_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref_name }}" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            git fetch --prune origin 'refs/heads/release/*:refs/remotes/origin/release/*'
+            VERSION="v${BASH_REMATCH[1]}"
+            TAG_SHA=$(git rev-list -n1 "${{ github.ref_name }}")
+
+            MATCHED_RELEASE=0
+            while IFS= read -r branch; do
+              BRANCH_SHA=$(git rev-parse "${branch}")
+              if [[ "$TAG_SHA" == "$BRANCH_SHA" ]]; then
+                MATCHED_RELEASE=1
+                break
+              fi
+            done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin/release/*)
+
+            if [[ "$MATCHED_RELEASE" -ne 1 ]]; then
+              echo "Stable tags must point to a release/* branch tip (not main)."
+              echo "Tag ${VERSION} points to ${TAG_SHA}."
+              exit 1
+            fi
+
+            echo "tags=${IMAGE}:${VERSION},${IMAGE}:stable,${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+            echo "channel=stable" >> "$GITHUB_OUTPUT"
+            echo "channel_tag=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "### Stable release build: \`${VERSION}\` + \`stable\` + \`latest\`" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "${{ github.ref_name }}" =~ ^release/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            echo "tags=${IMAGE}:${VERSION}-dev" >> "$GITHUB_OUTPUT"
+            echo "channel=${VERSION}-dev" >> "$GITHUB_OUTPUT"
+            echo "channel_tag=${VERSION}-dev" >> "$GITHUB_OUTPUT"
+            echo "### Dev build: \`${VERSION}-dev\`" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "${{ github.ref_name }}" == "main" ]]; then
+            TS=$(date -u +%Y%m%d_%H%M%S)
+            echo "tags=${IMAGE}:unstable,${IMAGE}:unstable_${TS}" >> "$GITHUB_OUTPUT"
+            echo "channel=unstable" >> "$GITHUB_OUTPUT"
+            echo "channel_tag=unstable" >> "$GITHUB_OUTPUT"
+            echo "### Unstable build: \`unstable\` + \`unstable_${TS}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            # Feature branch: sanitize name for use as Docker tag
+            BRANCH="${{ github.ref_name }}"
+            BRANCH_SAFE=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            echo "tags=${IMAGE}:${BRANCH_SAFE}_latest" >> "$GITHUB_OUTPUT"
+            echo "channel=" >> "$GITHUB_OUTPUT"
+            echo "channel_tag=" >> "$GITHUB_OUTPUT"
+            echo "### Feature build: \`${BRANCH_SAFE}_latest\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ── Verify sqlx offline cache is up-to-date ────────────────────────────
+  sqlx-check:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+#    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: sqlx-check-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: sqlx-check-
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features sqlite --locked
+
+      - name: Run migrations & check cache freshness
+        run: |
+          export DATABASE_URL="sqlite://ci-check.db?mode=rwc"
+          cargo sqlx database create
+          cargo sqlx migrate run --source crates/selu-orchestrator/migrations
+
+          # Regenerate into a temp dir and diff against committed .sqlx/
+          cargo sqlx prepare --workspace --check
+        env:
+          DATABASE_URL: "sqlite://ci-check.db?mode=rwc"
+
+  # ── Per-architecture builds (run in parallel on native runners) ───────
+  build:
+    needs: [prepare, sqlx-check]
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: blacksmith-4vcpu-ubuntu-2404
+#            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
+#            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Derive a cache scope from the platform (e.g. "linux-amd64")
+      - name: Prepare platform vars
+        id: platform
+        run: |
+          PAIR="${{ matrix.platform }}"
+          echo "scope=${PAIR//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          # Push individual arch image as a digest (no tag yet)
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          # Per-architecture GHA cache so amd64 and arm64 don't evict each other
+          cache-from: type=gha,scope=${{ steps.platform.outputs.scope }}
+          cache-to: type=gha,scope=${{ steps.platform.outputs.scope }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          DIGEST="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ steps.platform.outputs.scope }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ── Merge per-arch images into a multi-arch manifest ────────────────────
+  merge:
+    needs: [prepare, build]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+#    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Create and push multi-arch manifest
+        run: |
+          IMAGE="${{ needs.prepare.outputs.image }}"
+          TAGS="${{ needs.prepare.outputs.tags }}"
+
+          # Build --tag flags from comma-separated list
+          TAG_FLAGS=""
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          for TAG in "${TAG_ARRAY[@]}"; do
+            TAG_FLAGS="${TAG_FLAGS} --tag ${TAG}"
+          done
+
+          # Build source list from digests
+          SOURCES=""
+          for DIGEST_FILE in /tmp/digests/*; do
+            SOURCES="${SOURCES} ${IMAGE}@sha256:$(basename ${DIGEST_FILE})"
+          done
+
+          docker buildx imagetools create ${TAG_FLAGS} ${SOURCES}
+
+      - name: Inspect manifest
+        run: |
+          TAGS="${{ needs.prepare.outputs.tags }}"
+          FIRST_TAG="${TAGS%%,*}"
+          docker buildx imagetools inspect "${FIRST_TAG}"
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign published tags
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${COSIGN_PRIVATE_KEY:-}" ]]; then
+            echo "COSIGN_PRIVATE_KEY is not set. Skipping signing."
+            exit 0
+          fi
+          TAGS="${{ needs.prepare.outputs.tags }}"
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          for TAG in "${TAG_ARRAY[@]}"; do
+            cosign sign --yes --key env://COSIGN_PRIVATE_KEY "$TAG"
+          done
+
+  sync-release-metadata:
+    needs: [prepare, merge]
+    if: >-
+      needs.merge.result == 'success' &&
+      github.ref_type != 'tag' &&
+      (github.ref_name == 'main' || startsWith(github.ref_name, 'release/'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger release metadata sync
+        env:
+          GH_TOKEN: ${{ secrets.SELU_SITE_WORKFLOW_TOKEN }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          CHANNEL_TAG: ${{ needs.prepare.outputs.channel_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "SELU_SITE_WORKFLOW_TOKEN is not set. Skipping release metadata sync dispatch."
+            exit 0
+          fi
+
+          # For unstable channel, version is empty; for dev channel, version is the channel tag
+          VERSION=""
+          if [[ "${CHANNEL}" != "unstable" ]]; then
+            VERSION="${CHANNEL_TAG}"
+          fi
+
+          payload=$(jq -n \
+            --arg channel "${CHANNEL}" \
+            --arg tag "${CHANNEL_TAG}" \
+            --arg version "${VERSION}" \
+            --arg image_repo "${{ github.repository }}" \
+            '{event_type:"selu-release-published",client_payload:{channel:$channel,tag:$tag,version:$version,image_repo:$image_repo}}')
+
+          curl -fsSL -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${GH_TOKEN}" \
+            https://api.github.com/repos/selu-bot/selu-site/dispatches \
+            -d "${payload}"

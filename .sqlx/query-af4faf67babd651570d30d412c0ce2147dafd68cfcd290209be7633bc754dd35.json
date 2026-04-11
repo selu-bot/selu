@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT pipe_id FROM schedule_pipes WHERE schedule_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "pipe_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "af4faf67babd651570d30d412c0ce2147dafd68cfcd290209be7633bc754dd35"
+}

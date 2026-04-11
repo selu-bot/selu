@@ -1,0 +1,530 @@
+{% extends "layout.html" %}
+
+{% block title %}Agents{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-5xl mx-auto px-6 py-8 space-y-8 animate-fadein">
+
+    <!-- Header -->
+    <div>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="agents.title">Agents</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="agents.desc">Install agents from the marketplace and configure their LLM provider and model.</p>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
+      {% if err == "encrypt_failed" %}<span data-i18n="agents.error.encrypt_failed">Couldn't save the credential. Please try again.</span>
+      {% else if err == "store_cred_failed" %}<span data-i18n="agents.error.store_cred_failed">Couldn't store the credential. Please try again.</span>
+      {% else if err == "save_perms_failed" %}<span data-i18n="agents.error.save_perms_failed">Couldn't save tool permissions. Please try again.</span>
+      {% else if err == "not_installed" %}<span data-i18n="agents.error.not_installed">This agent is not installed yet.</span>
+      {% else if err == "rating_invalid" %}<span data-i18n="agents.error.rating_invalid">Please choose a rating between 1 and 5 stars.</span>
+      {% else if err == "rating_submit_failed" %}<span data-i18n="agents.error.rating_submit_failed">Couldn't submit your rating. Please try again.</span>
+      {% else if err == "rating_unavailable" %}<span data-i18n="agents.error.rating_unavailable">Couldn't submit your rating right now.</span>
+      {% else if err == "rating_save_failed" %}<span data-i18n="agents.error.rating_save_failed">Couldn't save your rating. Please try again.</span>
+      {% else %}{{ err }}
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if let Some(msg) = success %}
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+      {% if msg == "setup_complete" %}<span data-i18n="agents.success.setup_complete">Agent setup completed successfully.</span>
+      {% else if msg == "updated" %}<span data-i18n="agents.success.updated">Agent updated successfully.</span>
+      {% else if msg == "rating_saved" %}<span data-i18n="agents.success.rating_saved">Thanks! Your rating was saved.</span>
+      {% else if msg == "global_default_model_updated" %}<span data-i18n="agents.success.global_default_model_updated">Global default model updated.</span>
+      {% else if msg == "global_default_image_model_updated" %}<span data-i18n="agents.success.global_default_image_model_updated">Global default image model updated.</span>
+      {% else if msg == "image_model_updated" %}<span data-i18n="agents.success.image_model_updated">Image model updated.</span>
+      {% else %}{{ msg }}
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Global Default Model -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.globalmodel">Global Default Model</span>
+        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.globalmodel.hint">Used when no per-agent model is set</span>
+      </div>
+      <div class="p-5">
+        <form method="POST" action="{{ base_path }}/agents/default-model" class="flex items-end gap-3 flex-wrap">
+          <div class="flex-1 min-w-[150px]">
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
+            <select name="provider_id" id="global-provider-select"
+                    onchange="fetchModels(this.value, '#global-model-select')"
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+              <option value="" data-i18n="agents.selectprovider">-- Select provider --</option>
+              {% for p in providers %}
+              <option value="{{ p.id }}" {% if p.id == global_provider %}selected{% endif %}>{{ p.display_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="flex-[2] min-w-[200px]">
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.model">Model</label>
+            <select name="model_id" id="global-model-select" data-current="{{ global_model }}"
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+              {% if global_model.is_empty() %}
+              <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
+              {% else %}
+              <option value="{{ global_model }}" selected>{{ global_model_display_name }}</option>
+              {% endif %}
+            </select>
+          </div>
+          <div class="w-20">
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.temperature">Temp</label>
+            <input type="text" name="temperature" value="{{ global_temperature }}" placeholder="0.7"
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+          </div>
+          <button type="submit"
+                  class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                  data-i18n="agents.save">Save</button>
+        </form>
+        {% if providers.is_empty() %}
+        <p class="text-xs text-txt-muted mt-3" data-i18n="agents.noproviders">No providers configured. Go to <a href="{{ base_path }}/providers" class="text-coral hover:text-amber transition-colors">Providers</a> to set up an API key first.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Global Default Image Model -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.globalimagemodel">Global Default Image Model</span>
+        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.globalimagemodel.hint">Used for image generation and editing when no per-agent image model is set</span>
+      </div>
+      <div class="p-5">
+        <form method="POST" action="{{ base_path }}/agents/default-image-model" class="flex items-end gap-3 flex-wrap">
+          <div class="flex-1 min-w-[150px]">
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
+            <select name="provider_id" id="global-image-provider-select"
+                    onchange="fetchModels(this.value, '#global-image-model-select')"
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+              <option value="" data-i18n="agents.globaldefaultoption">-- Global default --</option>
+              {% for p in providers %}
+              <option value="{{ p.id }}" {% if p.id == global_image_provider %}selected{% endif %}>{{ p.display_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="flex-[2] min-w-[200px]">
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.image_model">Image model</label>
+            <select name="model_id" id="global-image-model-select" data-current="{{ global_image_model }}"
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+              {% if global_image_model.is_empty() %}
+              <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
+              {% else %}
+              <option value="{{ global_image_model }}" selected>{{ global_image_model_display_name }}</option>
+              {% endif %}
+            </select>
+          </div>
+          <button type="submit"
+                  class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                  data-i18n="agents.save">Save</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex items-center gap-1 border-b border-edge">
+      <button id="tab-installed" onclick="showTab('installed')"
+              class="px-4 py-2.5 text-sm font-medium border-b-2 border-coral text-txt-heading transition-colors cursor-pointer"
+              data-i18n="agents.installed">Installed Agents</button>
+      <button id="tab-marketplace" onclick="showTab('marketplace')"
+              class="px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-txt-muted hover:text-txt transition-colors cursor-pointer"
+              data-i18n="agents.marketplace">Marketplace</button>
+    </div>
+
+    <!-- Installed Agents Tab -->
+    <div id="panel-installed">
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-edge">
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.name">Name</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.version">Version</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.providermodel">Provider / Model</th>
+                <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.status">Status</th>
+                <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="agents.table.actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-edge">
+              {% for agent in agents %}
+              <tr class="hover:bg-sidebar-hover transition-colors">
+                <td class="px-5 py-3.5">
+                  <a href="{{ base_path }}/agents/{{ agent.id }}" class="font-medium text-txt-heading hover:text-coral transition-colors">{{ agent.name }}</a>
+                  {% if agent.is_bundled %}
+                   <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral" data-i18n="agents.bundled">Bundled</span>
+                  {% endif %}
+                  <div class="text-[10px] text-txt-faint font-mono mt-0.5">{{ agent.id }}{% if agent.capability_count > 0 %} &middot; {{ agent.capability_count }} cap{% endif %}</div>
+                  {% if !agent.is_bundled %}
+                  <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/rate" class="mt-2 flex items-center gap-1.5">
+                    <span class="text-[11px] text-txt-muted" data-i18n="agents.rating.label">Rate:</span>
+                    {% for i in 1..=5 %}
+                    <button type="submit" name="rating" value="{{ i }}"
+                            class="text-sm text-amber/40 hover:text-amber transition-colors cursor-pointer leading-none">★</button>
+                    {% endfor %}
+                  </form>
+                  {% endif %}
+                </td>
+                <td class="px-5 py-3.5">
+                  <span class="text-txt-muted text-xs">v{{ agent.version }}</span>
+                  {% if agent.update_available %}
+                  <span class="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber/10 text-amber border border-amber/20" data-update-chip="{{ agent.id }}">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+                    <span>v{{ agent.marketplace_version }}</span>
+                  </span>
+                  {% endif %}
+                </td>
+                <td class="px-5 py-3.5">
+                  {% if !agent.provider_id.is_empty() %}
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral">{{ agent.provider_id }}</span>
+                  <span class="text-txt ml-1">{{ agent.model_display_name }}</span>
+                  {% else %}
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-alt text-txt-muted" data-i18n="agents.globaldefault">Global default</span>
+                  {% endif %}
+                  <div class="mt-1 text-xs text-txt-muted">
+                    <span data-i18n="agents.image_model_short">Image:</span>
+                    {% if !agent.image_provider_id.is_empty() %}
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber/15 text-amber">{{ agent.image_provider_id }}</span>
+                    <span class="text-txt ml-1">{{ agent.image_model_display_name }}</span>
+                    {% else %}
+                    <span data-i18n="agents.globaldefault">Global default</span>
+                    {% endif %}
+                  </div>
+                </td>
+                <td class="px-5 py-3.5">
+                  {% if agent.setup_complete %}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
+                    <span data-i18n="agents.status.active">Active</span>
+                  </span>
+                  {% else %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber/10 text-amber border border-amber/20" data-i18n="agents.status.pending">Setup pending</span>
+                  {% endif %}
+                </td>
+                <td class="px-5 py-3.5 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    {% if agent.update_available %}
+                    <form method="POST" action="{{ base_path }}/agents/update/wizard" class="inline"
+                          data-agent-id="{{ agent.id }}"
+                          data-agent-name="{{ agent.name }}"
+                          data-agent-version="{{ agent.marketplace_version }}">
+                      <input type="hidden" name="entry_json" id="update-entry-{{ agent.id }}" value="" />
+                      <button type="submit" data-agent-update-id="{{ agent.id }}"
+                              class="text-xs font-medium text-amber hover:text-amber/80 bg-amber/10 border border-amber/20 hover:border-amber/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              data-i18n="agents.update">Update</button>
+                    </form>
+                    {% endif %}
+                    {% if !agent.setup_complete %}
+                    <a href="{{ base_path }}/agents/{{ agent.id }}/setup"
+                       class="text-xs font-medium text-coral hover:text-amber bg-coral/10 border border-coral/20 hover:border-coral/40 px-2.5 py-1 rounded-lg transition-colors"
+                       data-i18n="agents.setup">Setup</a>
+                    {% endif %}
+                    <button onclick="toggleModelPopover(this)"
+                            class="text-xs text-txt hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                            data-i18n="agents.model">Model</button>
+                    <div class="hidden absolute z-20 right-0 mt-1 bg-surface-alt border border-edge rounded-2xl p-4 min-w-[320px] shadow-xl shadow-black/40">
+                      <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/model" class="space-y-3">
+                        <div>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
+                          <select name="provider_id"
+                                  onchange="fetchModels(this.value, this.closest('form').querySelector('select[name=model_id]'))"
+                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
+                            <option value="" data-i18n="agents.globaldefaultoption">-- Global default --</option>
+                            {% for p in providers %}
+                            <option value="{{ p.id }}" {% if p.id == agent.provider_id %}selected{% endif %}>{{ p.display_name }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.model">Model</label>
+                          <select name="model_id" data-current="{{ agent.model_id }}"
+                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
+                            {% if agent.model_id.is_empty() %}
+                            <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
+                            {% else %}
+                            <option value="{{ agent.model_id }}" selected>{{ agent.model_display_name }}</option>
+                            {% endif %}
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.temperature">Temperature</label>
+                          <input type="text" name="temperature" value="0.7" placeholder="0.7"
+                                 class="w-20 bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition" />
+                        </div>
+                        <button type="submit"
+                                class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+                                data-i18n="agents.save">Save</button>
+                      </form>
+                    </div>
+                    <button onclick="toggleModelPopover(this)"
+                            class="text-xs text-txt hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                            data-i18n="agents.image_model">Image model</button>
+                    <div class="hidden absolute z-20 right-0 mt-1 bg-surface-alt border border-edge rounded-2xl p-4 min-w-[320px] shadow-xl shadow-black/40">
+                      <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/image-model" class="space-y-3">
+                        <div>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
+                          <select name="provider_id"
+                                  onchange="fetchModels(this.value, this.closest('form').querySelector('select[name=model_id]'))"
+                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
+                            <option value="" data-i18n="agents.globaldefaultoption">-- Global default --</option>
+                            {% for p in providers %}
+                            <option value="{{ p.id }}" {% if p.id == agent.image_provider_id %}selected{% endif %}>{{ p.display_name }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.image_model">Image model</label>
+                          <select name="model_id" data-current="{{ agent.image_model_id }}"
+                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
+                            {% if agent.image_model_id.is_empty() %}
+                            <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
+                            {% else %}
+                            <option value="{{ agent.image_model_id }}" selected>{{ agent.image_model_display_name }}</option>
+                            {% endif %}
+                          </select>
+                        </div>
+                        <button type="submit"
+                                class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+                                data-i18n="agents.save">Save</button>
+                      </form>
+                    </div>
+                    {% if !agent.is_bundled %}
+                    <!-- Auto-update toggle -->
+                    <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/auto-update" class="inline">
+                      <input type="hidden" name="auto_update" value="{% if agent.auto_update %}0{% else %}1{% endif %}" />
+                      <button type="submit" title="{% if agent.auto_update %}Disable auto-update{% else %}Enable auto-update{% endif %}"
+                              class="text-xs border px-2.5 py-1 rounded-lg transition-colors cursor-pointer {% if agent.auto_update %}text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:border-emerald-500/40{% else %}text-txt-muted border-edge hover:border-muted hover:text-txt{% endif %}">
+                        <span class="flex items-center gap-1">
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                          <span data-i18n="agents.autoupdate.short">Auto</span>
+                        </span>
+                      </button>
+                    </form>
+                    <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/uninstall" class="inline"
+                          onsubmit="return confirm(t('agents.uninstall.confirm').replace('{name}', '{{ agent.name }}'))">
+                      <button type="submit"
+                              class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              data-i18n="agents.uninstall">Uninstall</button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+              {% if agents.is_empty() %}
+              <tr>
+                <td colspan="5" class="px-5 py-8 text-center text-txt-muted text-sm" data-i18n="agents.noagents">No agents installed. Visit the Marketplace tab to install agents.</td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Marketplace Tab -->
+    <div id="panel-marketplace" class="hidden">
+      {% if !marketplace_error.is_empty() %}
+      <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm mb-4">{{ marketplace_error }}</div>
+      {% endif %}
+
+      <!-- Filter buttons -->
+      {% if !marketplace_agents.is_empty() %}
+      <div class="flex items-center gap-2 mb-4">
+        <button onclick="filterMarketplace('all')" id="mp-filter-all"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer border-coral text-coral bg-coral/10"
+                data-i18n="agents.filter.all">All</button>
+        <button onclick="filterMarketplace('available')" id="mp-filter-available"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer border-edge text-txt-muted hover:text-txt hover:border-muted"
+                data-i18n="agents.filter.available">Available</button>
+        <button onclick="filterMarketplace('installed')" id="mp-filter-installed"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer border-edge text-txt-muted hover:text-txt hover:border-muted"
+                data-i18n="agents.filter.installed">Installed</button>
+        <button onclick="filterMarketplace('updates')" id="mp-filter-updates"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer border-edge text-txt-muted hover:text-txt hover:border-muted"
+                data-i18n="agents.filter.updates">Update available</button>
+      </div>
+      {% endif %}
+
+      {% if marketplace_agents.is_empty() && marketplace_error.is_empty() %}
+      <div class="bg-surface-raised border border-edge rounded-2xl p-8 text-center">
+        <p class="text-sm text-txt-muted" data-i18n="agents.marketplace.empty">No agents available in the marketplace.</p>
+      </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="marketplace-grid">
+        {% for agent in marketplace_agents %}
+        <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden flex flex-col mp-card"
+             data-installed="{{ agent.is_installed }}" data-update="{{ agent.update_available }}">
+          <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+            <span class="text-sm font-semibold text-txt-heading">{{ agent.name }}</span>
+            <div class="flex items-center gap-1.5">
+              {% if agent.update_available %}
+              <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber/10 text-amber border border-amber/20">
+                v{{ agent.installed_version }} &rarr; v{{ agent.version }}
+              </span>
+              {% else %}
+              <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted">v{{ agent.version }}</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="p-5 flex flex-col flex-1">
+            <p class="text-xs text-txt-muted leading-relaxed flex-1">{{ agent.description }}</p>
+            {% if !agent.author.is_empty() %}
+            <p class="text-[11px] text-txt-faint mt-2">By {{ agent.author }}</p>
+            {% endif %}
+            {% if let Some(average_rating) = agent.average_rating %}
+            <div class="mt-2 flex items-center gap-2">
+              <span class="text-amber text-sm leading-none">★★★★★</span>
+              <span class="text-[11px] text-txt-muted">{{ average_rating }} ({{ agent.rating_count.unwrap_or(0) }})</span>
+            </div>
+            {% endif %}
+            <div class="mt-4 flex items-center gap-2">
+              {% if agent.update_available %}
+              <form method="POST" action="{{ base_path }}/agents/update" class="js-agent-update-form"
+                    data-agent-id="{{ agent.id }}"
+                    data-agent-name="{{ agent.name }}"
+                    data-agent-version="{{ agent.version }}">
+                <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
+                <button type="submit" data-agent-update-id="{{ agent.id }}"
+                        class="bg-gradient-to-r from-amber to-coral text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-amber/20"
+                        data-i18n="agents.update">Update</button>
+              </form>
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
+                <span data-i18n="agents.installed.badge">Installed</span>
+              </span>
+              {% else if agent.is_installed %}
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
+                <span data-i18n="agents.installed.badge">Installed</span>
+              </span>
+              {% else %}
+              <form method="POST" action="{{ base_path }}/agents/install">
+                <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
+                <button type="submit"
+                        class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
+                        data-i18n="agents.install">Install</button>
+              </form>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(tab) {
+  document.getElementById('panel-installed').classList.toggle('hidden', tab !== 'installed');
+  document.getElementById('panel-marketplace').classList.toggle('hidden', tab !== 'marketplace');
+  var tabInstalled = document.getElementById('tab-installed');
+  var tabMarketplace = document.getElementById('tab-marketplace');
+  if (tab === 'installed') {
+    tabInstalled.classList.add('border-coral', 'text-txt-heading');
+    tabInstalled.classList.remove('border-transparent', 'text-txt-muted');
+    tabMarketplace.classList.remove('border-coral', 'text-txt-heading');
+    tabMarketplace.classList.add('border-transparent', 'text-txt-muted');
+  } else {
+    tabMarketplace.classList.add('border-coral', 'text-txt-heading');
+    tabMarketplace.classList.remove('border-transparent', 'text-txt-muted');
+    tabInstalled.classList.remove('border-coral', 'text-txt-heading');
+    tabInstalled.classList.add('border-transparent', 'text-txt-muted');
+  }
+}
+
+/* Marketplace filter */
+function filterMarketplace(filter) {
+  var cards = document.querySelectorAll('.mp-card');
+  cards.forEach(function(card) {
+    var isInstalled = card.dataset.installed === 'true';
+    var hasUpdate = card.dataset.update === 'true';
+    var show = false;
+    if (filter === 'all') show = true;
+    else if (filter === 'available') show = !isInstalled;
+    else if (filter === 'installed') show = isInstalled;
+    else if (filter === 'updates') show = hasUpdate;
+    card.style.display = show ? '' : 'none';
+  });
+  /* Update active filter button styling */
+  var buttons = ['all', 'available', 'installed', 'updates'];
+  buttons.forEach(function(f) {
+    var btn = document.getElementById('mp-filter-' + f);
+    if (!btn) return;
+    if (f === filter) {
+      btn.classList.add('border-coral', 'text-coral', 'bg-coral/10');
+      btn.classList.remove('border-edge', 'text-txt-muted');
+    } else {
+      btn.classList.remove('border-coral', 'text-coral', 'bg-coral/10');
+      btn.classList.add('border-edge', 'text-txt-muted');
+    }
+  });
+}
+
+function toggleModelPopover(btn) {
+  var popover = btn.nextElementSibling;
+  var isHidden = popover.classList.contains('hidden');
+  document.querySelectorAll('[data-popover]').forEach(function(el) { el.classList.add('hidden'); });
+  if (isHidden) {
+    popover.classList.remove('hidden');
+    popover.setAttribute('data-popover', '');
+    var provSelect = popover.querySelector('select[name=provider_id]');
+    var modelSelect = popover.querySelector('select[name=model_id]');
+    if (provSelect.value && modelSelect.options.length <= 1) {
+      fetchModels(provSelect.value, modelSelect);
+    }
+  } else {
+    popover.classList.add('hidden');
+  }
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('[data-popover]') && !e.target.closest('button')) {
+    document.querySelectorAll('[data-popover]').forEach(function(el) { el.classList.add('hidden'); });
+  }
+});
+
+function fetchModels(providerId, target) {
+  var sel = (typeof target === 'string') ? document.querySelector(target) : target;
+  if (!sel) return;
+  if (!providerId) { sel.innerHTML = '<option value="">' + t('agents.selectproviderfirst') + '</option>'; return; }
+  sel.innerHTML = '<option value="">' + t('agents.loadingmodels') + '</option>';
+  fetch(BASE_PATH + '/agents/models/' + providerId, { credentials: 'same-origin' })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      sel.innerHTML = html;
+      var cur = sel.dataset.current;
+      if (cur) {
+        for (var i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === cur) { sel.selectedIndex = i; break; }
+        }
+      }
+    })
+    .catch(function() { sel.innerHTML = '<option value="">' + t('agents.loadmodelsfailed') + '</option>'; });
+}
+
+/* Inject marketplace entry_json into the installed table update forms */
+document.addEventListener('DOMContentLoaded', function() {
+  var gp = document.getElementById('global-provider-select');
+  if (gp && gp.value) fetchModels(gp.value, '#global-model-select');
+  var gip = document.getElementById('global-image-provider-select');
+  if (gip && gip.value) fetchModels(gip.value, '#global-image-model-select');
+
+  /* Copy entry_json from marketplace cards to installed-table update forms */
+  var mpCards = document.querySelectorAll('.mp-card');
+  mpCards.forEach(function(card) {
+    var entryInput = card.querySelector('input[name=entry_json]');
+    if (!entryInput) return;
+    var json = entryInput.value;
+    try {
+      var entry = JSON.parse(json);
+      var target = document.getElementById('update-entry-' + entry.id);
+      if (target) target.value = json;
+    } catch(e) {}
+  });
+
+});
+</script>
+{% endblock %}

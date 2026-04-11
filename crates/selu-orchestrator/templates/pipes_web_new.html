@@ -1,0 +1,69 @@
+{% extends "layout.html" %}
+
+{% block title %}New Web UI Pipe{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <!-- Back link + Header -->
+    <div>
+      <a href="{{ base_path }}/pipes/new" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <span data-i18n="pipes.back_to_add">Back to Add Pipe</span>
+      </a>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="pipes.web.title">New Web UI Pipe</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="pipes.web.desc">Create a pipe for chatting with your agents through the Selu web interface. Once created, it will appear in the Chat sidebar.</p>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
+      {{ err }}
+    </div>
+    {% endif %}
+
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="pipes.web.config">Web UI Configuration</span>
+      </div>
+      <form method="post" action="{{ base_path }}/pipes/web">
+        <div class="p-5 space-y-4">
+          {% if users.is_empty() %}
+          <div class="px-4 py-3 rounded-xl bg-coral/10 border border-coral/20 text-coral text-sm">
+            <p class="font-semibold" data-i18n="pipes.form.no_users.title">No users found.</p>
+            <p>
+              <span data-i18n="pipes.form.no_users.before_link">You need at least one user account before creating a pipe.</span>
+              <a href="{{ base_path }}/users" class="underline hover:no-underline" data-i18n="pipes.form.no_users.link">Create a user</a>.
+            </p>
+          </div>
+          {% endif %}
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="pipe-name" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="pipes.name">Name</label>
+              <input id="pipe-name" name="name" type="text" data-i18n-placeholder="pipes.web.name_placeholder" placeholder="e.g. General, Work, Personal" required
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+              <p class="text-[11px] text-txt-faint mt-1" data-i18n="pipes.web.name_hint">A friendly name shown in the Chat sidebar.</p>
+            </div>
+            <div>
+              <label for="pipe-user" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="pipes.owner">Owner</label>
+              <select id="pipe-user" name="user_id" required {% if users.is_empty() %}disabled{% endif %}
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition disabled:opacity-50">
+                <option value="" data-i18n="pipes.form.select_user">-- select user --</option>
+                {% for u in users %}
+                <option value="{{ u.id }}">{{ u.display }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="flex items-center justify-between pt-2">
+            <a href="{{ base_path }}/pipes/new" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
+            <button type="submit" {% if users.is_empty() %}disabled{% endif %}
+                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    data-i18n="pipes.create.web">Create Web Pipe</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

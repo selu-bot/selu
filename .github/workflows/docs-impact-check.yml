@@ -1,0 +1,98 @@
+name: Docs Impact Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  docs-impact-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for docs impact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # ── Docs-relevant path prefixes ──────────────────────────────
+          # Changes in these directories may require documentation updates.
+          DOCS_PATHS=(
+            "crates/selu-orchestrator/src/web/"
+            "crates/selu-orchestrator/src/api/"
+            "crates/selu-orchestrator/src/agents/"
+            "crates/selu-orchestrator/src/capabilities/"
+            "crates/selu-orchestrator/src/pipes/"
+            "crates/selu-orchestrator/src/channels/"
+            "crates/selu-orchestrator/src/permissions/"
+            "crates/selu-orchestrator/src/llm/"
+            "crates/selu-orchestrator/src/events/"
+            "crates/selu-orchestrator/migrations/"
+            "crates/selu-orchestrator/templates/"
+            "agents/"
+            ".env.example"
+          )
+
+          # ── Get changed files in this PR ─────────────────────────────
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          CHANGED_FILES=$(git diff --name-only "$BASE"..."$HEAD")
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No files changed. Skipping."
+            exit 0
+          fi
+
+          # ── Check if any changed file is in a docs-relevant path ─────
+          DOCS_RELEVANT=false
+          RELEVANT_FILES=""
+
+          for FILE in $CHANGED_FILES; do
+            for PREFIX in "${DOCS_PATHS[@]}"; do
+              if [[ "$FILE" == "$PREFIX"* ]]; then
+                DOCS_RELEVANT=true
+                RELEVANT_FILES="${RELEVANT_FILES}\n  - ${FILE}"
+              fi
+            done
+          done
+
+          if [ "$DOCS_RELEVANT" = false ]; then
+            echo "No docs-relevant files changed. Skipping."
+            exit 0
+          fi
+
+          echo "Docs-relevant files changed:"
+          echo -e "$RELEVANT_FILES"
+          echo ""
+
+          # ── Check if DOCS_IMPACT.yaml was modified ──────────────────
+          if echo "$CHANGED_FILES" | grep -q "^DOCS_IMPACT.yaml$"; then
+            echo "DOCS_IMPACT.yaml was updated. Check passed."
+            exit 0
+          fi
+
+          # ── Check for docs-impact: none label ───────────────────────
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name')
+
+          if echo "$LABELS" | grep -q "^docs-impact: none$"; then
+            echo "PR has 'docs-impact: none' label. Check passed."
+            exit 0
+          fi
+
+          # ── Neither condition met — fail ─────────────────────────────
+          echo "::error::This PR changes docs-relevant code but has no documentation impact entry."
+          echo ""
+          echo "This PR modifies files in docs-relevant paths:"
+          echo -e "$RELEVANT_FILES"
+          echo ""
+          echo "Please do one of the following:"
+          echo "  1. Add an entry to DOCS_IMPACT.yaml describing what docs need updating"
+          echo "     (see AGENTS.md section 'Documentation impact' for the format)"
+          echo "  2. Add the 'docs-impact: none' label if this change does not affect"
+          echo "     user-facing or developer-facing documentation"
+          exit 1

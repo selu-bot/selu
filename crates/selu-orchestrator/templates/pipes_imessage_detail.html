@@ -1,0 +1,136 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ config.name }} — iMessage{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <div>
+      <a href="{{ base_path }}/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <span data-i18n="pipes.back">Back to Pipes</span>
+      </a>
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+            <svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div>
+            <h1 class="text-2xl font-black text-txt-heading font-heading">{{ config.name }}</h1>
+            <p class="text-xs text-txt-muted mt-0.5" data-i18n="imsg.detail.via">iMessage via BlueBubbles</p>
+          </div>
+        </div>
+        {% if config.active %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          <span data-i18n="pipes.connected">Connected</span>
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rosie/10 text-rosie border border-rosie/30">
+          <span class="w-1.5 h-1.5 rounded-full bg-rosie"></span>
+          <span data-i18n="pipes.inactive">Inactive</span>
+        </span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if let Some(msg) = flash %}
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm" data-i18n="{{ msg }}">{{ msg }}</div>
+    {% endif %}
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm" data-i18n="{{ err }}">{{ err }}</div>
+    {% endif %}
+
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="imsg.detail.connection">Connection</span>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-txt-muted w-36" data-i18n="imsg.detail.server">BlueBubbles server</span>
+          <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading break-all">{{ config.server_url }}</code>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-txt-muted w-36" data-i18n="imsg.detail.chat">Selected chat</span>
+          <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading break-all">{{ config.chat_guid }}</code>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-txt-muted w-36" data-i18n="imsg.detail.agent">Agent</span>
+          <span class="text-txt-heading">{{ config.agent_name }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="imsg.detail.people">Who can use this pipe?</span>
+      </div>
+      <div class="p-5 space-y-3">
+        <p class="text-xs text-txt-muted leading-relaxed" data-i18n="imsg.detail.people.desc">Choose which people in this iMessage chat Selu should answer. Leave this empty if Selu should reply to everyone in the chat.</p>
+
+        {% if people.is_empty() %}
+        <p class="text-sm text-txt-muted" data-i18n="imsg.detail.everyone">Selu will reply to everyone in this chat.</p>
+        {% else %}
+        <div class="space-y-2">
+          {% for person in people %}
+          <div class="flex items-center gap-3 bg-surface-input border border-edge rounded-xl px-4 py-3">
+            <div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+              {{ person.initials }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-txt-heading">{{ person.display_name }}</div>
+              <div class="text-xs text-txt-muted font-mono">{{ person.sender_ref }}</div>
+            </div>
+            <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    hx-delete="{{ base_path }}/pipes/imessage/{{ config.config_id }}/people/{{ person.ref_id }}"
+                    hx-target="closest div.bg-surface-input"
+                    hx-swap="outerHTML"
+                    onclick="return confirm(t('pipes.person.remove.confirm') || 'Remove this person?')"
+                    data-i18n="pipes.remove">Remove</button>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{{ base_path }}/pipes/imessage/{{ config.config_id }}/people" class="mt-4 flex flex-col sm:flex-row items-end gap-3">
+          <div class="flex-1 w-full">
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.detail.sender">Phone number or Apple ID</label>
+            <input name="sender_ref" type="text" required data-i18n-placeholder="imsg.detail.sender.placeholder" placeholder="+14155551234 or name@icloud.com"
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+          </div>
+          <div class="flex-1 w-full">
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.detail.seluuser">Selu User</label>
+            <select name="user_id" required
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+              {% for u in users %}
+              <option value="{{ u.id }}">{{ u.display }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit"
+                  class="text-sm font-medium text-txt border border-edge hover:border-muted px-3 py-2.5 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                  data-i18n="imsg.detail.addperson">Add person</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="bg-surface-raised border border-rosie/20 rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-rosie/20">
+        <span class="text-sm font-semibold text-rosie" data-i18n="imsg.detail.danger">Remove this pipe</span>
+      </div>
+      <div class="p-5">
+        <p class="text-xs text-txt-muted mb-3" data-i18n="imsg.detail.danger.desc">If you remove this pipe, Selu will stop replying in this iMessage chat.</p>
+        <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                hx-delete="{{ base_path }}/pipes/imessage/{{ config.config_id }}"
+                onclick="return confirm(t('imsg.detail.remove.confirm') || 'Remove this iMessage pipe?')"
+                data-i18n="imsg.detail.remove">
+          Remove iMessage pipe
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "layout.html" %}
+
+{% block title %}Set Up WhatsApp{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <div>
+      <a href="{{ base_path }}/pipes/new" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <span data-i18n="pipes.back_to_add">Back to Add Pipe</span>
+      </a>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="wa.title">Set Up WhatsApp</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="wa.subtitle">Connect WhatsApp with Selu's managed bridge. Selu starts and updates the bridge automatically.</p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-coral/15 text-coral border border-coral/40">
+        <span class="w-5 h-5 rounded-full gradient-coral text-white text-[10px] font-bold flex items-center justify-center">1</span>
+        <span data-i18n="wa.step1">Create WhatsApp Pipe</span>
+      </div>
+      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
+        <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">2</span>
+        <span data-i18n="wa.step2">Pair and Pick Chats</span>
+      </div>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">
+      {{ err }}
+    </div>
+    {% endif %}
+
+    {% if already_configured %}
+    <div class="px-4 py-3 rounded-xl bg-amber/10 border border-amber/30 text-amber text-sm">
+      <span data-i18n="wa.single.limit">Only one WhatsApp pipe is supported right now. Remove the existing one before creating another.</span>
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ base_path }}/pipes/whatsapp/setup" class="space-y-4">
+      <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-edge">
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="wa.step1.title">Step 1: Managed WhatsApp Bridge</span>
+        </div>
+        <div class="p-5 space-y-4">
+          <p class="text-xs text-txt-muted leading-relaxed" data-i18n="wa.step1.desc">Selu manages the WhatsApp bridge container for you. No URL setup needed. After creating the pipe, open the next page to scan the QR code and pick chats.</p>
+          <div class="text-xs text-txt-muted bg-surface-input border border-edge rounded-lg px-3 py-2" data-i18n="wa.step1.discovery.hint">After pairing, chat search only shows conversations seen by the bridge. If a chat is missing, send one WhatsApp message first, then search again.</div>
+          <div class="text-xs text-amber bg-amber/10 border border-amber/30 rounded-lg px-3 py-2" data-i18n="wa.self.warning">Messaging yourself on WhatsApp is experimental. Self-chat replies can be unreliable, especially on iPhone.</div>
+
+          <div>
+            <label for="wa-name" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="wa.pipename">Pipe Name</label>
+            <input id="wa-name" name="name" type="text" data-i18n-placeholder="wa.pipename.placeholder" placeholder="e.g. Team WhatsApp" required
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+          </div>
+
+          <div>
+            <label for="wa-auth" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="wa.auth">Authorization Header</label>
+            <input id="wa-auth" name="outbound_auth" type="text" data-i18n-placeholder="wa.auth.placeholder" placeholder="Bearer your-bridge-secret"
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
+            <p class="text-[11px] text-txt-faint mt-1" data-i18n="wa.auth.hint">Optional. If your bridge requires auth, include the full header value (for example: Bearer ...).</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-2">
+        <a href="{{ base_path }}/pipes/new" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
+        <button type="submit"
+                {% if already_configured %}disabled{% endif %}
+                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                data-i18n="wa.setup">
+          Set Up WhatsApp
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, user_id, name, prompt, cron_expression, cron_description,\n                  active, one_shot, last_run_at, next_run_at, created_at\n           FROM schedules\n           WHERE user_id = ? AND name LIKE ?\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "prompt",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "cron_expression",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "cron_description",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "active",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "one_shot",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_run_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "next_run_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 10,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "6bd7c1e18c787ac49e3bba700452001074ab068058d2cbd320c6a298c945a00b"
+}

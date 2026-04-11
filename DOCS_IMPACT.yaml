@@ -1,0 +1,2275 @@
+# Documentation Impact Log
+#
+# This file tracks code changes that require documentation updates.
+# It is append-only — entries are never removed.
+#
+# HOW IT WORKS:
+# 1. When you make a docs-relevant change, append an entry below.
+# 2. CI checks that docs-relevant PRs include an entry (or the `docs-impact: none` label).
+# 3. After merge to main, a workflow reads new entries and creates a docs PR in selu-site.
+#
+# See AGENTS.md section "Documentation impact" for full details on when and how to add entries.
+#
+# ENTRY FORMAT:
+#
+# - id: YYYY-MM-DD-short-slug       # unique identifier
+#   date: YYYY-MM-DD                 # date of the change
+#   pr: <number>                     # selu PR number (fill in when known)
+#   area: <area>                     # capabilities | agents | channels | llm | permissions | events | api | ui | config
+#   type: <type>                     # added | changed | removed | deprecated
+#   audience: <audience>             # users | developers | both
+#   summary: "Short description"     # one-line summary of the docs impact
+#   affected_files:                  # source files that changed
+#     - path/to/file.rs
+#   docs_sections:                   # which docs pages need updating
+#     - developer-guide/capabilities/container-guidelines
+#   details: |                       # enough context for a docs author to write the update
+#     Multi-line description of what changed, why, and how it affects
+#     the user or developer experience.
+
+entries:
+  - id: 2026-04-09-shared-multimodal-image-normalization
+    date: "2026-04-09"
+    pr:
+    area: llm
+    type: changed
+    audience: both
+    summary: "Oversized image attachments are now resized/compressed before multimodal LLM calls across providers"
+    affected_files:
+      - crates/selu-orchestrator/src/llm/provider.rs
+      - crates/selu-orchestrator/src/llm/image_normalizer.rs
+      - crates/selu-orchestrator/src/llm/bedrock.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+    docs_sections:
+      - user-guide/channels/web-chat
+      - user-guide/channels/imessage
+      - user-guide/channels/telegram
+      - user-guide/llm-providers/bedrock
+      - developer-guide/capabilities/container-guidelines
+    details: |
+      Selu now applies a shared image-normalization pass before multimodal
+      messages are sent to LLM providers. If an inline image exceeds the
+      provider byte limit, Selu attempts to downscale and recompress it to fit.
+
+      Bedrock explicitly uses a 5 MB image cap; providers without declared
+      limits currently use the same default cap for safety.
+
+      If normalization still cannot fit the image into the limit, Selu omits
+      that image from the model input so the turn can continue instead of
+      failing the full request.
+
+  - id: 2026-03-29-default-agent-selective-memory-guidance
+    date: "2026-03-29"
+    pr:
+    area: agents
+    type: changed
+    audience: users
+    summary: "Default assistant now uses memory tools selectively with explicit guardrails"
+    affected_files:
+      - agents/default/agent.md
+    docs_sections:
+      - user-guide/agents
+    details: |
+      Updated the bundled default agent prompt guidance so long-term memory
+      usage is explicit and selective instead of implicit.
+
+      The assistant is now instructed to:
+      - use `memory_search` when stable past context is likely relevant
+      - save only durable, reusable facts with `memory_remember`
+      - avoid storing one-off chat details, temporary states, or secrets
+      - use `store_*` for exact mutable/checkpoint state rather than prose notes
+
+      This clarifies practical memory behavior and reduces low-value memory
+      writes while preserving continuity for recurring user needs.
+
+  - id: 2026-03-16-mobile-chat-thread-selection
+    date: "2026-03-16"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Mobile users can now open and select chat threads via a slide-in drawer"
+    affected_files:
+      - crates/selu-orchestrator/templates/chat.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/channels/web-chat
+    details: |
+      On mobile devices (below the md breakpoint), the chat thread sidebar was
+      previously hidden off-screen with no accessible entry point, making it
+      impossible to select or switch conversations.
+
+      The fix introduces a right-side slide-in drawer pattern for mobile:
+      - A chat-bubble icon button in the mobile top bar (always visible on the
+        Chat page) opens the thread drawer.
+      - A hamburger-style button in the chat header (visible when a thread is
+        open) also opens the drawer.
+      - When a pipe is selected but no thread is active, an "Open conversations"
+        button is shown instead of the desktop-only sidebar hint text.
+      - Tapping a thread in the drawer auto-dismisses it.
+      - A close (×) button and backdrop tap also dismiss the drawer.
+
+      The desktop two-column layout (always-visible sidebar) is unchanged.
+      All new strings are available in English and German.
+
+  - id: 2026-03-16-agent-session-isolation-mode
+    date: "2026-03-16"
+    pr:
+    area: agents
+    type: changed
+    audience: developers
+    summary: "Agents can now opt into per-thread session isolation via agent.yaml to avoid shared capability workspaces across threads"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/loader.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/thread.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+      - crates/selu-orchestrator/src/telegram/adapter.rs
+      - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+    docs_sections:
+      - developer-guide/agent-format/agent-yaml
+      - user-guide/agents
+      - developer-guide/capabilities/container-guidelines
+    details: |
+      Added a new optional `session.isolation` setting in `agent.yaml` with
+      values:
+      - `shared` (default): existing behavior, reuses active sessions for the
+        same user+agent.
+      - `per_thread`: forces dedicated sessions per thread.
+
+      When `per_thread` is set, Selu now avoids session/container reuse across
+      threads for that agent in both direct thread creation and delegated
+      specialist turns. This is intended for stateful agents (for example
+      coding/workspace agents) to prevent cross-thread state collisions.
+
+  - id: 2026-03-05-noninteractive-approval-reply-fallback
+    date: "2026-03-05"
+    pr:
+    area: permissions
+    type: changed
+    audience: users
+    summary: "Ask-policy approvals on chat channels can now be approved with a normal reply when thread metadata is missing"
+    affected_files:
+      - crates/selu-orchestrator/src/permissions/approval_queue.rs
+      - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+      - crates/selu-orchestrator/src/telegram/adapter.rs
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+    docs_sections:
+      - user-guide/security/tool-policies
+      - user-guide/channels/web-chat
+      - user-guide/channels/imessage
+      - user-guide/channels/telegram
+    details: |
+      Async Ask-policy approvals previously depended on matching the exact
+      conversation thread. On some channels, replies can arrive without
+      reply/thread metadata, which caused approvals to be missed.
+
+      Selu now uses a fallback matcher: if there is exactly one pending
+      approval for the same user and pipe, a normal chat reply can approve it.
+      If multiple approvals are pending on that pipe, Selu does not auto-approve
+      to avoid approving the wrong action.
+
+  - id: 2026-03-04-agent-detail-subpages
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Agent detail is now split into focused subpages (Overview, Storage, Secrets, Network, Permissions)"
+    affected_files:
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/credentials
+    details: |
+      The previous single long /agents/{id} page was restructured into tabbed
+      subpages:
+      - /agents/{id} (Overview)
+      - /agents/{id}/storage
+      - /agents/{id}/secrets
+      - /agents/{id}/network
+      - /agents/{id}/permissions
+
+      This reduces cognitive load by showing one concern per page.
+      Actions related to permissions and credentials now keep users on the
+      Permissions subpage instead of navigating back to Overview.
+      Capability resource limits (memory, CPU, PIDs, filesystem) were also
+      moved from the Network page into Overview for a faster at-a-glance
+      summary.
+
+  - id: 2026-03-04-agent-detail-storage-section
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Agent detail now has separate Network, Storage, and Permissions sections, including storage inspection and delete actions"
+    affected_files:
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/credentials
+    details: |
+      The /agents/{id} detail page was reorganized into clearer sections:
+      Network, Storage, and Permissions.
+
+      A new Storage section now lists persistent key-value entries saved by
+      agents through store_* built-in tools. Each row shows key, value, and
+      timestamp; admins also see the owning user. Users can delete entries
+      directly from the page.
+
+      Existing permissions controls remain but are grouped under a dedicated
+      Permissions section alongside credential management to reduce clutter.
+
+  - id: 2026-03-03-agent-update-background-progress
+    date: "2026-03-03"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Agent updates now run in the background with live progress and completion states"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/marketplace.rs
+      - crates/selu-orchestrator/src/state.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - reference/api
+    details: |
+      The Agents page update flow was changed from a blocking submit + browser
+      confirmation dialog to a background workflow with in-page feedback.
+
+      Users now see:
+      - a custom confirmation modal
+      - a live progress card while update work runs (based on real Docker
+        image pull progress, not a simulated timer)
+      - a success/error result state without immediate full-page reload
+
+      New authenticated admin web endpoints were added for this flow:
+      - POST /agents/update/start
+      - GET /agents/update/status/{job_id}
+
+      The previous POST /agents/update endpoint remains available for
+      synchronous form submissions.
+
+  - id: 2026-03-03-agent-detail-secrets
+    date: "2026-03-03"
+    pr:
+    area: ui
+    type: added
+    audience: both
+    summary: "Credential management is now available directly on the agent detail page"
+    affected_files:
+      - crates/selu-orchestrator/src/capabilities/manifest.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/credentials
+      - developer-guide/capabilities/container-guidelines
+      - reference/manifest-yaml-schema
+    details: |
+      The agent detail page (/agents/{id}) now shows a "Secrets" section inside
+      each capability card. Each secret declared in the capability's manifest.yaml
+      is listed with its name, description, required/optional status, and whether
+      it is currently set or missing.
+
+      Admins can save or remove secrets directly from this page — no need to
+      navigate to the standalone Credentials page or manually type capability IDs.
+
+      For capability developers: the manifest.yaml `credentials[]` entries now
+      support an optional `description` field (string) that is displayed to the
+      user alongside the secret input. Authors should add human-readable
+      descriptions explaining what the credential is for and where to obtain it.
+
+      Example manifest.yaml:
+        credentials:
+          - name: SERPAPI_API_KEY
+            scope: system
+            required: false
+            description: >
+              API key for SerpAPI (https://serpapi.com). Enables reliable
+              web search. Optional — falls back to browser search if absent.
+
+  - id: 2026-03-03-agent-persistent-storage
+    date: "2026-03-03"
+    pr:
+    area: agents
+    type: added
+    audience: both
+    summary: "Agents can now persistently store key-value data via built-in store_* tools"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0018_agent_storage.sql
+      - crates/selu-orchestrator/src/agents/storage.rs
+      - crates/selu-orchestrator/src/agents/mod.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/bundled.rs
+      - crates/selu-orchestrator/src/agents/marketplace.rs
+      - crates/selu-orchestrator/src/permissions/tool_policy.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - developer-guide/built-in-tools
+      - developer-guide/agent-format/agent-yaml
+      - user-guide/agents
+    details: |
+      Four new built-in tools are now available to all agents:
+
+      - store_get(key) — retrieve a stored value by key
+      - store_set(key, value) — persistently store a key-value pair
+      - store_delete(key) — delete a stored key
+      - store_list() — list all stored key-value pairs
+
+      Storage is scoped per agent + per user — each user's agent state
+      is fully isolated. Data survives container restarts, session resets,
+      and orchestrator reboots (stored in SQLite).
+
+      These tools follow the same pattern as emit_event and
+      delegate_to_agent: they are handled by the orchestrator, not by
+      capability containers, and are subject to tool policy (default: Allow).
+
+      The agent detail page now shows these tools in the built-in tools
+      policy section with both English and German translations.
+
+      Agent developers can instruct their agents to use store_* tools
+      in their agent.md or capability prompt.md for maintaining state
+      like sync checkpoints, user preferences, or bookmarks.
+
+      On agent uninstall, all stored data for that agent is cleaned up.
+
+  - id: 2026-03-03-egress-proxy-wildcard-hosts
+    date: "2026-03-03"
+    pr:
+    area: capabilities
+    type: added
+    audience: developers
+    summary: "Egress proxy allowlists now support wildcard suffix matching (*.domain.com)"
+    affected_files:
+      - crates/selu-orchestrator/src/capabilities/egress_proxy.rs
+    docs_sections:
+      - developer-guide/capabilities/container-guidelines
+      - reference/manifest-yaml-schema
+    details: |
+      The egress proxy's allowlist matching now supports wildcard entries
+      prefixed with "*." to match any subdomain.
+
+      Examples:
+        - "*.icloud.com:443" matches p42-caldav.icloud.com:443
+        - "*.example.com" matches sub.example.com on any port
+        - "*.example.com" does NOT match example.com itself (only subdomains)
+
+      This is useful for services like iCloud CalDAV that redirect to
+      numbered subdomains (p01-caldav.icloud.com, p42-caldav.icloud.com).
+
+      Manifest.yaml example:
+        network:
+          mode: allowlist
+          hosts:
+            - "api.example.com:443"
+            - "*.cdn.example.com:443"
+
+  - id: 2026-03-03-schedules
+    date: "2026-03-03"
+    pr:
+    area: ui
+    type: added
+    audience: users
+    summary: "Recurring schedules allow users to automate agent tasks on a cron-based timing"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0019_schedules.sql
+      - crates/selu-orchestrator/src/schedules/mod.rs
+      - crates/selu-orchestrator/src/schedules/nl_to_cron.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+      - crates/selu-orchestrator/src/commands/mod.rs
+      - crates/selu-orchestrator/src/commands/schedule.rs
+      - crates/selu-orchestrator/src/web/schedules.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/main.rs
+      - crates/selu-orchestrator/templates/schedules.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/channels/web-chat
+    details: |
+      Users can now create recurring schedules that run agent prompts
+      automatically. Schedules are created via:
+
+      1. The new /schedules web page (accessible to all users via sidebar)
+      2. Chat slash commands: /schedule add, /schedule list, /schedule delete
+
+      Key features:
+      - Natural language timing (e.g. "every weekday at 6:45 AM") is parsed
+        by the LLM into cron expressions
+      - Each schedule can fire on one or more pipes; results appear as new
+        conversation threads in Chat
+      - Per-user timezone support (configurable on the Schedules page)
+      - Toggle schedules on/off, delete them
+      - Background executor checks for due schedules every 30 seconds
+
+      This also introduces the slash command system to Selu. Messages starting
+      with "/" are intercepted before the agent engine and handled as commands.
+      Currently supported: /schedule add, /schedule list, /schedule delete.
+
+      New database tables: schedules, schedule_pipes.
+      New column on users: timezone (TEXT, default 'UTC').
+
+  - id: 2026-03-03-slash-commands
+    date: "2026-03-03"
+    pr:
+    area: ui
+    type: added
+    audience: both
+    summary: "Slash command system for chat (/schedule add, /schedule list, /schedule delete)"
+    affected_files:
+      - crates/selu-orchestrator/src/commands/mod.rs
+      - crates/selu-orchestrator/src/commands/schedule.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+    docs_sections:
+      - user-guide/channels/web-chat
+    details: |
+      A new extensible slash command system intercepts messages starting
+      with "/" in web chat before they reach the agent engine. Commands
+      are handled synchronously (no SSE streaming) and the response is
+      rendered as a static assistant message.
+
+      Currently available commands:
+      - /schedule add <prompt + timing> - create a recurring schedule
+      - /schedule list - list your schedules
+      - /schedule delete <name> - delete a schedule by name
+
+      The command system is designed for easy extension: adding new
+      commands only requires a new module and a match arm in the
+      dispatcher. Other channels (Telegram, iMessage) can integrate
+      the same command dispatcher in future.
+
+  - id: 2026-03-03-one-shot-reminders
+    date: "2026-03-03"
+    pr:
+    area: agents
+    type: added
+    audience: both
+    summary: "One-shot reminders via /remind command, set_reminder built-in tool, and unified NL schedule parser"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0020_one_shot_schedules.sql
+      - crates/selu-orchestrator/src/schedules/mod.rs
+      - crates/selu-orchestrator/src/schedules/nl_to_cron.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+      - crates/selu-orchestrator/src/commands/mod.rs
+      - crates/selu-orchestrator/src/commands/remind.rs
+      - crates/selu-orchestrator/src/commands/schedule.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/permissions/tool_policy.rs
+      - crates/selu-orchestrator/src/web/schedules.rs
+      - crates/selu-orchestrator/src/i18n.rs
+      - crates/selu-orchestrator/templates/schedules.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/channels/web-chat
+      - developer-guide/built-in-tools
+    details: |
+      Users can now create one-shot reminders that fire once at a specific
+      future time, complementing the existing recurring cron schedules.
+
+      Three entry points:
+
+      1. `/remind <what + when>` slash command in chat
+         (e.g. `/remind Check the weather and email about grilling next Sunday morning`)
+      2. `set_reminder` built-in tool — agents can call this directly during
+         conversation when the user asks to be reminded of something. The LLM
+         prefers this over telling the user to use the /remind command.
+      3. The existing `/schedule add` command and web UI form now auto-detect
+         one-shot vs. recurring timing — users don't need to know the difference.
+
+      The NL parser (LLM-based) now distinguishes between recurring timing
+      ("every weekday at 8am") and one-shot timing ("next Sunday at 10am",
+      "in 20 minutes", "tomorrow at 3pm") and creates the appropriate type.
+
+      When a one-shot reminder fires, the executor runs the prompt as a new
+      agent turn on the assigned pipes — the agent can use any of its tools
+      (check weather, send emails, etc.) to complete the task.
+
+      Fired reminders are automatically cleaned up after 7 days.
+
+      The Schedules web page shows one-shot reminders with a "Fires once"
+      badge and a "Completed" status after they fire.
+
+      New database column: schedules.one_shot (INTEGER, default 0).
+      New built-in tool: set_reminder (subject to tool policy, default: Allow).
+      New slash command: /remind.
+      All UI strings available in English and German.
+
+  - id: 2026-03-04-dynamic-capability-tools
+    date: "2026-03-04"
+    pr:
+    area: capabilities
+    type: added
+    audience: developers
+    summary: "Capabilities can opt into dynamic tool discovery and automatic policy reconciliation"
+    affected_files:
+      - crates/selu-orchestrator/src/capabilities/manifest.rs
+      - crates/selu-orchestrator/src/capabilities/discovery.rs
+      - crates/selu-orchestrator/src/capabilities/mod.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/marketplace.rs
+      - crates/selu-orchestrator/src/main.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/templates/agents_setup.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/migrations/0021_dynamic_tool_discovery.sql
+    docs_sections:
+      - developer-guide/capabilities/manifest-yaml
+      - developer-guide/capabilities/grpc-interface
+      - developer-guide/capabilities/container-guidelines
+      - reference/manifest-yaml-schema
+    details: |
+      Added an opt-in dynamic tool mode per capability via manifest fields:
+      `tool_source: dynamic` and optional `discovery_tool_name` (default:
+      `list_tools`). Dynamic capabilities must not statically declare `tools`.
+
+      Selu now invokes the discovery tool directly on capability containers,
+      stores discovered tool metadata in `discovered_tools`, and tracks sync
+      status in `tool_discovery_state`.
+
+      Sync runs in three lifecycle points:
+      - startup (best-effort background sync for loaded agents)
+      - install/update flows
+      - setup flow
+
+      Reconciliation behavior:
+      - added tools are upserted and get global default policies using
+        discovered `recommended_policy` or secure fallback `block`
+      - removed tools are hard-deleted from discovered metadata, global
+        policies, and per-user policy overrides
+      - failed discovery keeps prior discovered tool state unchanged and
+        records an error in `tool_discovery_state`
+
+      Runtime tool exposure now hydrates dynamic capability tools from the
+      discovered cache, so LLM tool specs and invocation resolution reflect
+      the latest synced tool set instead of static manifest declarations.
+
+  - id: 2026-03-04-approval-prompt-copy
+    date: "2026-03-04"
+    pr:
+    area: channels
+    type: changed
+    audience: users
+    summary: "Non-interactive approval prompts now use friendlier, less technical wording"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/i18n.rs
+    docs_sections:
+      - user-guide/security/tool-policies
+      - user-guide/channels/imessage
+    details: |
+      Approval prompts sent via non-interactive threaded channels (such as
+      iMessage and webhook-based channels) were rewritten to be easier for
+      non-technical users to understand.
+
+      The prompt format now:
+      - starts with a short confirmation request ("Before I continue...")
+      - shows a humanized action label derived from the tool name
+      - presents up to three arguments using humanized field names and
+        simplified values (arrays of strings are displayed as plain lists)
+      - ends with a plain-language reply instruction
+
+      Server-side i18n entries for both English and German were updated for
+      this flow.
+
+      Hybrid approval copy support was added: the LLM can include an optional
+      `_approval_message` field in tool arguments, and Selu will use it as the
+      headline text in the approval request. This field is internal-only and
+      is stripped before actual tool invocation.
+
+  - id: 2026-03-04-natural-language-schedule-intent
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Agents can now create recurring schedules via a new built-in tool (`set_schedule`) in natural-language conversations"
+    affected_files:
+      - crates/selu-orchestrator/src/schedules/mod.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/permissions/tool_policy.rs
+      - crates/selu-orchestrator/src/agents/bundled.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/channels/web-chat
+      - developer-guide/built-in-tools
+      - user-guide/security/tool-policies
+    details: |
+      Added a new built-in tool `set_schedule` for recurring schedules, similar
+      to the existing `set_reminder` one-shot tool.
+
+      This enables natural-language chat requests like "every weekday at 06:45..."
+      to be handled by the agent through tool invocation instead of relying on
+      special text parsing at the chat transport layer.
+
+      Slash commands remain supported (`/schedule`, `/remind`) for users who
+      prefer explicit commands.
+
+      Tool policy updates:
+      - `set_schedule` is now part of built-in tool policy completeness checks
+      - bundled/default agent policies seed and backfill now include `set_schedule`
+      - Agent detail UI now lists both `set_schedule` and `set_reminder` under
+        built-in tools with English/German labels
+
+  - id: 2026-03-04-reminder-timezone-handling
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Reminder times are now interpreted in the user's timezone when no UTC offset is provided"
+    affected_files:
+      - crates/selu-orchestrator/src/schedules/mod.rs
+      - crates/selu-orchestrator/src/web/schedules.rs
+    docs_sections:
+      - user-guide/channels/web-chat
+      - user-guide/agents
+      - developer-guide/built-in-tools
+    details: |
+      Fixed confusing timezone behavior for one-shot reminders created via the
+      built-in `set_reminder` tool.
+
+      Before:
+      - naive timestamps like `2026-03-04T11:10:00` were interpreted as UTC
+      - this could schedule reminders one hour late/early for users outside UTC
+
+      After:
+      - timestamps with explicit timezone/offset are honored as-is
+      - naive timestamps are interpreted in the user's configured timezone
+      - optional `timezone` argument can override the user's timezone for a
+        specific reminder tool call
+
+      Also updated schedules page display:
+      - `next_run_at` and `last_run_at` now render in the user's timezone with
+        timezone abbreviation (e.g. `CET`, `CEST`) instead of raw UTC-like values.
+  - id: 2026-03-04-provider-onboarding-wizard
+    date: "2026-03-04"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "LLM Providers page now shows active providers and a guided add-provider setup flow"
+    affected_files:
+      - crates/selu-orchestrator/src/web/providers.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/providers.html
+      - crates/selu-orchestrator/templates/providers_new.html
+      - crates/selu-orchestrator/templates/providers_setup.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/llm-providers
+      - user-guide/self-hosting/environment-variables
+    details: |
+      The /providers page was redesigned to reduce clutter. It now focuses on a
+      simple list of active/connected providers and a single "Add Provider"
+      action.
+
+      Provider setup is now a guided flow:
+      - Step 1: choose provider type on /providers/new
+      - Step 2: fill only required fields on /providers/new/{provider_id}
+      - Step 3: Selu validates connectivity before saving
+
+      The setup form adapts per provider (OpenAI, Anthropic, Bedrock, Pico AI Server),
+      requesting only relevant fields. A disconnect action was added to remove a
+      provider from the active list.
+
+      New/updated UI copy is fully translated in English and German.
+
+  - id: 2026-03-04-coding-github-agent-and-workspace-lifecycle
+    date: "2026-03-04"
+    pr:
+    area: capabilities
+    type: added
+    audience: both
+    summary: "Added a GitHub coding agent package and activated workspace lifecycle tracking for environment capabilities"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/session.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/main.rs
+      - crates/selu-orchestrator/src/capabilities/mod.rs
+      - crates/selu-orchestrator/src/capabilities/manifest.rs
+      - crates/selu-orchestrator/src/capabilities/runner.rs
+      - crates/selu-orchestrator/migrations/0022_workspace_activity.sql
+      - agents/coding-github/agent.yaml
+      - agents/coding-github/agent.md
+      - agents/coding-github/capabilities/coding-github/manifest.yaml
+      - agents/coding-github/capabilities/coding-github/prompt.md
+      - agents/coding-github/capabilities/coding-github/container/server.py
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/credentials
+      - developer-guide/agent-format
+      - developer-guide/capabilities/container-guidelines
+      - reference/manifest-yaml-schema
+    details: |
+      New coding agent package:
+      - Added `coding-github` agent definition with a GitHub-focused capability.
+      - Capability runs as `class: environment` with `filesystem: workspace`.
+      - Requires user credential `GITHUB_TOKEN`.
+      - Provides tools for repo checkout/branching, file edits/search, checks,
+        commit/push, and pull-request creation.
+      - `push_branch` and `create_pull_request` default to Ask policy.
+
+      Core lifecycle changes:
+      - Session idle cleanup now respects each agent's individual
+        `idle_timeout_minutes` instead of using a global minimum timeout.
+      - Session opening is now thread-aware: threaded turns attempt to resume
+        that thread's prior session (including idle sessions), and rebind the
+        thread to a new session when the previous one cannot be resumed.
+      - Workspace lifecycle is now active in runtime: environment capability
+        invocations touch/create workspace rows, and TTL cleanup uses
+        `last_active_at` activity timestamps.
+
+      Manifest and runtime hardening:
+      - `filesystem: workspace` is now validated to be allowed only for
+        `class: environment`.
+      - Environment capabilities no longer get implicit workspace mounts unless
+        they explicitly request `filesystem: workspace`.
+
+  - id: 2026-03-16-agent-bm25-memory-and-ui
+    date: "2026-03-16"
+    pr:
+    area: agents
+    type: added
+    audience: both
+    summary: "Added per-agent BM25 long-term memory with built-in tools, context retrieval, and a memory inspection UI"
+    affected_files:
+      - crates/selu-core/src/types.rs
+      - crates/selu-orchestrator/src/agents/memory.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/permissions/tool_policy.rs
+      - crates/selu-orchestrator/src/agents/bundled.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/migrations/0023_agent_bm25_memory.sql
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/tool-policies
+      - developer-guide/agent-format
+      - reference
+    details: |
+      Selu now supports a separate long-term memory system for agents that is
+      distinct from user personality facts.
+
+      Runtime behavior:
+      - Added a new per-agent, per-user memory store indexed with SQLite FTS5.
+      - Added BM25 retrieval for relevant memory injection into each turn's
+        context based on the latest user message.
+      - Added built-in tools for memory management:
+        `memory_remember`, `memory_forget`, `memory_search`, and `memory_list`.
+
+      Security/policies:
+      - Memory tools are integrated into the existing built-in tool policy
+        system (`Allow`/`Ask`/`Block`) and backfilled for existing agents.
+
+      UI:
+      - Agent detail pages now include a dedicated Memory tab where users can
+        inspect and delete stored memory entries.
+      - Overview cards now include memory entry counts.
+      - New UI copy and labels were added for both English and German.
+
+  - id: 2026-03-16-schedule-agent-pin
+    date: "2026-03-16"
+    pr:
+    area: schedules
+    type: changed
+    audience: both
+    summary: "Schedules and reminders created by agents are now pinned to the creating agent"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0024_schedules_agent_pin.sql
+      - crates/selu-orchestrator/src/schedules/mod.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/commands/schedule.rs
+      - crates/selu-orchestrator/src/commands/remind.rs
+      - crates/selu-orchestrator/src/web/schedules.rs
+    docs_sections:
+      - user-guide/agents
+      - user-guide/channels/web-chat
+      - reference
+    details: |
+      Agent-created schedules (`set_schedule`) and reminders (`set_reminder`)
+      now persist an optional `agent_id` on schedule rows. During execution,
+      the scheduler invokes agents in this order:
+      1) pinned schedule `agent_id`,
+      2) pipe default agent,
+      3) bundled `default` agent.
+
+      This prevents autonomous workflows from drifting to a different agent if
+      the pipe default changes after schedule creation. Existing schedules
+      without `agent_id` remain backward compatible and still use pipe default
+      fallback behavior.
+
+  - id: 2026-03-17-agent-managed-automation-schedules
+    date: "2026-03-17"
+    pr:
+    area: agents
+    type: added
+    audience: both
+    summary: "Agents can now declare opt-in managed schedule presets in agent.yaml and users can enable them from agent settings"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/loader.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/tool-policies
+      - developer-guide/agent-format
+      - reference
+    details: |
+      Added manifest-driven managed automation schedules:
+      - `agent.yaml` supports `automation.schedules[]` presets (id, label, prompt,
+        cron_expression, cron_description).
+      - Agent settings page now shows a Managed Automation panel with an explicit
+        opt-in toggle.
+      - Enabling automation is gated by readiness checks:
+        - at least one active pipe with this agent as default
+        - all required credentials for the agent are present
+      - Enabling creates/updates deterministic schedules pinned to the agent;
+        disabling turns those managed schedules off.
+
+      This allows only agents that explicitly declare schedule support to expose
+      automation controls, while keeping activation user-controlled and safe.
+
+  - id: 2026-03-17-system-updates-release-channels
+    date: "2026-03-17"
+    pr:
+    area: self-hosting
+    type: added
+    audience: both
+    summary: "Added a System Updates UI with release channel selection (stable/dev/nightly) and manual server update actions"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0025_system_updates.sql
+      - crates/selu-orchestrator/migrations/0026_system_update_state_machine.sql
+      - crates/selu-orchestrator/migrations/0027_system_update_jobs.sql
+      - crates/selu-orchestrator/src/config/mod.rs
+      - crates/selu-orchestrator/src/main.rs
+      - .github/workflows/docker-updater.yml
+      - Dockerfile.updater
+      - crates/selu-orchestrator/src/updater/client.rs
+      - crates/selu-orchestrator/src/updater/types.rs
+      - crates/selu-updater/src/main.rs
+      - crates/selu-updater/src/api.rs
+      - crates/selu-updater/src/config.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/web/system_updates.rs
+      - crates/selu-orchestrator/templates/system_updates.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/self-hosting/updating
+      - user-guide/self-hosting/environment-variables
+      - reference/environment-variables
+    details: |
+      Added a new System Updates section in the orchestrator UI for administrators:
+      - Choose release channel: stable (default), dev, nightly
+      - Trigger "Check now" against release metadata
+      - Trigger "Update now" to apply a server update via Docker Compose
+      - Trigger one-click rollback to the previously installed version
+      - Toggle auto-update preference
+
+      New configuration keys:
+      - `SELU__RELEASE_METADATA_URL` (default: https://selu.bot/api/releases/selu)
+      - `SELU__COMPOSE_FILE` (default: ./docker-compose.yml)
+      - `SELU__COMPOSE_SERVICE` (default: selu)
+      - `SELU__COMPOSE_ENV_FILE` (default: ./.env)
+      - `SELU__UPDATER_MODE` (`in_process` or `sidecar`, default: `sidecar`)
+      - `SELU__UPDATER_URL` (default: http://selu-updater:8090)
+      - `SELU__UPDATER_SHARED_SECRET` (optional shared secret header)
+      - `SELU__UPDATER_REQUEST_TIMEOUT_SECS` (default: 30)
+
+      New persistence tables track update settings and server update state,
+      including updater status/progress keys, update attempt timestamps, and
+      previous image references for rollback, plus explicit update jobs.
+      Background checks run daily when auto-check is enabled, and auto-apply
+      runs automatically when auto-update is enabled and a newer digest exists.
+
+  - id: 2026-03-17-system-updates-version-build-changelog
+    date: "2026-03-17"
+    pr:
+    area: self-hosting
+    type: changed
+    audience: both
+    summary: "System Updates now shows semantic release version, build number, and changelog links in addition to channel/tag information"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0028_system_update_release_metadata.sql
+      - crates/selu-orchestrator/src/updater/types.rs
+      - crates/selu-updater/src/types.rs
+      - crates/selu-updater/src/state.rs
+      - crates/selu-updater/src/engine.rs
+      - crates/selu-updater/src/api.rs
+      - crates/selu-orchestrator/src/web/system_updates.rs
+      - crates/selu-orchestrator/templates/system_updates.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/self-hosting/updating
+      - user-guide/self-hosting/environment-variables
+      - reference/environment-variables
+      - reference/api
+    details: |
+      Extended the update metadata flow and UI to separate user-facing release identity from deploy tags:
+      - New metadata fields consumed and displayed: `version`, `build_number`, `changelog_url`.
+      - Version labels are normalized by channel (`vX.Y.Z`, `vX.Y.Z-dev`, `vX.Y.Z-nightly`).
+      - System Updates status cards now show release version/build and provide a changelog link for the available release.
+
+      Added persisted fields in `system_update_state` for release version/build/changelog display, while retaining existing tag/digest fields for update/rollback behavior.
+
+      Added/used new env vars during apply/rollback:
+      - `SELU_IMAGE_VERSION`
+      - `SELU_IMAGE_BUILD`
+
+      Sidecar updater request/status payloads now also carry release version/build metadata so UI state remains consistent during sidecar-managed updates.
+  - id: 2026-03-18-users-agent-access-persistence
+    date: "2026-03-18"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Users page now reliably saves per-user agent access selections and reduces table scrolling pressure"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/access.rs
+      - crates/selu-orchestrator/src/web/users.rs
+      - crates/selu-orchestrator/templates/users.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/security/credentials
+    details: |
+      The Users admin page agent-access picker moved out of the table cell into
+      a dedicated modal per user to improve usability on smaller screens and in
+      dense tables.
+
+      Saving now uses a standard POST + redirect flow from that modal with a
+      single serialized `agents` field, making selection behavior deterministic
+      and immediately visible after reload.
+
+      Added a backward-compatible runtime safeguard in the users web handler to
+      ensure the `user_agent_access` table exists before read/write operations.
+      This avoids silent failures on older installations that have not yet run
+      the migration.
+
+      The table layout was also adjusted to reduce excessive scrolling on the
+      page: the content container is wider, the table now has a stable minimum
+      width, and the "Created" column is hidden on smaller screens.
+  - id: 2026-03-19-agent-i18n-bundles
+    date: "2026-03-19"
+    pr:
+    area: agents
+    type: changed
+    audience: developers
+    summary: "Agents can now ship optional locale bundles for localized names, setup copy, prompts, and approval text"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/loader.rs
+      - crates/selu-orchestrator/src/agents/localization.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/capabilities/manifest.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/src/agents/marketplace.rs
+    docs_sections:
+      - developer-guide/agent-format/package-structure
+      - developer-guide/agent-format/agent-yaml
+      - developer-guide/capabilities/manifests
+      - reference/manifest-yaml-schema
+    details: |
+      Agents can now optionally provide locale bundles under `i18n/<locale>.yaml`
+      plus localized prompt files such as `agent.<locale>.md` and
+      `capabilities/<capability>/prompt.<locale>.md`.
+
+      Selu now resolves localized agent names, install-step labels and
+      descriptions, automation preset labels, tool descriptions, credential
+      descriptions, and approval prompt labels/messages using the user's
+      language with fallback to the agent's default locale and then English.
+
+      Marketplace payloads now also carry localized agent names and
+      descriptions so the Selu admin UI and marketplace surfaces can render the
+      same locale-aware copy from one source.
+  - id: 2026-03-19-hide-events-ui
+    date: "2026-03-19"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Event subscriptions and emit-event permissions are hidden from the admin UI for now"
+    affected_files:
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/src/web/agents.rs
+    docs_sections:
+      - user-guide/security/tool-policies
+    details: |
+      Removed the Events/Subscriptions navigation entry from the admin sidebar
+      so event configuration is no longer discoverable in normal UI flow.
+
+      Also removed the `emit_event` built-in permission row from agent setup and
+      agent detail permission views. The backend event system remains in place,
+      but event-related controls are intentionally hidden pending future
+      productization.
+  - id: 2026-03-19-hard-disable-events
+    date: "2026-03-19"
+    pr:
+    area: events
+    type: changed
+    audience: both
+    summary: "Event subscriptions and emit_event execution are now disabled in normal runtime paths"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/api/mod.rs
+    docs_sections:
+      - user-guide/security/tool-policies
+      - reference/api
+    details: |
+      Removed event-subscription route registration from the web and API routers,
+      so `/subscriptions` and `/api/subscriptions` are no longer exposed.
+
+      Removed `emit_event` from the runtime tool spec list and dispatch path in
+      the agent engine. Agents no longer receive or execute the built-in
+      `emit_event` tool during normal turn execution.
+  - id: 2026-03-19-whatsapp-pipe-wizard
+    date: "2026-03-19"
+    pr:
+    area: channels
+    type: added
+    audience: both
+    summary: "Added a WhatsApp pipe setup wizard and management pages using a Baileys webhook bridge"
+    affected_files:
+      - crates/selu-orchestrator/src/web/whatsapp.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/web/pipes.rs
+      - crates/selu-orchestrator/src/updater/client.rs
+      - crates/selu-orchestrator/src/updater/types.rs
+      - crates/selu-orchestrator/templates/pipes.html
+      - crates/selu-orchestrator/templates/pipes_whatsapp_setup.html
+      - crates/selu-orchestrator/templates/pipes_whatsapp_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/migrations/0032_whatsapp_configs.sql
+      - crates/selu-updater/src/api.rs
+      - crates/selu-updater/src/engine.rs
+      - crates/selu-updater/src/config.rs
+      - crates/selu-updater/src/types.rs
+      - sidecars/whatsapp-bridge/Dockerfile
+      - sidecars/whatsapp-bridge/package.json
+      - sidecars/whatsapp-bridge/src/index.js
+      - .env.example
+    docs_sections:
+      - user-guide/channels/telegram
+      - user-guide/self-hosting/docker
+      - user-guide/agents/sessions
+    details: |
+      Selu now supports WhatsApp as a first-class pipe type in the admin UI,
+      implemented as a guided setup flow for Baileys-based bridges.
+
+      The wizard creates both a `pipes` row (webhook transport) and a new
+      `whatsapp_configs` row, stores the bridge outbound URL plus optional auth
+      header, and supports optional sender-to-user mapping.
+
+      A dedicated detail page now shows the Selu inbound URL and bearer token
+      to configure on the bridge, plus allowed-sender management and safe
+      deactivation for WhatsApp pipes.
+
+      Setup now also calls the updater sidecar to transparently pull and launch
+      the `selu-whatsapp-bridge` container directly (on-demand) before creating
+      the pipe, so users do not need to predefine a WhatsApp service in compose.
+
+      On Selu startup, if an active WhatsApp pipe exists, Selu re-runs the
+      sidecar ensure flow so the bridge is available after restarts.
+
+      The updater sidecar now exposes a WhatsApp-bridge ensure endpoint that
+      performs Docker `pull` + `run` with persisted bridge auth state and
+      injected Selu inbound URL/token env vars.
+  - id: 2026-03-20-whatsapp-managed-bridge-lifecycle
+    date: "2026-03-20"
+    pr:
+    area: channels
+    type: changed
+    audience: both
+    summary: "WhatsApp now uses a managed bridge UX with single-pipe enforcement and bridge status/lifecycle controls"
+    affected_files:
+      - crates/selu-orchestrator/src/web/whatsapp.rs
+      - crates/selu-orchestrator/src/web/pipes.rs
+      - crates/selu-orchestrator/src/updater/client.rs
+      - crates/selu-orchestrator/src/updater/types.rs
+      - crates/selu-orchestrator/templates/pipes.html
+      - crates/selu-orchestrator/templates/pipes_whatsapp_setup.html
+      - crates/selu-orchestrator/templates/pipes_whatsapp_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-updater/src/api.rs
+      - crates/selu-updater/src/engine.rs
+      - crates/selu-updater/src/types.rs
+    docs_sections:
+      - user-guide/channels/telegram
+      - user-guide/self-hosting/docker
+      - reference/api
+    details: |
+      The WhatsApp setup wizard no longer asks users to provide a bridge URL.
+      Selu now treats the bridge as a managed sidecar and writes the outbound
+      callback URL automatically.
+
+      Selu currently enforces one active WhatsApp pipe per instance. The setup
+      page and the "Add new pipe" card now reflect this limitation in the UI.
+
+      The WhatsApp detail page now shows bridge/session pairing state and QR
+      code availability for phone linking when required.
+
+      The updater sidecar now exposes additional WhatsApp bridge lifecycle
+      endpoints: status inspection and stop. Selu calls stop automatically when
+      the last active WhatsApp pipe is removed (and on startup if no active
+      WhatsApp pipe exists).
+  - id: 2026-03-20-whatsapp-chat-picker
+    date: "2026-03-20"
+    pr:
+    area: channels
+    type: changed
+    audience: users
+    summary: "WhatsApp sender mapping now supports searchable chat selection instead of manual sender IDs"
+    affected_files:
+      - crates/selu-orchestrator/src/web/whatsapp.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/updater/client.rs
+      - crates/selu-orchestrator/src/updater/types.rs
+      - crates/selu-orchestrator/templates/pipes_whatsapp_setup.html
+      - crates/selu-orchestrator/templates/pipes_whatsapp_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-updater/src/api.rs
+      - crates/selu-updater/src/engine.rs
+      - crates/selu-updater/src/types.rs
+      - sidecars/whatsapp-bridge/src/index.js
+      - sidecars/whatsapp-bridge/README.md
+    docs_sections:
+      - user-guide/channels/telegram
+      - user-guide/self-hosting/docker
+    details: |
+      WhatsApp setup and management flows now let admins search and select
+      chats/senders discovered from the active Baileys session instead of
+      manually typing sender identifiers.
+
+      Selu now exposes a web endpoint for WhatsApp chat search, which calls new
+      updater sidecar chat-list APIs. The updater in turn queries the bridge
+      sidecar for known chats with optional search filtering.
+
+      The bridge sidecar now records known sender/chat references from incoming
+      message events and exposes them via `GET /chats`.
+  - id: 2026-03-25-whatsapp-delete-clears-auth
+    date: "2026-03-25"
+    pr:
+    area: channels
+    type: changed
+    audience: both
+    summary: "Removing the last WhatsApp pipe now also clears the persisted bridge login session"
+    affected_files:
+      - crates/selu-updater/src/engine.rs
+      - crates/selu-orchestrator/src/web/whatsapp.rs
+    docs_sections:
+      - user-guide/channels/telegram
+      - user-guide/self-hosting/docker
+    details: |
+      When the last active WhatsApp pipe is removed, Selu still stops the
+      managed bridge container, but now it also deletes the persisted Baileys
+      auth directory inside the bridge data volume.
+
+      Recreating a WhatsApp pipe after deletion now requires pairing the phone
+      again, rather than reusing the previous bridge login session.
+  - id: 2026-03-25-pipe-creation-wizard
+    date: "2026-03-25"
+    pr:
+    area: channels
+    type: changed
+    audience: users
+    summary: "Pipe creation now starts from a separate wizard-style selection screen"
+    affected_files:
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/web/pipes.rs
+      - crates/selu-orchestrator/templates/pipes.html
+      - crates/selu-orchestrator/templates/pipes_new.html
+      - crates/selu-orchestrator/templates/pipes_web_new.html
+      - crates/selu-orchestrator/templates/pipes_webhook_new.html
+      - crates/selu-orchestrator/templates/pipes_imessage_setup.html
+      - crates/selu-orchestrator/templates/pipes_telegram_setup.html
+      - crates/selu-orchestrator/templates/pipes_whatsapp_setup.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/channels/web-chat
+      - user-guide/channels/telegram
+      - getting-started/first-conversation
+    details: |
+      The Pipes index is now focused on managing existing pipes. Creating a new
+      pipe starts from a dedicated "Add Pipe" screen that mirrors the provider
+      setup flow: choose a pipe type first, then continue into the matching
+      setup wizard.
+
+      Pipe-specific setup pages now link back to the new selection step instead
+      of directly back to the Pipes index, so the flow behaves like a guided
+      two-step wizard.
+
+      The refactor also updates several pipe setup pages to use translation keys
+      for user-facing labels, hints, and button text that were previously
+      hardcoded.
+  - id: 2026-03-25-whatsapp-requires-allowed-chat
+    date: "2026-03-25"
+    pr:
+    area: channels
+    type: changed
+    audience: users
+    summary: "WhatsApp pipes now stay silent until at least one allowed chat is added"
+    affected_files:
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/templates/pipes_whatsapp_detail.html
+    docs_sections:
+      - user-guide/channels/telegram
+    details: |
+      Selu no longer falls back to the pipe owner for WhatsApp messages when a
+      WhatsApp pipe has no `user_sender_refs` entries yet.
+
+      A newly paired WhatsApp pipe now ignores inbound messages until the admin
+      explicitly adds at least one allowed chat on the WhatsApp pipe detail
+      page. This closes a security gap where a fresh pipe could briefly answer
+      any forwarded WhatsApp sender before chat restrictions were configured.
+  - id: 2026-03-25-all-pipes-require-allowed-sender
+    date: "2026-03-25"
+    pr:
+    area: channels
+    type: changed
+    audience: users
+    summary: "All pipes now ignore unknown senders until a sender mapping is configured"
+    affected_files:
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+      - crates/selu-orchestrator/src/telegram/adapter.rs
+      - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/templates/pipes_imessage_detail.html
+      - crates/selu-orchestrator/templates/pipes_telegram_detail.html
+      - crates/selu-orchestrator/templates/pipes_whatsapp_detail.html
+    docs_sections:
+      - user-guide/channels/telegram
+      - user-guide/channels/web-chat
+    details: |
+      Selu no longer falls back to the pipe owner when an inbound message
+      arrives from an unknown sender on any pipe type.
+
+      Messages from unknown iMessage, Telegram, WhatsApp, and generic webhook
+      senders are now ignored until the admin explicitly adds matching
+      `user_sender_refs` entries for that pipe.
+
+      Pipe setup and detail pages were updated to explain that an empty allowed
+      sender list means "reply to nobody yet", not "reply to everyone".
+- id: 2026-03-25-whatsapp-self-chat-support
+  date: "2026-03-25"
+  pr:
+  area: channels
+  type: changed
+  audience: users
+  summary: "WhatsApp pipes now support chatting with your own WhatsApp account"
+  affected_files:
+    - sidecars/whatsapp-bridge/src/index.js
+    - sidecars/whatsapp-bridge/README.md
+  docs_sections:
+    - user-guide/channels/telegram
+  details: |
+    The WhatsApp bridge now treats WhatsApp's self-chat identity aliases as the
+    same account when deciding whether an inbound `fromMe` event should be
+    forwarded to Selu.
+
+    This allows people who message themselves in WhatsApp to use that chat with
+    Selu, even when WhatsApp reports the self-chat as a local identity (`@lid`)
+    instead of the phone JID used elsewhere.
+- id: 2026-03-25-whatsapp-self-chat-whole-thread
+  date: "2026-03-25"
+  pr:
+  area: channels
+  type: changed
+  audience: users
+  summary: "WhatsApp self-chat now treats the whole conversation as one thread"
+  affected_files:
+    - sidecars/whatsapp-bridge/src/index.js
+    - crates/selu-orchestrator/src/pipes/inbound.rs
+  docs_sections:
+    - user-guide/channels/telegram
+  details: |
+    When Selu is used through WhatsApp self-messaging, inbound messages are now
+    marked to use whole-chat thread routing instead of per-message reply
+    routing.
+
+    This avoids WhatsApp self-chat reply metadata edge cases by treating the
+    conversation like one ongoing chat thread. The tradeoff is that self-chat
+    replies are no longer tied to a specific WhatsApp message bubble.
+- id: 2026-03-27-admin-password-reset-command
+  date: "2026-03-27"
+  pr:
+  area: security
+  type: added
+  audience: developers
+  summary: "Added an admin CLI command to securely reset a user's web password"
+  affected_files:
+    - crates/selu-orchestrator/src/admin.rs
+    - crates/selu-orchestrator/src/main.rs
+  docs_sections:
+    - user-guide/self-hosting/updating
+    - reference/env-vars
+  details: |
+    The orchestrator binary now supports an administrative command:
+
+      selu-orchestrator reset-password --username <username> --password-stdin
+
+    The command reads the new password from stdin, hashes it with Argon2id,
+    updates the selected user's `password_hash`, and revokes all active
+    `web_sessions` for that user in the same transaction.
+
+    This provides a secure recovery path when an admin forgets a user's
+    password without introducing a web-based reset endpoint.
+- id: 2026-03-27-self-service-password-change
+  date: "2026-03-27"
+  pr:
+  area: security
+  type: added
+  audience: users
+  summary: "Logged-in users can now change their own password from the Users screen"
+  affected_files:
+    - crates/selu-orchestrator/src/web/users.rs
+    - crates/selu-orchestrator/src/web/mod.rs
+    - crates/selu-orchestrator/templates/users.html
+    - crates/selu-orchestrator/templates/layout.html
+  docs_sections:
+    - user-guide/security/credentials
+    - user-guide/self-hosting/updating
+  details: |
+    Added a self-service password change flow on `/users` for all authenticated users.
+    The form is opened from a "Change password" button in a modal, keeping the
+    page focused on the main user list.
+    The flow requires the current password, enforces a minimum length for the new
+    password, confirms the new password, and updates the stored Argon2id hash.
+
+    After a successful password change, Selu revokes other active web sessions
+    for that account to reduce account takeover risk while keeping the current
+    session active.
+
+    The Users page navigation is now visible to non-admin users so they can
+    reach their account password settings.
+- id: 2026-03-27-artifact-handoff-for-attachments
+  date: "2026-03-27"
+  pr:
+  area: agents
+  type: added
+  audience: developers
+  summary: "Capabilities can now return artifact payloads that become attachment references across tools in the same session"
+  affected_files:
+    - crates/selu-orchestrator/src/agents/artifacts.rs
+    - crates/selu-orchestrator/src/agents/engine.rs
+    - crates/selu-orchestrator/src/state.rs
+  docs_sections:
+    - developer-guide/capabilities/container-guidelines
+    - developer-guide/agent-format/package-structure
+    - reference/manifest-yaml-schema
+  details: |
+    Added orchestrator-level artifact handoff support for capability tool flows.
+    A capability tool can now return JSON with an `artifact` (or `artifacts`)
+    object that includes `filename`, `mime_type`, and `data_base64`.
+
+    Selu stores the payload in session-scoped in-memory storage and rewrites
+    tool output to a compact `artifact_id` reference. Later tool calls in the
+    same user session can pass `attachments[].artifact_id`, and Selu resolves
+    it back into `data_base64` right before invoking the target capability.
+
+    Security constraints:
+    - artifacts are scoped to `(user_id, session_id)`
+    - artifacts expire automatically (TTL)
+    - payload size is validated with an upper bound
+- id: 2026-03-27-grpc-artifact-streaming
+  date: "2026-03-27"
+  pr:
+  area: capabilities
+  type: changed
+  audience: developers
+  summary: "Capability artifact exchange now uses artifact IDs and gRPC upload/download streams instead of inline base64 payloads"
+  affected_files:
+    - crates/selu-orchestrator/proto/capability.proto
+    - crates/selu-orchestrator/src/capabilities/grpc.rs
+    - crates/selu-orchestrator/src/capabilities/mod.rs
+    - crates/selu-orchestrator/src/agents/artifacts.rs
+    - crates/selu-orchestrator/src/agents/engine.rs
+    - crates/selu-orchestrator/src/llm/tool_loop.rs
+  docs_sections:
+    - developer-guide/capabilities/container-guidelines
+    - user-guide/agents/sessions
+    - reference/manifest-yaml-schema
+  details: |
+    Orchestrator-to-capability artifact transfer now uses dedicated gRPC RPCs:
+    `UploadInputArtifact` and `DownloadOutputArtifact`.
+
+    Capabilities that produce artifacts should return metadata with a
+    `capability_artifact_id` in tool results. Orchestrator fetches bytes using
+    `DownloadOutputArtifact`, stores them as session-scoped artifacts, and
+    surfaces `artifact_id` to later tool calls.
+
+    Capabilities that consume attachments receive files through
+    `UploadInputArtifact`; tool arguments now carry references (`artifact_id`
+    from the model, translated to `capability_artifact_id` for the capability)
+    rather than inline `data_base64`.
+
+    Inline artifact payloads in tool args/results are rejected. This reduces
+    sensitive payload exposure in logs and approval records.
+- id: 2026-03-27-pipe-pdf-outbound-delivery
+  date: "2026-03-27"
+  pr:
+  area: channels
+  type: changed
+  audience: both
+  summary: "Generated artifacts (including PDFs) can now be delivered as outbound pipe attachments with signed download links"
+  affected_files:
+    - crates/selu-core/src/types.rs
+    - crates/selu-orchestrator/src/agents/engine.rs
+    - crates/selu-orchestrator/src/agents/artifacts.rs
+    - crates/selu-orchestrator/src/api/mod.rs
+    - crates/selu-orchestrator/src/api/artifacts.rs
+    - crates/selu-orchestrator/src/pipes/inbound.rs
+    - crates/selu-orchestrator/src/channels/registry.rs
+    - crates/selu-orchestrator/src/channels/webhook_sender.rs
+    - crates/selu-orchestrator/src/telegram/adapter.rs
+    - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+    - crates/selu-orchestrator/src/schedules/executor.rs
+    - sidecars/whatsapp-bridge/src/index.js
+  docs_sections:
+    - user-guide/channels/telegram
+    - user-guide/channels/web-chat
+    - reference/api
+  details: |
+    Outbound delivery now supports structured attachments in addition to text.
+
+    `run_turn` returns both assistant text and newly generated session
+    artifacts. Pipe/channel delivery paths convert those artifacts into outbound
+    attachments and include:
+    - attachment metadata (artifact_id, filename, mime_type, size_bytes)
+    - optional inline `data_base64` for webhook adapters
+    - short-lived signed `download_url` values
+
+    A new public endpoint serves signed artifact downloads:
+    `GET /api/artifacts/{artifact_id}/download?exp=...&sig=...`.
+
+    Telegram now sends PDF attachments with `sendDocument`.
+    BlueBubbles keeps text delivery and appends signed download links.
+    WhatsApp bridge outbound webhook handling now accepts `attachments` and
+    sends PDF documents (URL- or base64-backed) when provided.
+
+  - id: 2026-03-27-system-updates-modal-self-restart
+    date: "2026-03-27"
+    pr:
+    area: updates
+    type: changed
+    audience: both
+    summary: "System Updates now runs update/rollback from a modal with live progress and the updater sidecar replaces itself cleanly"
+    affected_files:
+      - crates/selu-updater/src/engine.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/web/system_updates.rs
+      - crates/selu-orchestrator/templates/system_updates.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/self-hosting/updating
+      - user-guide/self-hosting/docker
+    details: |
+      The updater sidecar self-refresh flow now stops and removes the running
+      updater container before recreating it, instead of trying to bring up the
+      replacement while the old container still owns the published port. This
+      avoids duplicate updater instances and port-bind failures during Selu
+      self-updates.
+
+      The System Updates page now starts update and rollback work via
+      background JSON actions instead of redirecting away immediately. The UI
+      shows a modal with staged progress, keeps polling while Selu restarts,
+      and reloads the page automatically when the refreshed server is back so
+      people see the successful update state without manually refreshing.  - id: 2026-03-27-agent-update-wizard
+    date: "2026-03-27"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Agent updates now use a guided wizard and only ask for follow-up setup when the new version truly needs new permissions or credentials"
+    affected_files:
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/agents/marketplace.rs
+      - crates/selu-orchestrator/templates/agents.html
+      - crates/selu-orchestrator/templates/agents_setup.html
+      - crates/selu-orchestrator/templates/agents_update.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents
+    details: |
+      The web UI agent update flow is now wizard-based instead of a background
+      update banner on the Agents list.
+
+      Behavior changes:
+      - Choosing "Update" opens a dedicated update page with clear review,
+        progress, and finish steps.
+      - When the update completes and additional review is needed, Selu now
+        takes the user directly into the final setup step of the same flow.
+      - Existing global tool policies and stored system credentials are now
+        reused when deciding whether post-update setup is needed.
+      - Agents are no longer sent through an unnecessary extra setup step
+        after an update just because they already have tools.
+
+  - id: 2026-03-27-chat-sidebar-last-activity
+    date: "2026-03-27"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Chat sidebar now orders conversations by latest message activity and shows readable timestamps"
+    affected_files:
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/templates/chat.html
+    docs_sections:
+      - user-guide/channels/web-chat
+    details: |
+      The web chat conversation list now prioritizes recent activity.
+
+      Behavior changes:
+      - Conversations are sorted by latest message timestamp (most recent first),
+        with thread creation time used as fallback when no messages exist.
+      - Each conversation row now shows a compact last-activity timestamp.
+      - Message timestamps in the chat view are formatted in a more readable
+        way and adapt to the user's language (English/German).
+
+  - id: 2026-03-27-chat-delete-conversations
+    date: "2026-03-27"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Web chat now lets users delete conversations from the sidebar"
+    affected_files:
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/chat.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/channels/web-chat
+    details: |
+      Added a new delete action for web chat conversations (threads).
+      Users can now remove a conversation directly from the chat sidebar.
+
+      Behavior:
+      - Delete is available per conversation in the sidebar.
+      - A confirmation prompt is shown before deletion.
+      - Deleting a conversation removes the thread and its message history,
+        then returns the user to the selected pipe view.
+
+  - id: 2026-03-27-agent-tool-loop-limit-ui
+    date: "2026-03-27"
+    pr:
+    area: ui
+    type: changed
+    audience: both
+    summary: "Agent detail now includes a per-user complex-task step limit (0 = no limit), with defaults raised to 32"
+    affected_files:
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/llm/tool_loop.rs
+      - crates/selu-orchestrator/src/config/mod.rs
+      - crates/selu-orchestrator/migrations/0034_agent_tool_loop_limits.sql
+      - .env.example
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/tool-policies
+      - reference/env-vars
+    details: |
+      Added a new "Complex Task Steps" control on the agent detail Overview
+      page that lets each user set a per-agent loop limit for tool-call turns.
+
+      Behavior:
+      - Positive values set a hard cap for tool-loop iterations per turn.
+      - `0` means no iteration cap (unlimited).
+      - Runtime resolution order is user override -> agent default -> app config.
+
+      Defaults were raised to 32:
+      - Agent default (`agents.max_tool_loop_iterations`) now defaults to 32.
+      - App-level fallback (`SELU__MAX_TOOL_LOOP_ITERATIONS`) now defaults to 32.
+
+  - id: 2026-03-27-tool-loop-iteration-config
+    date: "2026-03-27"
+    pr:
+    area: llm
+    type: changed
+    audience: developers
+    summary: "Tool-loop iteration cap is configurable via env and now defaults to 32 (was hardcoded to 8)"
+    affected_files:
+      - crates/selu-orchestrator/src/config/mod.rs
+      - crates/selu-orchestrator/src/llm/tool_loop.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - .env.example
+    docs_sections:
+      - reference/env-vars
+      - developer-guide/agent-format
+    details: |
+      Added a new configuration value `max_tool_loop_iterations` exposed as
+      `SELU__MAX_TOOL_LOOP_ITERATIONS`.
+
+      The tool loop no longer uses a hardcoded 8-iteration cap; the default is
+      now 32 and can be tuned per deployment.
+
+      This supports longer multi-step tool workflows (e.g. search, coding,
+      artifact generation, delivery) while still preserving loop safeguards.
+
+  - id: 2026-03-26-user-network-overrides
+    date: "2026-03-26"
+    pr:
+    area: permissions
+    type: changed
+    audience: both
+    summary: "Users can now override agent network access with allow/deny and per-host rules, including custom hosts"
+    affected_files:
+      - crates/selu-orchestrator/src/permissions/network_policy.rs
+      - crates/selu-orchestrator/src/capabilities/mod.rs
+      - crates/selu-orchestrator/src/capabilities/runner.rs
+      - crates/selu-orchestrator/src/capabilities/egress_proxy.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/migrations/0033_user_network_policies.sql
+    docs_sections:
+      - user-guide/agents
+      - user-guide/security/tool-policies
+      - developer-guide/capabilities/container-guidelines
+    details: |
+      The Agent detail Network tab now lets each user control network behavior
+      per capability with:
+      - Allow/Deny access toggle (user-level override)
+      - Per-host allow/deny controls for default hosts declared by the agent
+      - Custom host entries (for example `pypi.org:443`) that can be added,
+        toggled between allow/deny, and removed
+
+      Runtime egress enforcement now resolves effective policy as:
+      1) user capability access override
+      2) user host overrides
+      3) capability manifest defaults
+
+      User policy overrides are applied in the egress proxy for tool invocations
+      and take precedence over agent manifest defaults, including explicit deny
+      host rules.
+
+  - id: 2026-03-28-public-web-address-and-imessage-attachments
+    date: "2026-03-28"
+    pr:
+    area: channels
+    type: changed
+    audience: both
+    summary: "Admins can save Selu's public web address in the UI, and iMessage now sends real attachments before falling back to links"
+    affected_files:
+      - crates/selu-orchestrator/src/state.rs
+      - crates/selu-orchestrator/src/web/system_updates.rs
+      - crates/selu-orchestrator/templates/system_updates.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+      - crates/selu-orchestrator/src/web/whatsapp.rs
+      - crates/selu-orchestrator/src/web/telegram.rs
+      - crates/selu-orchestrator/migrations/0035_public_origin_setting.sql
+    docs_sections:
+      - user-guide/self-hosting/updating
+      - user-guide/channels/imessage
+      - user-guide/channels/telegram
+      - reference/env-vars
+    details: |
+      Selu now persists a global public web address in SQLite instead of relying
+      only on the `SELU__EXTERNAL_URL` environment variable. Admins can edit it
+      on the System Updates page and apply the current browser host with one
+      click. The saved value takes effect immediately and is used for generated
+      artifact links, webhook registration, and bridge callback URLs.
+
+      BlueBubbles/iMessage outbound delivery now uploads attachment media with
+      `POST /api/v1/message/attachment` when artifact bytes are available. If an
+      attachment upload fails, Selu still delivers a signed download link as a
+      fallback so the file is not lost.
+
+  - id: 2026-03-28-relative-date-grounding-user-timezone
+    date: "2026-03-28"
+    pr:
+    area: agents
+    type: changed
+    audience: users
+    summary: "Agent prompts now include explicit today/tomorrow/yesterday anchors in the user's timezone to improve relative-date accuracy"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/context.rs
+    docs_sections:
+      - user-guide/channels/imessage
+      - user-guide/channels/web-chat
+    details: |
+      Conversation context now injects a stronger per-turn date/time block that
+      is computed in the user's configured timezone (from the `users.timezone`
+      setting) instead of relying on server-local time formatting only.
+
+      The system prompt now includes:
+      - current timezone
+      - current local datetime (human readable + ISO 8601)
+      - explicit `Today`, `Tomorrow`, and `Yesterday` dates
+      - instruction to resolve relative date words from these anchors
+
+      This improves reliability for requests like "tomorrow", especially in new
+      threads and around timezone boundaries.
+
+  - id: 2026-03-28-anonymous-installation-stats
+    date: "2026-03-28"
+    pr:
+    area: self-hosting
+    type: changed
+    audience: both
+    summary: "Selu can send daily anonymous installation and marketplace-agent activity heartbeats with an opt-out in System Updates"
+    affected_files:
+      - crates/selu-orchestrator/src/telemetry.rs
+      - crates/selu-orchestrator/src/main.rs
+      - crates/selu-orchestrator/src/web/system_updates.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/system_updates.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/migrations/0036_installation_telemetry_opt_out.sql
+    docs_sections:
+      - user-guide/self-hosting/updating
+      - user-guide/agents/installing-agents
+      - reference/env-vars
+    details: |
+      Selu now sends an anonymous heartbeat on startup and every 24 hours to
+      selu.bot. The heartbeat includes only a persistent installation ID and the
+      running Selu version. For marketplace activity counts, Selu also reports
+      installed marketplace agent IDs and versions.
+
+      A new System Updates setting, "Anonymous installation statistics", lets
+      admins opt out at any time. When disabled, no telemetry heartbeats are sent.
+
+  - id: 2026-03-28-settings-page-update-simplification
+    date: "2026-03-28"
+    pr:
+    area: self-hosting
+    type: changed
+    audience: users
+    summary: "System Updates UI is now a simpler Settings page with one update summary card and a dedicated update modal"
+    affected_files:
+      - crates/selu-orchestrator/templates/system_updates.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/src/web/system_updates.rs
+    docs_sections:
+      - user-guide/self-hosting/updating
+    details: |
+      The admin page at `/system-updates` is now presented as Settings instead of
+      System Updates. Update information is condensed into a single summary card
+      that shows current version, new version, whether an update is available,
+      and changes/changelog links.
+
+      Detailed update actions (update now, rollback, status details, and last
+      errors) now live behind a dedicated "Manage update" modal to reduce page
+      clutter and make the main screen easier for non-technical users.
+
+  - id: 2026-03-28-nested-delegation-second-hop
+    date: "2026-03-28"
+    pr:
+    area: agents
+    type: changed
+    audience: users
+    summary: "Agent workflows can now delegate through one additional specialist hop in a single request"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/engine.rs
+    docs_sections:
+      - user-guide/agents/sessions-and-subscriptions
+    details: |
+      Selu now allows one nested delegation hop (`chain_depth <= 1`) instead of
+      only allowing delegation at the top level. This enables multi-specialist
+      flows like default assistant -> PDF specialist -> email specialist in one
+      user request.
+
+      Deeper delegation remains disabled to reduce risk of specialist ping-pong
+      loops.
+
+  - id: 2026-03-28-agent-autonomy-level-settings
+    date: "2026-03-28"
+    pr:
+    area: agents
+    type: changed
+    audience: users
+    summary: "Agent runtime control is now an autonomy-level setting with optional advanced limits for steps and specialist handoffs"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/runtime_limits.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/migrations/0038_autonomy_runtime_settings.sql
+    docs_sections:
+      - user-guide/agents/sessions-and-subscriptions
+      - user-guide/security/tool-policies
+    details: |
+      The agent detail page now exposes one simple "Autonomy level" control
+      (low/medium/high) for normal users, plus an "Advanced" section for
+      optional explicit limits.
+
+      Runtime limits are now resolved from a shared settings model:
+      - max tool steps per reply
+      - max specialist delegation hops
+
+      New database fields were added for agent defaults and per-user overrides
+      in `user_agent_runtime_settings`, including a flag to enable advanced
+      overrides.
+
+  - id: 2026-03-29-autonomy-preset-rebalance
+    date: "2026-03-29"
+    pr:
+    area: agents
+    type: changed
+    audience: users
+    summary: "Autonomy presets were rebalanced so medium/high support longer workflows; high now has a generous 200-step cap instead of unlimited"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/runtime_limits.rs
+      - crates/selu-orchestrator/migrations/0039_autonomy_preset_rebalance.sql
+    docs_sections:
+      - user-guide/agents/sessions-and-subscriptions
+    details: |
+      Preset mappings are now:
+      - low: 24 tool steps, 1 specialist handoff
+      - medium: 64 tool steps, 5 specialist handoffs
+      - high: 200 tool steps, 6 specialist handoffs
+
+      All levels now have a finite iteration cap as a safety net against
+      runaway cost if the LLM enters a degenerate loop pattern.
+
+  - id: 2026-03-29-delegate-default-allow-runtime
+    date: "2026-03-29"
+    pr:
+    area: security
+    type: changed
+    audience: users
+    summary: "Built-in delegate_to_agent now defaults to Allow at runtime when no explicit policy exists"
+    affected_files:
+      - crates/selu-orchestrator/src/permissions/tool_policy.rs
+      - crates/selu-orchestrator/migrations/0041_delegate_policy_default_allow_backfill.sql
+    docs_sections:
+      - user-guide/security/tool-policies
+      - user-guide/agents/sessions-and-subscriptions
+    details: |
+      Effective policy resolution now includes a runtime fallback for the
+      built-in `delegate_to_agent` tool. If neither a per-user override nor a
+      global policy exists, delegation defaults to Allow so multi-agent
+      workflows remain usable without extra setup.
+
+  - id: 2026-03-28-grok-provider-support
+    date: "2026-03-28"
+    pr:
+    area: llm-providers
+    type: added
+    audience: both
+    summary: "Added xAI Grok as a configurable LLM provider in setup, provider settings, and model selection"
+    affected_files:
+      - crates/selu-orchestrator/src/llm/openai.rs
+      - crates/selu-orchestrator/src/llm/registry.rs
+      - crates/selu-orchestrator/src/llm/models.rs
+      - crates/selu-orchestrator/src/web/providers.rs
+      - crates/selu-orchestrator/src/web/auth.rs
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/llm-providers/openai
+      - reference/env-vars
+    details: |
+      Selu now supports xAI Grok through the existing provider system.
+
+      Admins can add Grok from the Providers UI, save an xAI API key, and use an
+      optional custom base URL (default is `https://api.x.ai`). Provider
+      connection checks now validate Grok credentials via `GET /v1/models`.
+
+      Runtime provider loading and model listing now support the `grok`
+      provider ID, including static fallback model entries and live model
+      discovery.
+
+  - id: 2026-03-28-system-updater-installed-version-source
+    date: "2026-03-28"
+    pr:
+    area: updates
+    type: changed
+    audience: users
+    summary: "System update checks now use the running Selu container image, and update actions prevent duplicate concurrent starts"
+    affected_files:
+      - crates/selu-updater/src/api.rs
+      - crates/selu-updater/src/engine.rs
+      - crates/selu-updater/src/config.rs
+      - crates/selu-orchestrator/src/web/system_updates.rs
+    docs_sections:
+      - user-guide/self-hosting/updating
+      - user-guide/self-hosting/docker
+    details: |
+      The updater no longer treats `.env` image values as the source of truth
+      for "currently installed". Instead it resolves the running Selu service
+      container via Docker Compose and reads its actual image digest/tag.
+
+      This fixes false "already on latest version" results when desired image
+      variables and real running container state diverge.
+
+      The orchestrator now atomically claims the active update job slot before
+      starting check/apply/rollback actions, so repeated clicks cannot start
+      multiple concurrent system update jobs.
+  - id: 2026-03-28-pipe-inbound-images-and-aggregation
+    date: "2026-03-28"
+    pr:
+    area: pipes
+    type: changed
+    audience: both
+    summary: "Inbound pipes now support image attachments and short-window text/image aggregation before agent turns"
+    affected_files:
+      - crates/selu-core/src/types.rs
+      - crates/selu-orchestrator/src/pipes/ingest.rs
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+      - crates/selu-orchestrator/src/telegram/adapter.rs
+      - sidecars/whatsapp-bridge/src/index.js
+    docs_sections:
+      - user-guide/channels/web-chat
+      - user-guide/channels/imessage
+      - user-guide/channels/telegram
+      - user-guide/channels/whatsapp
+      - reference/api
+    details: |
+      The inbound message contract now accepts optional `attachments` on
+      `InboundEnvelope` (with `filename`, `mime_type`, optional `size_bytes`,
+      and either `download_url` or `data_base64`).
+
+      Selu now aggregates split text/image inbound events in-memory for a short
+      2-second window per pipe+conversation key, so transports that emit text
+      and media as separate events can be merged into one agent turn.
+
+      Inbound image attachments are normalized into session artifacts before the
+      agent loop, and the user message passed to the model includes canonical
+      artifact references. Image-only inbound messages are wrapped with a
+      standard instruction prompt so the agent responds meaningfully.
+  - id: 2026-03-29-web-chat-image-upload
+    date: "2026-03-29"
+    pr:
+    area: web
+    type: changed
+    audience: users
+    summary: "Web chat now supports attaching image files to a message"
+    affected_files:
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/templates/chat.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/channels/web-chat
+      - reference/api
+    details: |
+      The web chat compose form now supports image attachments via multipart
+      requests. Users can send text-only, image-only, or text+image messages.
+
+      Uploaded image files are validated server-side (image mime type and size
+      limits) and forwarded into the standard agent turn attachment path.
+
+      New chat UI copy/labels were added for image selection and image-send
+      message bubbles in both English and German translations.
+  - id: 2026-03-29-image-upload-fallback-and-artifact-filter
+    date: "2026-03-29"
+    pr:
+    area: chat
+    type: changed
+    audience: users
+    summary: "Image-upload chat responses now use friendly fallback copy and no longer list uploaded images as generated files"
+    affected_files:
+      - crates/selu-orchestrator/src/i18n.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+    docs_sections:
+      - user-guide/channels/web-chat
+    details: |
+      Added server-side translation keys for web chat image-upload status labels,
+      so UI bubbles do not show raw i18n keys.
+
+      Inbound user-uploaded image artifacts are now excluded from the turn output
+      attachment list, preventing "Generated files" from showing just because a
+      user attached an image.
+
+      When a model reply indicates it cannot view/process an image, Selu now
+      rewrites the response to a friendlier localized fallback message asking the
+      user to retry or describe the image.
+  - id: 2026-03-29-multimodal-image-parts-across-providers
+    date: "2026-03-29"
+    pr:
+    area: llm-providers
+    type: changed
+    audience: both
+    summary: "Inbound image attachments are now sent as multimodal content parts to Anthropic, OpenAI-compatible providers, and Bedrock"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/llm/provider.rs
+      - crates/selu-orchestrator/src/llm/openai.rs
+      - crates/selu-orchestrator/src/llm/anthropic.rs
+      - crates/selu-orchestrator/src/llm/bedrock.rs
+      - crates/selu-orchestrator/src/llm/models.rs
+    docs_sections:
+      - user-guide/llm-providers/anthropic
+      - user-guide/llm-providers/openai
+      - user-guide/llm-providers/bedrock
+      - user-guide/channels/web-chat
+      - reference/api
+    details: |
+      User-uploaded inbound image attachments are now converted into multimodal
+      `MessageContent::Parts` payloads and injected into the latest user turn,
+      rather than being passed only as text artifact references.
+
+      Provider mappings now serialize image parts in each API's native format:
+      - OpenAI-compatible providers (OpenAI, Grok, Pico): `image_url` data URLs
+      - Anthropic: `image` blocks with base64 source
+      - Bedrock Converse: `image` blocks with bytes source
+
+      Grok model listing no longer filters out IDs containing `vision`/`image`,
+      so multimodal-capable models remain selectable.
+  - id: 2026-03-29-chat-image-preview-and-remove
+    date: "2026-03-29"
+    pr:
+    area: web
+    type: changed
+    audience: users
+    summary: "Web chat image attachments now show thumbnail previews before send and can be removed individually"
+    affected_files:
+      - crates/selu-orchestrator/templates/chat.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/channels/web-chat
+    details: |
+      The chat composer now renders thumbnail previews for selected images
+      before sending. Users can remove any selected image directly from the
+      preview grid before submitting the message.
+
+      File-selection UX supports incremental multi-select and de-duplication in
+      the browser, and updates localized status labels in English and German.
+  - id: 2026-03-29-web-chat-thread-artifact-persistence
+    date: "2026-03-29"
+    pr:
+    area: channels
+    type: changed
+    audience: both
+    summary: "Web chat image artifacts are now persisted on disk per thread and cleaned up on thread deletion"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/artifacts.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/api/artifacts.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/migrations/0042_thread_artifacts.sql
+    docs_sections:
+      - user-guide/channels/web-chat
+      - user-guide/self-hosting/docker
+      - reference/api
+    details: |
+      Web chat thread artifacts (user-uploaded images and agent-generated
+      artifact files) are now persisted to the Selu data filesystem and indexed
+      in a new `thread_artifacts` table.
+
+      Artifact downloads now fall back to persisted thread storage when an
+      artifact is no longer in the in-memory store, preventing broken image
+      previews after page reload or process restart.
+
+      Deleting a web chat thread now deletes associated `thread_artifacts`
+      database rows and removes persisted files from disk.
+  - id: 2026-03-29-image-model-routing-and-settings
+    date: "2026-03-29"
+    pr:
+    area: agents
+    type: changed
+    audience: both
+    summary: "Selu now supports optional image-model configuration and channel-agnostic image intent routing for generate/edit flows"
+    affected_files:
+      - crates/selu-orchestrator/migrations/0043_image_model_config.sql
+      - crates/selu-orchestrator/src/agents/model.rs
+      - crates/selu-orchestrator/src/agents/image_intent.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/llm/image_provider.rs
+      - crates/selu-orchestrator/src/llm/registry.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents.html
+      - crates/selu-orchestrator/templates/layout.html
+      - crates/selu-orchestrator/src/i18n.rs
+    docs_sections:
+      - user-guide/agents/sessions
+      - user-guide/channels/web-chat
+      - user-guide/channels/imessage
+      - user-guide/channels/telegram
+      - user-guide/llm-providers/openai
+      - reference/env-vars
+    details: |
+      Image generation and image editing are now routed by a channel-agnostic
+      resolver in the agent turn engine instead of web-only UI actions. Selu
+      detects explicit commands (`/image`, `/edit`) and conservative natural
+      language signals, then runs image generation/editing when configured.
+
+      Image-model selection is now optional and separate from text-model
+      selection:
+      - Global default image model in the Agents settings page
+      - Per-agent optional image model override
+      - Graceful localized fallback when image model is not configured
+
+      Backend image execution now uses a dedicated image provider abstraction
+      (`llm/image_provider.rs`) with an OpenAI-compatible implementation for
+      generate/edit API calls. Generated/edited images are persisted as Selu
+      artifacts and returned through standard turn attachments, preserving
+      cross-channel behavior.
+  - id: 2026-03-29-whatsapp-outbound-image-delivery
+    date: "2026-03-29"
+    pr:
+    area: channels
+    type: changed
+    audience: both
+    summary: "WhatsApp bridge outbound webhooks now deliver image attachments as native WhatsApp images, not only PDFs/documents"
+    affected_files:
+      - sidecars/whatsapp-bridge/src/index.js
+      - sidecars/whatsapp-bridge/README.md
+    docs_sections:
+      - user-guide/channels/telegram
+      - user-guide/channels/imessage
+      - user-guide/channels/web-chat
+    details: |
+      The WhatsApp bridge outbound webhook handler now supports image
+      attachments (`mime_type` starting with `image/`) in addition to
+      PDF/document attachments.
+
+      Behavior:
+      - `image/*` attachments are sent via WhatsApp `image` messages.
+      - Non-image attachments continue to be sent as documents.
+      - Both inline `data_base64` payloads and remote `download_url` payloads
+        are supported for attachments.
+
+      This aligns WhatsApp outbound media behavior with BlueBubbles and Telegram
+      attachment handling in Selu.
+  - id: 2026-03-30-cross-session-capability-sharing
+    date: "2026-03-30"
+    pr:
+    area: capabilities
+    type: added
+    audience: developers
+    summary: "Capability manifests can now opt into cross-session container reuse with configurable concurrency limits"
+    affected_files:
+      - crates/selu-orchestrator/src/capabilities/manifest.rs
+      - crates/selu-orchestrator/src/capabilities/mod.rs
+      - crates/selu-orchestrator/src/capabilities/runner.rs
+      - crates/selu-orchestrator/src/main.rs
+    docs_sections:
+      - developer-guide/capabilities/container-guidelines
+      - developer-guide/capabilities/manifests
+      - reference/manifest-yaml-schema
+    details: |
+      Capability manifests now support an optional `sharing` block:
+
+        sharing:
+          mode: shared          # or "exclusive" (default)
+          max_concurrent: 4     # max parallel gRPC invocations (default: 1)
+          idle_timeout_seconds: 300  # stop after N seconds idle (default: 300)
+
+      When `mode: shared`, a single container is reused across all sessions
+      instead of spawning one per session. This reduces resource usage for
+      stateless Tool-class capabilities like weather lookups or PDF generation.
+
+      Safety constraints:
+      - Only `class: tool` capabilities can opt in (environment class rejected)
+      - `filesystem: workspace` is rejected (workspace volumes are per-session)
+      - Shared containers omit SELU_SESSION_ID env var (session_id is still
+        passed per-request in gRPC InvokeRequest)
+      - Per-user network policy overrides do not apply to shared containers
+        (the manifest's declared policy is used directly)
+      - Concurrency is bounded by a tokio::sync::Semaphore per capability
+      - A background reaper stops idle shared containers after their timeout
+
+      Credentials remain safe: they are resolved per-user per-invoke and
+      passed in gRPC config_json, never as container environment variables.
+
+  - id: 2026-03-31-unified-memory
+    date: 2026-03-31
+    pr:
+    area: agents
+    type: changed
+    audience: both
+    summary: "Unified memory: personality and agent memory merged into one shared, BM25-searchable memory pool"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/memory.rs
+      - crates/selu-orchestrator/src/agents/personality.rs
+      - crates/selu-orchestrator/src/agents/context.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/web/personality.rs
+      - crates/selu-orchestrator/migrations/0048_unified_memory.sql
+      - crates/selu-orchestrator/templates/personality.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/personality
+      - developer-guide/built-in-tools/*
+    details: |
+      The separate "Personality" (auto-extracted user facts) and "Memory"
+      (per-agent BM25 notes) systems have been merged into a single unified
+      memory pool stored in the agent_memories table.
+
+      Key changes for users:
+      - The "Personality" page in the web UI is now called "Memory".
+      - All facts are shared across all agents — anything one agent learns
+        about you is available to every other agent.
+      - The system still auto-extracts facts from conversations (previously
+        called "personality extraction"), and agents can still save notes
+        via the memory_remember tool.
+      - Three source types are shown: "Learned from conversation" (auto),
+        "Saved by agent" (agent tool call), "Added manually" (web UI).
+
+      Key changes for agent developers:
+      - The memory_* tools (memory_remember, memory_forget, memory_search,
+        memory_list) now operate on a user-scoped pool, not per-agent.
+        Memories written by one agent are visible to all agents for that user.
+      - The store_* tools remain agent-scoped (private per agent+user) and
+        are unchanged. Use store for workflow state; use memory for user
+        knowledge.
+      - No changes needed to agent.yaml or capability manifests.
+
+      Migration: existing personality facts are automatically copied into
+      the unified memory table on first start (migration 0048). The old
+      user_personality table is preserved but no longer read by the system.
+  - id: 2026-03-31-delegation-progress-heartbeat
+    date: "2026-03-31"
+    pr:
+    area: agents
+    type: changed
+    audience: users
+    summary: "Long delegated runs now emit periodic progress updates instead of appearing stalled"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/i18n.rs
+    docs_sections:
+      - user-guide/channels/web-chat
+      - user-guide/channels/imessage
+    details: |
+      Delegated agent calls now send localized periodic status updates while the
+      specialist agent is still running. Users will now see continued progress
+      messages (for example while a PDF/report run is still processing) instead
+      of a long silent gap.
+
+      New i18n key: `chat.tool.delegating_progress` (en/de).

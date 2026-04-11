@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE telegram_configs SET active = 0 WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "9061235c7402a6945393065d7b7e1273f11bc4bdbc6b8d98856d3416b50665e9"
+}

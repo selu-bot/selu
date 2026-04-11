@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE whatsapp_configs SET active = 0 WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "bf86f786559321cf036baead29eb4ab8e73bbbb62b3ffb512e760e993542756e"
+}

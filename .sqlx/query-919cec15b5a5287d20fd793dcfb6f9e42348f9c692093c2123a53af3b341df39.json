@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "919cec15b5a5287d20fd793dcfb6f9e42348f9c692093c2123a53af3b341df39"
+}

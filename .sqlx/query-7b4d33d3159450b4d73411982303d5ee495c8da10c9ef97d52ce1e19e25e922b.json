@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.inbound_token\n         FROM telegram_configs tc\n         JOIN pipes p ON p.id = tc.pipe_id\n         WHERE tc.id = ? AND tc.active = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "inbound_token",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7b4d33d3159450b4d73411982303d5ee495c8da10c9ef97d52ce1e19e25e922b"
+}

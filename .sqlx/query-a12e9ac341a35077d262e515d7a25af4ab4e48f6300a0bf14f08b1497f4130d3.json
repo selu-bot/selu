@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT sr.id, sr.sender_ref, u.display_name\n           FROM user_sender_refs sr\n           JOIN users u ON u.id = sr.user_id\n           WHERE sr.pipe_id = ?\n           ORDER BY u.display_name",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "sender_ref",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "display_name",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "a12e9ac341a35077d262e515d7a25af4ab4e48f6300a0bf14f08b1497f4130d3"
+}

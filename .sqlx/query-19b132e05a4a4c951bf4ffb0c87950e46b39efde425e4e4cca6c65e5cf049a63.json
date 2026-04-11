@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO schedules (id, user_id, agent_id, name, prompt, cron_expression, cron_description, next_run_at, one_shot)\n           VALUES (?, ?, ?, ?, ?, '', ?, ?, 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "19b132e05a4a4c951bf4ffb0c87950e46b39efde425e4e4cca6c65e5cf049a63"
+}

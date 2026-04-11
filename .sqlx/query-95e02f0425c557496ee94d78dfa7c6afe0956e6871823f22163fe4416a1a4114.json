@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT credential_name FROM user_credentials\n             WHERE user_id = ? AND capability_id = ?\n               AND (expires_at IS NULL OR expires_at > datetime('now'))",
+  "describe": {
+    "columns": [
+      {
+        "name": "credential_name",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "95e02f0425c557496ee94d78dfa7c6afe0956e6871823f22163fe4416a1a4114"
+}

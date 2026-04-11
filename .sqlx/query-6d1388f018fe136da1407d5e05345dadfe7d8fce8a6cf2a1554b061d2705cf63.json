@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(1) as \"count!: i64\"\n           FROM whatsapp_configs wc\n           JOIN pipes p ON p.id = wc.pipe_id\n           WHERE wc.active = 1 AND p.active = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "count!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6d1388f018fe136da1407d5e05345dadfe7d8fce8a6cf2a1554b061d2705cf63"
+}

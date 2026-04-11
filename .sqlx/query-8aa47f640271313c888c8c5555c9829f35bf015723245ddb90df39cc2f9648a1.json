@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT wc.id as config_id, wc.pipe_id, p.inbound_token, p.outbound_auth\n           FROM whatsapp_configs wc\n           JOIN pipes p ON p.id = wc.pipe_id\n           WHERE wc.active = 1 AND p.active = 1\n           ORDER BY wc.created_at DESC\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "config_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "inbound_token",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "outbound_auth",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "8aa47f640271313c888c8c5555c9829f35bf015723245ddb90df39cc2f9648a1"
+}

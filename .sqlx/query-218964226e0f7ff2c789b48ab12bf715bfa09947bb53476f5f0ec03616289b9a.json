@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO thread_reply_guids (id, thread_id, pipe_id, reply_guid)\n         VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "218964226e0f7ff2c789b48ab12bf715bfa09947bb53476f5f0ec03616289b9a"
+}

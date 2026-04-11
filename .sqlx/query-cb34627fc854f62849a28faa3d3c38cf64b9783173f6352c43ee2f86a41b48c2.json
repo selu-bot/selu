@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id\n           FROM threads t\n           JOIN pipes p ON p.id = t.pipe_id\n           WHERE t.id = ? AND t.pipe_id = ? AND t.user_id = ? AND p.user_id = ? AND p.transport = 'web'\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "cb34627fc854f62849a28faa3d3c38cf64b9783173f6352c43ee2f86a41b48c2"
+}

@@ -1,0 +1,71 @@
+{% extends "layout.html" %}
+{% block title %}Provider Setup{% endblock %}
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <div>
+      <a href="{{ base_path }}/providers/new" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7 7-7-7 7-7"/></svg>
+        <span data-i18n="providers.back_to_add">Back to Add Provider</span>
+      </a>
+      <h1 class="text-2xl font-black text-txt-heading font-heading">
+        <span data-i18n="providers.setup_title">Set Up Provider</span>
+        <span>: {{ provider_display_name }}</span>
+      </h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="{{ subtitle_key }}">Model provider</p>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
+    {% endif %}
+
+    <div class="bg-surface-raised border border-edge rounded-2xl p-6">
+      <form method="post" action="{{ base_path }}/providers/new/{{ provider_id }}" class="space-y-4">
+
+        {% if requires_api_key %}
+        <div>
+          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="{{ api_key_label_key }}">API Key</label>
+          <input type="password" name="api_key" required
+                 placeholder=""
+                 data-i18n-placeholder="{{ api_key_placeholder_key }}"
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+          {% if has_key %}
+          <p class="text-[11px] text-txt-faint mt-1" data-i18n="providers.key_will_replace">A key already exists. Saving will replace it.</p>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if requires_base_url %}
+        <div>
+          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="{{ base_url_label_key }}">Base URL</label>
+          <input type="text" name="base_url" required
+                 value="{{ base_url }}"
+                 placeholder=""
+                 data-i18n-placeholder="{{ base_url_placeholder_key }}"
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+          <p class="text-[11px] text-txt-faint mt-1" data-i18n="{{ base_url_hint_key }}">Connection details</p>
+        </div>
+        {% else %}
+        <div>
+          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="{{ base_url_label_key }}">Base URL</label>
+          <input type="text" name="base_url"
+                 value="{{ base_url }}"
+                 placeholder=""
+                 data-i18n-placeholder="{{ base_url_placeholder_key }}"
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+          <p class="text-[11px] text-txt-faint mt-1" data-i18n="{{ base_url_hint_key }}">Connection details</p>
+        </div>
+        {% endif %}
+
+        <div class="pt-2 flex items-center gap-3">
+          <a href="{{ base_path }}/providers" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
+          <button type="submit"
+                  class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                  data-i18n="providers.check_and_save">Check & Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

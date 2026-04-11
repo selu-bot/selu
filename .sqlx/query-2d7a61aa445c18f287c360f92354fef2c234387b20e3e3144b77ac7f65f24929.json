@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT wc.id, wc.name, wc.bridge_url, wc.active, wc.pipe_id,\n                  p.inbound_token,\n                  COALESCE(p.default_agent_id, 'default') as \"agent_name!: String\"\n           FROM whatsapp_configs wc\n           JOIN pipes p ON p.id = wc.pipe_id\n           ORDER BY wc.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "bridge_url",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "active",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "inbound_token",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "agent_name!: String",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2d7a61aa445c18f287c360f92354fef2c234387b20e3e3144b77ac7f65f24929"
+}

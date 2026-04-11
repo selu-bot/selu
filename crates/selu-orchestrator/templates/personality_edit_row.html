@@ -1,0 +1,28 @@
+<form class="flex items-center gap-3 px-5 py-3 bg-sidebar-hover flex-wrap" id="fact-{{ fact.id }}"
+      hx-put="{{ base_path }}/personality/{{ fact.id }}"
+      hx-target="#fact-{{ fact.id }}"
+      hx-swap="outerHTML">
+  <div class="flex-1 min-w-0 flex gap-3">
+    <select name="category"
+            class="bg-surface-input border border-edge rounded-lg px-2.5 py-1.5 text-xs text-txt-heading focus:outline-none focus:border-coral transition">
+      <option value="personal" {% if fact.category == "personal" %}selected{% endif %} data-i18n="personality.cat.personal">Personal</option>
+      <option value="preferences" {% if fact.category == "preferences" %}selected{% endif %} data-i18n="personality.cat.preferences">Preferences</option>
+      <option value="location" {% if fact.category == "location" %}selected{% endif %} data-i18n="personality.cat.location">Location</option>
+      <option value="work" {% if fact.category == "work" %}selected{% endif %} data-i18n="personality.cat.work">Work & Skills</option>
+      <option value="other" {% if fact.category == "other" %}selected{% endif %} data-i18n="personality.cat.other">Other</option>
+    </select>
+    <input name="fact" type="text" value="{{ fact.fact }}" required
+           class="flex-1 bg-surface-input border border-edge rounded-lg px-3 py-1.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+  </div>
+  <div class="flex items-center gap-2">
+    <button type="submit"
+            class="text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/20 hover:border-emerald-500/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            data-i18n="common.save">Save</button>
+    <button type="button"
+            class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-txt-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            hx-get="{{ base_path }}/personality/{{ fact.id }}/row"
+            hx-target="#fact-{{ fact.id }}"
+            hx-swap="outerHTML"
+            data-i18n="common.cancel">Cancel</button>
+  </div>
+</form>

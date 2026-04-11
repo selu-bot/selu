@@ -1,0 +1,76 @@
+{% extends "layout.html" %}
+{% block title %}LLM Providers{% endblock %}
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-4xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="providers.title">LLM Providers</h1>
+        <p class="text-sm text-txt-muted mt-1" data-i18n="providers.new_desc">Choose where Selu should run AI responses. Add only the providers you want to use.</p>
+      </div>
+      <a href="{{ base_path }}/providers/new"
+         class="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-coral to-amber text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-coral/20 hover:shadow-coral/30 transition-all">
+        <span data-i18n="providers.add">Add Provider</span>
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      </a>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
+    {% endif %}
+
+    {% if let Some(msg) = success %}
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+      {% if msg == "connected" %}
+      <span data-i18n="providers.success.connected">Provider connected successfully.</span>
+      {% else if msg == "disconnected" %}
+      <span data-i18n="providers.success.disconnected">Provider disconnected.</span>
+      {% else %}
+      {{ msg }}
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div>
+      <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-txt-muted mb-3" data-i18n="providers.active">Active Providers</h2>
+
+      {% if providers.is_empty() %}
+      <div class="bg-surface-raised border border-edge rounded-2xl p-8 text-center">
+        <p class="text-sm text-txt-muted" data-i18n="providers.empty">No active providers yet. Add one to start chatting with your agents.</p>
+      </div>
+      {% else %}
+      <div class="space-y-3">
+        {% for p in providers %}
+        <div class="bg-surface-raised border border-edge rounded-2xl p-5">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-sm font-semibold text-txt-heading">{{ p.display_name }}</h3>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span data-i18n="providers.ready">Ready</span>
+                </span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-alt text-txt-muted" data-i18n="{{ p.category_key }}">Cloud</span>
+              </div>
+              <p class="text-xs text-txt-muted mt-1" data-i18n="{{ p.subtitle_key }}">Model provider</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <a href="{{ base_path }}/providers/new/{{ p.id }}"
+                 class="text-xs text-txt-heading border border-edge hover:border-coral/40 hover:text-coral px-3 py-1.5 rounded-lg transition-colors"
+                 data-i18n="providers.edit">Edit</a>
+              <form method="POST" action="{{ base_path }}/providers/{{ p.id }}/disconnect">
+                <button type="submit"
+                        class="text-xs text-rosie border border-rosie/20 hover:border-rosie/40 hover:bg-rosie/5 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                        data-i18n="providers.disconnect">Disconnect</button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

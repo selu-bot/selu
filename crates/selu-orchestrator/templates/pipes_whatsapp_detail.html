@@ -1,0 +1,305 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ config.name }}{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <div>
+      <a href="{{ base_path }}/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <span data-i18n="pipes.back">Back to Pipes</span>
+      </a>
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0">
+            <svg class="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5A8.38 8.38 0 0 1 9.5 20L4 21l1-5.5A8.5 8.5 0 1 1 20 11.5z"/></svg>
+          </div>
+          <div>
+            <h1 class="text-2xl font-black text-txt-heading font-heading">{{ config.name }}</h1>
+            <p class="text-xs text-txt-muted mt-0.5" data-i18n="wa.detail.via">WhatsApp via Baileys</p>
+          </div>
+        </div>
+        {% if let Some(status) = bridge_status %}
+          {% if status.running %}
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span data-i18n="pipes.connected">Connected</span>
+          </span>
+          {% else %}
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rosie/10 text-rosie border border-rosie/30">
+            <span class="w-1.5 h-1.5 rounded-full bg-rosie"></span>
+            <span data-i18n="pipes.inactive">Inactive</span>
+          </span>
+          {% endif %}
+        {% else %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-surface-alt text-txt-muted border border-edge">
+          <span class="w-1.5 h-1.5 rounded-full bg-txt-faint"></span>
+          <span data-i18n="pipes.checking">Checking</span>
+        </span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if let Some(msg) = flash %}
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm" data-i18n="{{ msg }}">
+      {{ msg }}
+    </div>
+    {% endif %}
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm" data-i18n="{{ err }}">
+      {{ err }}
+    </div>
+    {% endif %}
+
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="wa.detail.pairing">WhatsApp connection</span>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="text-xs text-amber bg-amber/10 border border-amber/30 rounded-lg px-3 py-2" data-i18n="wa.self.warning">Messaging yourself on WhatsApp is experimental. Self-chat replies can be unreliable, especially on iPhone.</div>
+        {% if let Some(status) = bridge_status %}
+          <div class="flex items-center gap-3 text-sm">
+            <span class="text-txt-muted w-36" data-i18n="wa.detail.state">Bridge</span>
+            {% if status.running %}
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span data-i18n="wa.detail.running">Ready</span>
+              </span>
+            {% else %}
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rosie/10 text-rosie border border-rosie/30">
+                <span class="w-1.5 h-1.5 rounded-full bg-rosie"></span>
+                <span data-i18n="wa.detail.notrunning">Needs attention</span>
+              </span>
+            {% endif %}
+          </div>
+
+          {% if let Some(state) = status.connection_state %}
+          <div class="flex items-center gap-3 text-sm">
+            <span class="text-txt-muted w-36" data-i18n="wa.detail.connectionstate">Phone connection</span>
+            {% if let Some(state_key) = status.connection_state_key %}
+            <span class="text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading" data-i18n="{{ state_key }}">{{ state }}</span>
+            {% else %}
+            <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading">{{ state }}</code>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          {% if let Some(jid) = status.jid %}
+          <div class="flex items-center gap-3 text-sm">
+            <span class="text-txt-muted w-36" data-i18n="wa.detail.connectedas">WhatsApp account</span>
+            <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading break-all">{{ jid }}</code>
+          </div>
+          {% endif %}
+
+          {% if let Some(last_error) = status.last_error %}
+          <div class="text-xs text-rosie bg-rosie/10 border border-rosie/30 rounded-lg px-3 py-2">
+            {{ last_error }}
+          </div>
+          {% endif %}
+
+          {% if status.requires_qr %}
+          <div class="pt-2 space-y-2">
+            <p class="text-xs text-txt-muted leading-relaxed" data-i18n="wa.detail.scan">Open WhatsApp on your phone, then scan this QR code from Settings > Linked Devices.</p>
+            {% if let Some(qr) = status.qr_data_url %}
+            <div class="inline-flex items-center justify-center bg-white rounded-xl p-3 border border-edge">
+              <img src="{{ qr }}" alt="WhatsApp QR" class="w-52 h-52" />
+            </div>
+            {% else %}
+            <div class="text-xs text-txt-muted" data-i18n="wa.detail.qrwait">Waiting for a QR code. Refresh this page in a few seconds.</div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          {% if let Some(msg) = status.message %}
+          {% if let Some(msg_key) = status.message_key %}
+          <div class="text-xs text-txt-muted" data-i18n="{{ msg_key }}">{{ msg }}</div>
+          {% else %}
+          <div class="text-xs text-txt-muted">{{ msg }}</div>
+          {% endif %}
+          {% endif %}
+        {% else %}
+        <div class="text-sm text-txt-muted" data-i18n="wa.detail.status.unavailable">We could not check the WhatsApp connection right now.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="wa.detail.connection">Advanced details</span>
+      </div>
+      <div class="p-5 space-y-3">
+        <p class="text-xs text-txt-muted leading-relaxed" data-i18n="wa.detail.connection.desc">You usually only need these details when troubleshooting your WhatsApp bridge.</p>
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-txt-muted w-36" data-i18n="wa.detail.bridgeurl">Bridge address</span>
+          <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading break-all">{{ config.bridge_url }}</code>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-txt-muted w-36" data-i18n="wa.detail.inboundurl">Selu receiving address</span>
+          <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading break-all">{{ inbound_url }}</code>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-txt-muted w-36" data-i18n="wa.detail.token">Access token</span>
+          <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading break-all">{{ config.inbound_token }}</code>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-txt-muted w-36" data-i18n="wa.detail.agent">Agent</span>
+          <span class="text-txt-heading">{{ config.agent_name }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="wa.detail.people">Who can use this pipe?</span>
+      </div>
+      <div class="p-5 space-y-3">
+        <p class="text-xs text-txt-muted leading-relaxed" data-i18n="wa.detail.people.desc">Choose which WhatsApp chats Selu should answer. Leave this empty if everyone forwarded by your bridge should get a reply.</p>
+        <p class="text-xs text-txt-muted leading-relaxed" data-i18n="wa.chatsearch.discover.hint">Only chats already seen by the current WhatsApp connection show up here. If a chat is missing, send one message from that chat first, then search again.</p>
+
+        {% if people.is_empty() %}
+        <p class="text-sm text-txt-muted" data-i18n="wa.detail.everyone">Everyone forwarded by your bridge will get a response.</p>
+        {% else %}
+        <div class="space-y-2">
+          {% for person in people %}
+          <div id="person-{{ person.ref_id }}" class="flex items-center gap-3 bg-surface-input border border-edge rounded-xl px-4 py-3">
+            <div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+              {{ person.initials }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-txt-heading">{{ person.display_name }}</div>
+              <div class="text-xs text-txt-muted font-mono">{{ person.sender_ref }}</div>
+            </div>
+            <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2 py-1 rounded transition-colors cursor-pointer"
+                    hx-delete="{{ base_path }}/pipes/whatsapp/{{ config.config_id }}/people/{{ person.ref_id }}"
+                    hx-target="#person-{{ person.ref_id }}"
+                    hx-swap="outerHTML"
+                    onclick="return confirm(t('pipes.person.remove.confirm') || 'Remove this person?')"
+                    data-i18n="pipes.remove">Remove</button>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{{ base_path }}/pipes/whatsapp/{{ config.config_id }}/people" class="mt-4 space-y-3">
+          <input type="hidden" name="sender_ref" id="detail-sender-ref" />
+          <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex-1 w-full">
+              <label class="block text-xs font-medium text-txt-muted mb-1.5" for="detail-chat-query" data-i18n="wa.chatsearch">Find a WhatsApp chat</label>
+              <input id="detail-chat-query" type="text" data-i18n-placeholder="wa.chatsearch.placeholder" placeholder="Name, sender ID, or chat ID"
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+            </div>
+            <button type="button"
+                    onclick="detailSearchChats()"
+                    class="text-sm font-medium text-txt border border-edge hover:border-muted px-3 py-2.5 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                    data-i18n="wa.chatsearch.btn">Find</button>
+          </div>
+          <div id="detail-chat-results" class="space-y-2"></div>
+          <div id="detail-selected" class="hidden text-xs text-txt-muted bg-surface-input border border-edge rounded-lg px-3 py-2"></div>
+          <div class="flex flex-col sm:flex-row items-end gap-3">
+            <div class="flex-1 w-full">
+              <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="wa.seluuser">Selu User</label>
+              <select name="user_id"
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                {% for u in users %}
+                <option value="{{ u.id }}">{{ u.display }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button type="submit"
+                    onclick="return detailValidateSelection()"
+                    class="text-sm font-medium text-txt border border-edge hover:border-muted px-3 py-2.5 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                    data-i18n="wa.addperson">Add person</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="bg-surface-raised border border-rosie/20 rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-rosie/20">
+        <span class="text-sm font-semibold text-rosie" data-i18n="wa.detail.danger">Remove this pipe</span>
+      </div>
+      <div class="p-5">
+        <form method="post" action="{{ base_path }}/pipes/whatsapp/{{ config.config_id }}/delete">
+          <p class="text-xs text-txt-muted mb-3" data-i18n="wa.detail.danger.desc">If you remove this pipe, WhatsApp messages will stop reaching Selu.</p>
+          <button type="submit"
+                  onclick="return confirm(t('wa.detail.remove.confirm') || 'Remove this WhatsApp pipe?')"
+                  class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  data-i18n="wa.detail.remove">Remove WhatsApp pipe</button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block head %}
+<script>
+function escapeHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function jsEscape(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function detailSelectChat(senderRef, label) {
+  var input = document.getElementById('detail-sender-ref');
+  var selected = document.getElementById('detail-selected');
+  input.value = senderRef || '';
+  selected.classList.remove('hidden');
+  selected.innerHTML = '<span class="text-txt-heading font-medium">' + escapeHtml(label || senderRef || '') + '</span>'
+    + '<span class="ml-2 text-txt-faint font-mono">' + escapeHtml(senderRef || '') + '</span>';
+}
+
+function detailValidateSelection() {
+  var input = document.getElementById('detail-sender-ref');
+  if (input.value.trim()) {
+    return true;
+  }
+  alert(t('wa.chatsearch.pickfirst') || 'Please pick a chat first.');
+  return false;
+}
+
+async function detailSearchChats() {
+  var query = document.getElementById('detail-chat-query').value.trim();
+  var results = document.getElementById('detail-chat-results');
+  results.innerHTML = '<div class="text-xs text-txt-muted">' + (t('wa.chatsearch.loading') || 'Loading chats...') + '</div>';
+  try {
+    var url = '{{ base_path }}/pipes/whatsapp/chats/search?q=' + encodeURIComponent(query);
+    var resp = await fetch(url, { method: 'GET' });
+    var data = await resp.json();
+    if (!resp.ok || !data.ok) {
+      var msg = (data && data.message) ? data.message : (t('wa.chatsearch.error') || 'Could not load chats.');
+      results.innerHTML = '<div class="text-xs text-rosie">' + escapeHtml(msg) + '</div>';
+      return;
+    }
+    var chats = Array.isArray(data.chats) ? data.chats : [];
+    if (!chats.length) {
+      results.innerHTML = '<div class="text-xs text-txt-muted">' + (t('wa.chatsearch.empty') || 'No chats found yet.') + '</div>';
+      return;
+    }
+    results.innerHTML = chats.map(function(c) {
+      var sender = escapeHtml(c.sender_ref || '');
+      var label = escapeHtml(c.label || c.sender_ref || '');
+      return '<div class="flex items-center gap-3 bg-surface-input border border-edge rounded-xl px-4 py-3">'
+        + '<div class="flex-1 min-w-0">'
+        + '<div class="text-sm font-medium text-txt-heading">' + label + '</div>'
+        + '<div class="text-xs text-txt-faint font-mono">' + sender + '</div>'
+        + '</div>'
+        + '<button type="button" class="text-xs text-txt border border-edge hover:border-muted px-2 py-1 rounded transition-colors cursor-pointer" onclick="detailSelectChat(\'' + jsEscape(c.sender_ref || '') + '\', \'' + jsEscape(c.label || c.sender_ref || '') + '\')">'
+        + (t('wa.chatsearch.use') || 'Use')
+        + '</button>'
+        + '</div>';
+    }).join('');
+  } catch (_e) {
+    results.innerHTML = '<div class="text-xs text-rosie">' + (t('wa.chatsearch.error') || 'Could not load chats.') + '</div>';
+  }
+}
+</script>
+{% endblock %}

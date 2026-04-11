@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT transport FROM pipes WHERE id = ? AND user_id = ? LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "transport",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1a0861b22f164d0706076b7167b2c9d8983e0e913f2340f84575642531977c3a"
+}

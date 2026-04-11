@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO whatsapp_configs (id, name, bridge_url, pipe_id)\n         VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "cbbfb98bd7591b72c88445583ec641370e5a5fb015a6059aaf8b91fd74b447a1"
+}

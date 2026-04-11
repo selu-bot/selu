@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE sessions SET status = 'closed' WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "6137640c8cb18c7ba0b1b5a46fd8fba72b7cd50cf91d8f03482c5b3fe04c66b5"
+}

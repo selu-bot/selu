@@ -1,0 +1,185 @@
+{% extends "layout.html" %}
+
+{% block title %}Schedules{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-4xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <!-- Header + Timezone -->
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="schedules.title">Schedules</h1>
+        <p class="text-sm text-txt-muted mt-1" data-i18n="schedules.desc">Automate recurring tasks. Schedule results appear as new conversations in Chat.</p>
+      </div>
+      <form method="post" action="{{ base_path }}/user/timezone" class="flex items-center gap-2 flex-shrink-0">
+        <label class="text-xs font-medium text-txt-muted whitespace-nowrap" data-i18n="schedules.timezone">Timezone</label>
+        <select name="timezone" onchange="this.form.submit()"
+                class="bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition cursor-pointer">
+          {% for tz in timezones %}
+          <option value="{{ tz.0 }}" {% if user_timezone == tz.0 %}selected{% endif %}>{{ tz.1 }}</option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
+    {% endif %}
+
+    {% if let Some(msg) = success %}
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{{ msg }}</div>
+    {% endif %}
+
+    <!-- Schedules Table -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-edge">
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="schedules.col.name">Name</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="schedules.col.prompt">What it does</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="schedules.col.when">When</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="schedules.col.pipes">Pipes</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="schedules.col.nextrun">Next Run</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="schedules.col.lastrun">Last Run</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="schedules.col.status">Status</th>
+              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-edge">
+            {% for s in schedules %}
+            <tr class="hover:bg-sidebar-hover transition-colors{% if s.one_shot && !s.active %} opacity-60{% endif %}">
+              <td class="px-5 py-3.5 font-medium text-txt-heading">
+                {{ s.name }}
+                {% if s.one_shot %}
+                <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber/15 text-amber border border-amber/20" data-i18n="schedules.one_shot">Fires once</span>
+                {% endif %}
+              </td>
+              <td class="px-5 py-3.5 text-txt-muted max-w-[200px] truncate" title="{{ s.prompt }}">{{ s.prompt }}</td>
+              <td class="px-5 py-3.5 text-txt-muted whitespace-nowrap">
+                <span title="{{ s.cron_expression }}">{{ s.cron_description }}</span>
+              </td>
+              <td class="px-5 py-3.5 text-txt-muted text-xs">
+                {% for name in s.pipe_names %}
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral mr-1">{{ name }}</span>
+                {% endfor %}
+              </td>
+              <td class="px-5 py-3.5 font-mono text-xs text-txt-muted whitespace-nowrap">{{ s.next_run_at }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-txt-muted whitespace-nowrap">{{ s.last_run_at }}</td>
+              <td class="px-5 py-3.5">
+                {% if s.one_shot && !s.active %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-txt-muted/10 text-txt-muted border border-txt-muted/20">
+                  <span data-i18n="schedules.completed">Completed</span>
+                </span>
+                {% else %}
+                <button hx-post="{{ base_path }}/schedules/{{ s.id }}/toggle"
+                        hx-target="closest td"
+                        hx-swap="innerHTML"
+                        class="cursor-pointer">
+                  {% if s.active %}
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-1 h-1 rounded-full bg-emerald-400"></span>
+                    <span data-i18n="schedules.on">On</span>
+                  </span>
+                  {% else %}
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-rosie/10 text-rosie border border-rosie/20">
+                    <span data-i18n="schedules.off">Off</span>
+                  </span>
+                  {% endif %}
+                </button>
+                {% endif %}
+              </td>
+              <td class="px-5 py-3.5 text-right">
+                <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        hx-delete="{{ base_path }}/schedules/{{ s.id }}"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete this schedule?"
+                        data-i18n="common.delete">Delete</button>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if schedules.is_empty() %}
+            <tr>
+              <td colspan="8" class="px-5 py-8 text-center text-txt-muted text-sm" data-i18n="schedules.empty">No schedules yet. Create one below or use /schedule add in chat.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Create Schedule -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="schedules.add">Add Schedule</span>
+      </div>
+      <form method="post" action="{{ base_path }}/schedules">
+        <div class="p-5 space-y-4">
+          {% if pipes.is_empty() %}
+          <div class="px-4 py-3 rounded-xl bg-coral/10 border border-coral/20 text-coral text-sm">
+            <p class="font-semibold" data-i18n="schedules.nopipes">No pipes found.</p>
+            <p><a href="{{ base_path }}/pipes" class="underline hover:no-underline" data-i18n="schedules.nopipes.hint">Create a pipe first to use schedules.</a></p>
+          </div>
+          {% endif %}
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="schedules.form.name">Name</label>
+              <input name="name" type="text" required {% if pipes.is_empty() %}disabled{% endif %}
+                     data-i18n-placeholder="schedules.form.name.placeholder" placeholder="e.g. morning-report"
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="schedules.form.when">When</label>
+              <input name="when_text" type="text" required {% if pipes.is_empty() %}disabled{% endif %}
+                     data-i18n-placeholder="schedules.form.when.placeholder" placeholder="e.g. Every weekday at 6:45 AM"
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+              <p class="text-[11px] text-txt-faint mt-1" data-i18n="schedules.form.when.hint">Natural language is fine — recurring or one-time. Selu will figure it out.</p>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="schedules.form.prompt">What should happen</label>
+            <textarea name="prompt" rows="3" required {% if pipes.is_empty() %}disabled{% endif %}
+                      data-i18n-placeholder="schedules.form.prompt.placeholder" placeholder="e.g. Give me a summary of my calendar today, any new emails, and the weather."
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint font-normal focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition resize-y min-h-[80px]"></textarea>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="schedules.form.pipes">Run on these pipes</label>
+            <div class="flex flex-wrap gap-3" id="pipe-checkboxes">
+              {% for pipe in pipes %}
+              <label class="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="pipe_check" value="{{ pipe.id }}" checked
+                       onchange="updatePipeIds()"
+                       class="rounded border-edge text-coral focus:ring-coral/50 bg-surface-input cursor-pointer" />
+                <span class="text-sm text-txt-heading">{{ pipe.name }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <input type="hidden" name="pipe_ids" id="pipe-ids-hidden" value="{% for pipe in pipes %}{{ pipe.id }}{% if !loop.last %},{% endif %}{% endfor %}" />
+          </div>
+          <div class="flex justify-end">
+            <button type="submit" {% if pipes.is_empty() %}disabled{% endif %}
+                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    data-i18n="schedules.add">Add Schedule</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Chat command hint -->
+    <div class="text-center text-xs text-txt-faint py-2" data-i18n="schedules.chat.hint">
+      Tip: You can also manage schedules from Chat with /schedule add, /schedule list, /schedule delete, and /remind.
+    </div>
+  </div>
+</div>
+
+<script>
+function updatePipeIds() {
+  var checks = document.querySelectorAll('#pipe-checkboxes input[name="pipe_check"]:checked');
+  var ids = [];
+  checks.forEach(function(c) { ids.push(c.value); });
+  document.getElementById('pipe-ids-hidden').value = ids.join(',');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,2349 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>selu. — {% block title %}Your personal agent{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0.2' y1='0' x2='0.8' y2='1'%3E%3Cstop offset='0%25' stop-color='%23FF7EB3'/%3E%3Cstop offset='100%25' stop-color='%23FF6B5A'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='108' fill='url(%23g)'/%3E%3Cellipse cx='195' cy='222' rx='36' ry='44' fill='white'/%3E%3Ccircle cx='205' cy='214' r='21' fill='%232D2B55'/%3E%3Ccircle cx='213' cy='205' r='7.5' fill='white' opacity='0.9'/%3E%3Cellipse cx='317' cy='222' rx='36' ry='44' fill='white'/%3E%3Ccircle cx='327' cy='214' r='21' fill='%232D2B55'/%3E%3Ccircle cx='335' cy='205' r='7.5' fill='white' opacity='0.9'/%3E%3Cpath d='M 212,326 Q 256,370 300,326' stroke='%232D2B55' stroke-width='7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#FFF5F3',
+              100: '#FFE8E4',
+              200: '#FFD0C9',
+              300: '#FFB0A3',
+              400: '#FF8D7D',
+              500: '#FF6B5A',
+              600: '#E85A4A',
+              700: '#CC4A3C',
+              800: '#A33B30',
+              900: '#7A2C24',
+            },
+            coral:  '#FF6B5A',
+            amber:  '#FF9F67',
+            blush:  '#FF7EB3',
+            navy:   '#2D2B55',
+            dark:   '#1E1B3A',
+            muted:  '#8E8AA0',
+            warm:   '#FFF8F5',
+            sunny:  '#FFD93D',
+            rosie:  '#FF4070',
+            /* Semantic colors via CSS vars */
+            surface: {
+              DEFAULT: 'var(--c-surface)',
+              alt:     'var(--c-surface-alt)',
+              raised:  'var(--c-surface-raised)',
+              input:   'var(--c-surface-input)',
+            },
+            edge: {
+              DEFAULT: 'var(--c-edge)',
+              strong:  'var(--c-edge-strong)',
+            },
+            txt: {
+              DEFAULT: 'var(--c-text)',
+              heading: 'var(--c-text-heading)',
+              muted:   'var(--c-text-muted)',
+              faint:   'var(--c-text-faint)',
+            },
+            sidebar: {
+              DEFAULT: 'var(--c-sidebar)',
+              hover:   'var(--c-sidebar-hover)',
+            },
+          },
+          fontFamily: {
+            heading: ['Nunito', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+            mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ══ Theme Variables ═══════════════════════════════════════════ */
+    :root, html.light {
+      --c-surface:       #FFFFFF;
+      --c-surface-alt:   #F7F5F3;
+      --c-surface-raised:#FFFFFF;
+      --c-surface-input: #F2F0EE;
+      --c-edge:          #E5E2DD;
+      --c-edge-strong:   #D0CCC6;
+      --c-text:          #3D3A50;
+      --c-text-heading:  #1E1B3A;
+      --c-text-muted:    #7A7890;
+      --c-text-faint:    #A09EB0;
+      --c-sidebar:       #F7F5F3;
+      --c-sidebar-hover: rgba(0,0,0,0.04);
+      --c-nav-active-bg: rgba(255,107,90,0.08);
+      --c-nav-text:      #5C596E;
+      --c-card-bg:       #FFFFFF;
+      --c-card-border:   #E5E2DD;
+      --c-input-border:  #D0CCC6;
+      --c-scrollbar:     #D0CCC6;
+      --c-scrollbar-h:   #B0ADA6;
+      --c-code-bg:       #F5F3F0;
+      --c-code-border:   #E5E2DD;
+      --c-pre-bg:        #F0EDEA;
+      --c-md-strong:     #1E1B3A;
+      --c-md-em:         #5C596E;
+      --c-table-header:  #F2F0EE;
+    }
+    html.dark {
+      --c-surface:       #151229;
+      --c-surface-alt:   #1A1735;
+      --c-surface-raised:#1E1B3A;
+      --c-surface-input: #151229;
+      --c-edge:          #3D3A5C;
+      --c-edge-strong:   #514D75;
+      --c-text:          #E0DDF0;
+      --c-text-heading:  #FFFFFF;
+      --c-text-muted:    #A09EB0;
+      --c-text-faint:    #706D88;
+      --c-sidebar:       rgba(45,43,85,0.7);
+      --c-sidebar-hover: rgba(255,255,255,0.06);
+      --c-nav-active-bg: rgba(255,107,90,0.12);
+      --c-nav-text:      #C0BDD0;
+      --c-card-bg:       #1E1B3A;
+      --c-card-border:   #3D3A5C;
+      --c-input-border:  #514D75;
+      --c-scrollbar:     #3D3A5C;
+      --c-scrollbar-h:   #514D75;
+      --c-code-bg:       rgba(45,43,85,0.5);
+      --c-code-border:   #3D3A5C;
+      --c-pre-bg:        #111024;
+      --c-md-strong:     #F0EDE8;
+      --c-md-em:         #D0CDE0;
+      --c-table-header:  #2D2B55;
+    }
+
+    /* ── Animations ──────────────────────────────────────────────── */
+    @keyframes blink { 50% { opacity: 0; } }
+    .streaming::after {
+      content: "\25CB";
+      animation: blink 1s step-end infinite;
+      color: #FF6B5A;
+      margin-left: 2px;
+    }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-float { animation: float 3s ease-in-out infinite; }
+    .animate-fadein { animation: fadeIn 0.3s ease-out; }
+
+    /* ── Scrollbar ───────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--c-scrollbar); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--c-scrollbar-h); }
+
+    /* ── HTMX ────────────────────────────────────────────────────── */
+    .htmx-indicator { opacity: 0; transition: opacity 0.2s; }
+    .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+
+    /* ── Markdown prose ──────────────────────────────────────────── */
+    .markdown-body { line-height: 1.65; word-wrap: break-word; }
+    .markdown-body p { margin: 0.4em 0; }
+    .markdown-body p:first-child { margin-top: 0; }
+    .markdown-body p:last-child { margin-bottom: 0; }
+    .markdown-body strong { color: var(--c-md-strong); font-weight: 600; }
+    .markdown-body em { color: var(--c-md-em); }
+    .markdown-body ul, .markdown-body ol { margin: 0.4em 0; padding-left: 1.5em; }
+    .markdown-body li { margin: 0.15em 0; }
+    .markdown-body li::marker { color: var(--c-text-muted); }
+    .markdown-body code {
+      background: var(--c-code-bg);
+      border: 1px solid var(--c-code-border);
+      border-radius: 4px;
+      padding: 0.15em 0.35em;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+      color: var(--c-text-heading);
+    }
+    .markdown-body pre {
+      background: var(--c-pre-bg);
+      border: 1px solid var(--c-edge);
+      border-radius: 8px;
+      padding: 0.85em 1em;
+      margin: 0.5em 0;
+      overflow-x: auto;
+    }
+    .markdown-body pre code {
+      background: none; border: none; padding: 0;
+      font-size: 0.82em; color: var(--c-text);
+    }
+    .markdown-body blockquote {
+      border-left: 3px solid #FF6B5A;
+      padding-left: 0.8em;
+      margin: 0.5em 0;
+      color: var(--c-text-muted);
+    }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3,
+    .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+      color: var(--c-text-heading); font-weight: 600; margin: 0.6em 0 0.3em;
+      font-family: 'Nunito', sans-serif;
+    }
+    .markdown-body h1 { font-size: 1.3em; }
+    .markdown-body h2 { font-size: 1.15em; }
+    .markdown-body h3 { font-size: 1.05em; }
+    .markdown-body hr { border: none; border-top: 1px solid var(--c-edge); margin: 0.8em 0; }
+    .markdown-body a { color: #FF6B5A; text-decoration: underline; text-underline-offset: 2px; }
+    .markdown-body a:hover { color: #FF9F67; }
+    .markdown-body table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }
+    .markdown-body th, .markdown-body td {
+      border: 1px solid var(--c-edge); padding: 0.35em 0.6em; font-size: 0.9em;
+    }
+    .markdown-body th { background: var(--c-table-header); color: var(--c-text-heading); font-weight: 600; }
+
+    /* ── Tool-call pill ──────────────────────────────────────────── */
+    .tool-status {
+      display: flex; align-items: center; gap: 0.5em;
+      padding: 0.4em 0.8em;
+      background: var(--c-surface-raised);
+      border: 1px solid var(--c-edge);
+      border-radius: 9999px;
+      font-size: 0.75rem; color: var(--c-text-muted); width: fit-content;
+    }
+    .tool-status svg { flex-shrink: 0; }
+    .tool-status.active { color: #FF6B5A; border-color: rgba(255, 107, 90, 0.3); background: rgba(255, 107, 90, 0.08); }
+    .tool-status.active svg { animation: spin 2s linear infinite; }
+
+    /* ── Tool-call group & collapsible results ─────────────────── */
+    .tool-calls-group {
+      display: flex; flex-direction: column; gap: 0.25rem;
+      max-width: 72%;
+    }
+    .tool-call-item {
+      border: 1px solid var(--c-edge);
+      border-radius: 0.75rem;
+      background: var(--c-surface-raised);
+      overflow: hidden;
+    }
+    .tool-call-summary {
+      display: flex; align-items: center; gap: 0.5em;
+      padding: 0.45em 0.85em;
+      font-size: 0.75rem; color: var(--c-text-muted);
+      list-style: none; user-select: none;
+    }
+    .tool-call-summary::-webkit-details-marker { display: none; }
+    .tool-call-summary::marker { display: none; content: ''; }
+    .tool-call-item[open] > .tool-call-summary,
+    .tool-call-summary:hover { color: var(--c-text); cursor: pointer; }
+
+    /* Standalone orphaned tool result (fallback) */
+    .tool-result {
+      border: 1px solid var(--c-edge);
+      border-radius: 0.75rem;
+      background: var(--c-surface-raised);
+      overflow: hidden;
+    }
+    .tool-result-summary {
+      display: flex; align-items: center; gap: 0.5em;
+      padding: 0.45em 0.85em;
+      font-size: 0.75rem; color: var(--c-text-muted);
+      cursor: pointer; user-select: none;
+      list-style: none;
+    }
+    .tool-result-summary::-webkit-details-marker { display: none; }
+    .tool-result-summary::marker { display: none; content: ''; }
+    .tool-result-summary:hover { color: var(--c-text); }
+
+    .tool-result-chevron { transition: transform 0.15s ease; }
+    details[open] > summary .tool-result-chevron,
+    details[open] > .tool-call-summary .tool-result-chevron { transform: rotate(180deg); }
+    .tool-result-body {
+      border-top: 1px solid var(--c-edge);
+      padding: 0.6em 0.85em;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .tool-result-pre {
+      margin: 0; padding: 0;
+      font-size: 0.7rem; line-height: 1.5;
+      color: var(--c-text-muted);
+      white-space: pre-wrap; word-break: break-all;
+      background: none; border: none;
+    }
+
+    /* ── Confirmation card ───────────────────────────────────────── */
+    .confirm-card {
+      background: var(--c-card-bg); border: 1px solid var(--c-card-border);
+      border-radius: 12px; padding: 1em; margin: 0.5em 0; max-width: 72%;
+    }
+    .confirm-card pre {
+      background: var(--c-surface); border: 1px solid var(--c-edge);
+      border-radius: 6px; padding: 0.6em 0.8em;
+      font-size: 0.78em; color: var(--c-text-muted); overflow-x: auto; margin: 0.5em 0;
+    }
+    .confirm-card .confirm-actions { display: flex; gap: 0.5em; margin-top: 0.6em; }
+    .confirm-card .btn-approve {
+      background: #065f46; color: #6ee7b7; border: 1px solid #059669;
+      padding: 0.35em 1em; border-radius: 8px; font-size: 0.8rem; font-weight: 500;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .confirm-card .btn-approve:hover { background: #047857; }
+    .confirm-card .btn-deny {
+      background: #7f1d1d; color: #fca5a5; border: 1px solid #dc2626;
+      padding: 0.35em 1em; border-radius: 8px; font-size: 0.8rem; font-weight: 500;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .confirm-card .btn-deny:hover { background: #991b1b; }
+
+    /* ── Gradient accents ────────────────────────────────────────── */
+    .gradient-coral { background: linear-gradient(135deg, #FF6B5A, #FF9F67); }
+    .gradient-blush { background: linear-gradient(135deg, #FF7EB3, #FF6B5A); }
+    .text-gradient-coral {
+      background: linear-gradient(135deg, #FF6B5A, #FF9F67);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    /* ── Sidebar active indicator ────────────────────────────────── */
+    .nav-active {
+      background: var(--c-nav-active-bg);
+      border-left: 3px solid #FF6B5A;
+    }
+
+    /* ── Card component ──────────────────────────────────────────── */
+    .selu-card {
+      background: var(--c-card-bg);
+      border: 1px solid var(--c-card-border);
+    }
+
+    /* ── Theme transition ────────────────────────────────────────── */
+    html { transition: background-color 0.2s ease, color 0.2s ease; }
+    html * { transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+    html svg, html img, html .animate-float, html .animate-fadein { transition: none; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body class="bg-surface text-txt font-sans h-dvh flex overflow-hidden antialiased">
+
+  <!-- Mobile top bar (visible below md) -->
+  <div class="md:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-sidebar border-b border-edge flex items-center px-4 gap-3">
+    <button onclick="document.getElementById('sidebar').classList.remove('-translate-x-full');document.getElementById('sidebar-backdrop').classList.remove('hidden')"
+            class="p-1.5 rounded-lg hover:bg-sidebar-hover transition-colors" aria-label="Open menu">
+      <svg class="w-6 h-6 text-txt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <span class="font-heading text-lg font-black text-txt-heading tracking-tight flex-1">selu<span class="text-coral">.</span></span>
+    {% block mobile_topbar_extra %}{% endblock %}
+  </div>
+  <!-- Mobile backdrop -->
+  <div id="sidebar-backdrop" class="hidden md:hidden fixed inset-0 z-40 bg-black/50"
+       onclick="document.getElementById('sidebar').classList.add('-translate-x-full');this.classList.add('hidden')"></div>
+
+  <!-- Sidebar Navigation -->
+  <aside id="sidebar" class="w-[230px] bg-sidebar backdrop-blur-sm border-r border-edge flex flex-col flex-shrink-0
+         fixed md:relative z-50 h-full transition-transform duration-200
+         -translate-x-full md:translate-x-0">
+    <!-- Logo -->
+    <div class="px-5 h-16 flex items-center border-b border-edge">
+      <a href="{{ base_path }}/chat" class="flex items-center gap-3 group">
+        <svg class="w-9 h-9 flex-shrink-0 animate-float" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <defs><linearGradient id="selu-g" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0%" stop-color="#FF7EB3"/><stop offset="100%" stop-color="#FF6B5A"/></linearGradient></defs>
+          <circle cx="165" cy="90" r="50" fill="url(#selu-g)"/>
+          <circle cx="347" cy="90" r="50" fill="url(#selu-g)"/>
+          <circle cx="256" cy="272" r="190" fill="url(#selu-g)"/>
+          <ellipse cx="200" cy="242" rx="30" ry="36" fill="white"/>
+          <circle cx="208" cy="235" r="17" fill="#2D2B55"/>
+          <circle cx="215" cy="227" r="6" fill="white" opacity="0.9"/>
+          <ellipse cx="312" cy="242" rx="30" ry="36" fill="white"/>
+          <circle cx="320" cy="235" r="17" fill="#2D2B55"/>
+          <circle cx="327" cy="227" r="6" fill="white" opacity="0.9"/>
+          <ellipse cx="160" cy="292" rx="28" ry="14" fill="#FF4070" opacity="0.2"/>
+          <ellipse cx="352" cy="292" rx="28" ry="14" fill="#FF4070" opacity="0.2"/>
+          <path d="M 222,312 Q 256,344 290,312" stroke="#2D2B55" stroke-width="5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <span class="font-heading text-xl font-black text-txt-heading tracking-tight">selu<span class="text-coral">.</span></span>
+      </a>
+    </div>
+
+    <!-- Nav Links -->
+    <nav class="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
+      <div class="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-faint" data-i18n="nav.main">Main</div>
+
+      <a href="{{ base_path }}/chat" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "chat" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span data-i18n="nav.chat">Chat</span>
+      </a>
+
+      <a href="{{ base_path }}/personality" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "personality" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><path d="M10 21h4"/></svg>
+        <span data-i18n="nav.personality">Memory</span>
+      </a>
+
+      <a href="{{ base_path }}/schedules" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "schedules" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span data-i18n="nav.schedules">Schedules</span>
+      </a>
+
+      <a href="{{ base_path }}/users" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "users" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span data-i18n="nav.users">Users</span>
+      </a>
+
+      {% if is_admin %}
+      <a href="{{ base_path }}/pipes" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "pipes" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span data-i18n="nav.pipes">Pipes</span>
+      </a>
+
+      <a href="{{ base_path }}/agents" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "agents" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
+        <span data-i18n="nav.agents">Agents</span>
+      </a>
+
+      <a href="{{ base_path }}/providers" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "providers" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        <span data-i18n="nav.providers">Providers</span>
+      </a>
+
+      <a href="{{ base_path }}/system-updates" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "system_updates" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="2" y1="14" x2="6" y2="14"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="18" y1="16" x2="22" y2="16"/></svg>
+        <span data-i18n="nav.system_updates">Settings</span>
+      </a>
+
+      <div class="px-3 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-faint" data-i18n="nav.advanced">Advanced</div>
+
+      <a href="{{ base_path }}/credentials" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "credentials" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span data-i18n="nav.credentials">Credentials</span>
+      </a>
+
+      {% endif %}
+    </nav>
+
+    <!-- Theme + Language + Logout -->
+    <div class="px-3 py-3 border-t border-edge space-y-1">
+      <!-- Theme Toggle -->
+      <button onclick="toggleTheme()" id="theme-toggle"
+              class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover transition-all cursor-pointer">
+        <!-- Sun icon (shown in dark mode) -->
+        <svg id="theme-icon-sun" class="w-[18px] h-[18px] flex-shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <!-- Moon icon (shown in light mode) -->
+        <svg id="theme-icon-moon" class="w-[18px] h-[18px] flex-shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <span id="theme-label">Light mode</span>
+      </button>
+      <!-- Language Toggle -->
+      <button onclick="toggleLang()" id="lang-toggle"
+              class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover transition-all cursor-pointer">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span id="lang-label">EN</span>
+      </button>
+      <!-- Logout -->
+      <form method="POST" action="{{ base_path }}/logout">
+        <button type="submit" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-rosie hover:bg-rosie/5 transition-all cursor-pointer">
+          <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span data-i18n="nav.signout">Sign out</span>
+        </button>
+      </form>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col overflow-hidden pt-14 md:pt-0">
+    {% block body %}{% endblock %}
+  </main>
+
+  <script>
+    // ── Base path for reverse-proxy sub-path deployments ────────────
+    var BASE_PATH = '{{ base_path }}';
+
+    // ── Mobile sidebar toggle ──────────────────────────────────────
+    function closeSidebar() {
+      var sb = document.getElementById('sidebar');
+      var bd = document.getElementById('sidebar-backdrop');
+      if (sb) sb.classList.add('-translate-x-full');
+      if (bd) bd.classList.add('hidden');
+    }
+
+    // ── Theme System ───────────────────────────────────────────────
+    function getTheme() {
+      return localStorage.getItem('selu-theme') || 'dark';
+    }
+    function applyTheme(theme) {
+      var html = document.documentElement;
+      html.classList.remove('dark', 'light');
+      html.classList.add(theme);
+      localStorage.setItem('selu-theme', theme);
+      var sun = document.getElementById('theme-icon-sun');
+      var moon = document.getElementById('theme-icon-moon');
+      var label = document.getElementById('theme-label');
+      if (sun && moon && label) {
+        if (theme === 'dark') {
+          sun.classList.remove('hidden');
+          moon.classList.add('hidden');
+          label.textContent = getCurrentLang() === 'de' ? 'Heller Modus' : 'Light mode';
+        } else {
+          sun.classList.add('hidden');
+          moon.classList.remove('hidden');
+          label.textContent = getCurrentLang() === 'de' ? 'Dunkler Modus' : 'Dark mode';
+        }
+      }
+    }
+    function toggleTheme() {
+      applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
+    }
+
+    // ── I18n System ────────────────────────────────────────────────
+    const translations = {
+      en: {
+        'nav.main': 'Main',
+        'nav.chat': 'Chat',
+        'nav.personality': 'Memory',
+        'nav.pipes': 'Pipes',
+        'nav.agents': 'Agents',
+        'nav.providers': 'Providers',
+        'nav.system_updates': 'Settings',
+        'nav.users': 'Users',
+        'nav.advanced': 'Advanced',
+        'nav.credentials': 'Credentials',
+        'nav.events': 'Events',
+        'nav.signout': 'Sign out',
+        'nav.schedules': 'Schedules',
+        'chat.conversations': 'Conversations',
+        'chat.new': 'New conversation',
+        'chat.nopipes': 'No pipes yet.',
+        'chat.createone': 'Create one',
+        'chat.noconversations': 'No conversations yet',
+        'chat.start': 'Start a conversation',
+        'chat.select': 'Select a conversation from the sidebar',
+        'chat.selectpipe': 'Select a conversation to start chatting',
+        'chat.openconversations': 'Open conversations',
+        'chat.delete': 'Delete conversation',
+        'chat.delete.confirm': 'Delete this conversation? This cannot be undone.',
+        'chat.placeholder': 'Message... (Shift+Enter for newline)',
+        'chat.send': 'Send',
+        'chat.attach_image': 'Attach image',
+        'chat.image_preview': 'Image preview',
+        'chat.remove_image': 'Remove image',
+        'chat.image_selected_single': '1 image selected',
+        'chat.image_selected_multi': '{count} images selected',
+        'chat.image_only_sent': '[Image sent]',
+        'chat.image_attached_note': '[Image attached]',
+        'chat.confirm.title': 'Confirmation required',
+        'chat.confirm.tool': 'Tool:',
+        'chat.confirm.approve': 'Approve',
+        'chat.confirm.deny': 'Deny',
+        'chat.confirm.approved': 'Approved',
+        'chat.confirm.denied': 'Denied',
+        'chat.confirm.expired': 'Confirmation expired or already handled.',
+        'chat.confirm.queued': 'Approval queued for {tool} (id: {id})',
+        'pipes.title': 'Pipes',
+        'pipes.desc': 'Pipes connect the outside world to your agents. Add a pipe for each way you want to talk to Selu.',
+        'pipes.active': 'Active Pipes',
+        'pipes.empty': 'No active pipes yet. Add one to start connecting people to your agents.',
+        'pipes.add': 'Add Pipe',
+        'pipes.add_title': 'Add Pipe',
+        'pipes.add_desc': 'Choose how people should reach Selu. We’ll guide you through the setup for that pipe type.',
+        'pipes.addnew': 'Add New Pipe',
+        'pipes.webui': 'Web UI',
+        'pipes.webui.desc': 'Chat with your agents directly in the Selu web interface.',
+        'pipes.imessage': 'iMessage',
+        'pipes.imessage.desc': 'Connect your Mac\'s iMessage via BlueBubbles. Your agents can receive and reply to iMessages.',
+        'pipes.whatsapp': 'WhatsApp',
+        'pipes.whatsapp.desc': 'Connect WhatsApp through a Baileys bridge with a simple wizard.',
+        'pipes.whatsapp.single.desc': 'WhatsApp currently supports one active pipe per Selu instance.',
+        'pipes.whatsapp.single.manage': 'Open your existing WhatsApp pipe to manage it.',
+        'pipes.whatsapp.via': 'WhatsApp via Baileys',
+        'pipes.webhook': 'Webhook',
+        'pipes.webhook.desc': 'For developers: connect any external service via HTTP.',
+        'pipes.setup': 'Set up',
+        'pipes.comingsoon': 'Coming Soon',
+        'pipes.remove': 'Remove',
+        'pipes.connected': 'Connected',
+        'pipes.inactive': 'Inactive',
+        'pipes.checking': 'Checking',
+        'pipes.active_status': 'Active',
+        'pipes.back': 'Back to Pipes',
+        'pipes.back_to_add': 'Back to Add Pipe',
+        'pipes.person.added': 'Person added.',
+        'pipes.person.add.error': 'Could not add this person. Please try again.',
+        'pipes.person.remove.confirm': 'Remove this person?',
+        'pipes.form.no_users.title': 'No users found.',
+        'pipes.form.no_users.before_link': 'You need at least one user account before creating a pipe.',
+        'pipes.form.no_users.link': 'Create a user',
+        'pipes.form.select_user': '-- select user --',
+        'pipes.web.title': 'New Web UI Pipe',
+        'pipes.web.desc': 'Create a pipe for chatting with your agents through the Selu web interface. Once created, it will appear in the Chat sidebar.',
+        'pipes.web.config': 'Web UI Configuration',
+        'pipes.web.name_placeholder': 'e.g. General, Work, Personal',
+        'pipes.web.name_hint': 'A friendly name shown in the Chat sidebar.',
+        'pipes.webhook.title': 'New Webhook Pipe',
+        'pipes.webhook.desc': 'Connect an external service to Selu via HTTP. The service POSTs messages to Selu\'s inbound URL, and Selu POSTs agent replies back to your callback URL.',
+        'pipes.webhook.config': 'Webhook Configuration',
+        'pipes.webhook.name_placeholder': 'e.g. Slack Bot, Telegram Bridge',
+        'pipes.webhook.name_hint': 'A friendly name for this pipe.',
+        'pipes.webhook.callback_placeholder': 'https://your-service.example.com/selu-replies',
+        'pipes.webhook.callback_hint': 'Selu will POST agent replies to this URL as JSON.',
+        'pipes.webhook.auth_placeholder': 'Bearer your-secret-token',
+        'pipes.webhook.auth_hint': 'If your callback URL requires auth, Selu will send this as the Authorization header.',
+        'pipes.name': 'Name',
+        'pipes.owner': 'Owner',
+        'pipes.cancel': 'Cancel',
+        'pipes.create.web': 'Create Web Pipe',
+        'pipes.create.webhook': 'Create Webhook Pipe',
+        'pipes.callbackurl': 'Callback URL',
+        'pipes.callbackauth': 'Callback Auth Header',
+        'imsg.title': 'Set Up iMessage',
+        'imsg.desc': 'Connect your iMessage to Selu.',
+        'imsg.subtitle.before_link': 'Connect your iMessage to Selu. You\'ll need a',
+        'imsg.subtitle.after_link': 'server running on your Mac.',
+        'imsg.step1': 'Connect Server',
+        'imsg.step1.title': 'Step 1: Connect to BlueBubbles',
+        'imsg.step1.desc': 'Enter your BlueBubbles server details. You can find these in the BlueBubbles app under Settings > Connection.',
+        'imsg.step2': 'Pick Chat',
+        'imsg.step2.title': 'Step 2: Pick a Chat',
+        'imsg.step2.desc': 'Choose which iMessage conversation Selu should monitor and respond in.',
+        'imsg.step3': 'Add People',
+        'imsg.connect': 'Connect to BlueBubbles',
+        'imsg.connecting': 'Connecting...',
+        'imsg.verifying': 'Reaching BlueBubbles server...',
+        'imsg.connected_btn': 'Connected',
+        'imsg.connected_found': 'Connected! Found {count} chat(s).',
+        'imsg.error.missing_credentials': 'Please enter both URL and password.',
+        'imsg.error.network': 'Network error. Is Selu running?',
+        'imsg.pipename': 'Pipe Name',
+        'imsg.pipename.placeholder': 'e.g. Family Chat',
+        'imsg.server_url': 'Server URL',
+        'imsg.server_url.placeholder': 'http://host.docker.internal:1234',
+        'imsg.server_url.hint': 'If Selu runs in Docker on your Mac, use http://host.docker.internal:PORT.',
+        'imsg.server_password': 'Server Password',
+        'imsg.server_password.placeholder': 'Your BlueBubbles password',
+        'imsg.chat_search.placeholder': 'Search chats...',
+        'imsg.chat_search.empty': 'No chats match your search.',
+        'imsg.people_in_chat': 'People in this chat:',
+        'imsg.sender': 'Phone / Apple ID',
+        'imsg.sender.placeholder': '+14155551234 or email@icloud.com',
+        'imsg.seluuser': 'Selu User',
+        'imsg.whocan': 'Who Can Talk to Selu?',
+        'imsg.setup': 'Set Up iMessage',
+        'imsg.detail.via': 'iMessage via BlueBubbles',
+        'imsg.detail.connection': 'Connection',
+        'imsg.detail.server': 'BlueBubbles server',
+        'imsg.detail.chat': 'Selected chat',
+        'imsg.detail.agent': 'Agent',
+        'imsg.detail.people': 'Who can use this pipe?',
+        'imsg.detail.people.desc': 'Choose which people in this iMessage chat Selu should answer. Until you add someone here, Selu will stay quiet.',
+        'imsg.detail.everyone': 'No one is allowed yet. Add someone before Selu replies in this chat.',
+        'imsg.detail.sender': 'Phone number or Apple ID',
+        'imsg.detail.sender.placeholder': '+14155551234 or name@icloud.com',
+        'imsg.detail.seluuser': 'Selu User',
+        'imsg.detail.addperson': 'Add person',
+        'imsg.detail.person.exists': 'This phone number or Apple ID has already been added.',
+        'imsg.detail.danger': 'Remove this pipe',
+        'imsg.detail.danger.desc': 'If you remove this pipe, Selu will stop replying in this iMessage chat.',
+        'imsg.detail.remove': 'Remove iMessage pipe',
+        'imsg.detail.remove.confirm': 'Remove this iMessage pipe?',
+        'agents.title': 'Agents',
+        'agents.desc': 'Install agents from the marketplace and configure their LLM provider and model.',
+        'agents.globalmodel': 'Global Default Model',
+        'agents.globalimagemodel': 'Global Default Image Model',
+        'agents.installed': 'Installed Agents',
+        'agents.marketplace': 'Marketplace',
+        'agents.install': 'Install',
+        'agents.uninstall': 'Uninstall',
+        'agents.setup': 'Setup',
+        'agents.model': 'Model',
+        'agents.image_model': 'Image model',
+        'agents.image_model_short': 'Image:',
+        'agents.save': 'Save',
+        'agents.complete': 'Complete Setup',
+        'agents.noagents': 'No agents installed. Visit the Marketplace tab to install agents.',
+        'agents.globalmodel.hint': 'Used when no per-agent model is set',
+        'agents.globalimagemodel.hint': 'Used for image generation and editing when no per-agent image model is set',
+        'agents.provider': 'Provider',
+        'agents.selectprovider': '-- Select provider --',
+        'agents.selectproviderfirst': '-- Select a provider first --',
+        'agents.temperature': 'Temperature',
+        'agents.noproviders': 'No providers configured. Go to Providers to set up an API key first.',
+        'agents.table.id': 'ID',
+        'agents.table.name': 'Name',
+        'agents.table.providermodel': 'Provider / Model',
+        'agents.table.capabilities': 'Capabilities',
+        'agents.table.status': 'Status',
+        'agents.table.actions': 'Actions',
+        'agents.bundled': 'Bundled',
+        'agents.globaldefault': 'Global default',
+        'agents.globaldefaultoption': '-- Global default --',
+        'agents.status.active': 'Active',
+        'agents.status.pending': 'Setup pending',
+        'agents.uninstall.confirm': 'Uninstall {name}? This will remove all agent files.',
+        'agents.marketplace.empty': 'No agents available in the marketplace.',
+        'agents.installed.badge': 'Installed',
+        'agents.loadingmodels': 'Loading models...',
+        'agents.loadmodelsfailed': 'Failed to load models',
+        'agents.success.global_default_image_model_updated': 'Global default image model updated.',
+        'agents.success.image_model_updated': 'Image model updated.',
+        'agents.update': 'Update',
+        'agents.update.confirm': 'Update {name} to version {version}? Running sessions will be interrupted.',
+        'agents.update.confirm_action': 'Start update',
+        'agents.update.modal.title': 'Update agent?',
+        'agents.update.progress.title': 'Updating in background',
+        'agents.update.phase.preparing': 'Preparing update...',
+        'agents.update.phase.downloading': 'Downloading update files...',
+        'agents.update.phase.finalizing': 'Finishing update...',
+        'agents.update.success.updated': 'Update complete.',
+        'agents.update.success.setup_required': 'Update complete. One setup step is required.',
+        'agents.update.error.invalid_payload': 'Couldn\'t start update. Please refresh and try again.',
+        'agents.update.error.docker': 'Couldn\'t connect to Docker. Please check Docker and try again.',
+        'agents.update.error.start': 'Couldn\'t start the update. Please try again.',
+        'agents.update.error.failed': 'Update failed. Please try again.',
+        'agents.update.error.status': 'Update status is unavailable. Please refresh.',
+        'agents.update.refresh': 'Refresh',
+        'agents.update.open_setup': 'Open setup',
+        'agents.update.available': 'Update available',
+        'agents.update.wizard.title': 'Update Agent',
+        'agents.update.wizard.desc': 'You will review the update, wait while it installs, and only see one more step if something new needs your attention.',
+        'agents.update.wizard.step1.label': 'Step 1',
+        'agents.update.wizard.step1.title': 'Review',
+        'agents.update.wizard.step1.desc': 'Check which version you are moving to.',
+        'agents.update.wizard.step2.label': 'Step 2',
+        'agents.update.wizard.step2.title': 'Update',
+        'agents.update.wizard.step2.desc': 'Selu downloads the new version and keeps your existing settings when it can.',
+        'agents.update.wizard.step3.label': 'Step 3',
+        'agents.update.wizard.step3.title': 'Finish',
+        'agents.update.wizard.step3.desc': 'If the update adds anything new, Selu will take you straight to it.',
+        'agents.update.wizard.from_version': 'Current version',
+        'agents.update.wizard.to_version': 'New version',
+        'agents.update.wizard.note': 'Your saved secrets and tool decisions stay in place. You will only be asked about new things the updated version needs.',
+        'agents.update.wizard.progress_hint': 'Please keep this page open until the update finishes.',
+        'agents.update.wizard.redirecting': 'Opening the last step now...',
+        'agents.update.wizard.complete_title': 'Update complete',
+        'agents.update.wizard.done': 'Back to Agents',
+        'agents.update.wizard.error_title': 'Update failed',
+        'agents.autoupdate.short': 'Auto',
+        'agents.autoupdate.enable': 'Enable auto-update',
+        'agents.autoupdate.disable': 'Disable auto-update',
+        'agents.filter.all': 'All',
+        'agents.filter.available': 'Available',
+        'agents.filter.installed': 'Installed',
+        'agents.filter.updates': 'Update available',
+        'agents.rating.label': 'Rate:',
+        'agents.table.version': 'Version',
+        'agents.back': 'Back to Agents',
+        'agents.detail.network': 'Network',
+        'agents.detail.allowedhosts': 'Allowed Hosts',
+        'agents.detail.network_access': 'Network Access',
+        'agents.detail.network_user_overrides': 'Your choice here overrides this agent\'s default network setting.',
+        'agents.detail.network_access_hint': 'Choose Deny to pause all network traffic for this capability.',
+        'agents.detail.allowedhosts_hint': 'Default hosts come from the agent. Set a host to Deny to block it.',
+        'agents.detail.host_default': 'Default',
+        'agents.detail.host_custom': 'Custom',
+        'agents.detail.add_host': 'Add Host',
+        'agents.detail.add_host_placeholder': 'pypi.org:443',
+        'agents.detail.add_host_hint': 'Use host or host:port (for example, pypi.org:443).',
+        'agents.detail.add': 'Add',
+        'agents.detail.remove': 'Remove',
+        'agents.detail.deny': 'Deny',
+        'agents.detail.resources': 'Resources',
+        'agents.detail.memory': 'Memory',
+        'agents.detail.cpu': 'CPU',
+        'agents.detail.pids': 'PIDs',
+        'agents.detail.fs': 'FS',
+        'agents.detail.tools': 'Tools',
+        'agents.detail.tools.desc': 'Control how this agent uses these tools. Changes take effect immediately.',
+        'agents.detail.tools.desc.admin': 'Set default permissions for all users. Changes take effect immediately.',
+        'agents.detail.admin_badge': 'Admin',
+        'agents.detail.tools.desc.user': 'Override the default permissions for your account. Changes take effect immediately.',
+        'agents.detail.builtintools': 'Built-in Tool Permissions',
+        'agents.detail.builtintools.desc': 'Control how this agent uses built-in tools. Changes take effect immediately.',
+        'agents.detail.builtintools.desc.admin': 'Set default permissions for all users. Changes take effect immediately.',
+        'agents.detail.builtintools.desc.user': 'Override the default permissions for your account. Changes take effect immediately.',
+        'agents.builtin.delegate_to_agent': 'Delegate to Agent',
+        'agents.builtin.delegate_to_agent.desc': 'Allows the agent to hand off tasks to other specialist agents.',
+        'agents.builtin.emit_event': 'Emit Event',
+        'agents.builtin.emit_event.desc': 'Allows the agent to emit events that can trigger other agents or notifications.',
+        'agents.builtin.store_get': 'Store Get',
+        'agents.builtin.store_get.desc': 'Allows the agent to retrieve persistently stored values.',
+        'agents.builtin.store_set': 'Store Set',
+        'agents.builtin.store_set.desc': 'Allows the agent to persistently store key-value pairs.',
+        'agents.builtin.store_delete': 'Store Delete',
+        'agents.builtin.store_delete.desc': 'Allows the agent to delete persistently stored values.',
+        'agents.builtin.store_list': 'Store List',
+        'agents.builtin.store_list.desc': 'Allows the agent to list all persistently stored key-value pairs.',
+        'agents.builtin.memory_remember': 'Memory Remember',
+        'agents.builtin.memory_remember.desc': 'Allows the agent to save long-term memory notes for future conversations.',
+        'agents.builtin.memory_forget': 'Memory Forget',
+        'agents.builtin.memory_forget.desc': 'Allows the agent to remove stored memory notes.',
+        'agents.builtin.memory_search': 'Memory Search',
+        'agents.builtin.memory_search.desc': 'Allows the agent to search saved memory using BM25 relevance.',
+        'agents.builtin.memory_list': 'Memory List',
+        'agents.builtin.memory_list.desc': 'Allows the agent to list saved memory notes.',
+        'agents.builtin.set_schedule': 'Set Schedule',
+        'agents.builtin.set_schedule.desc': 'Allows the agent to create recurring schedules from natural-language user requests.',
+        'agents.builtin.set_reminder': 'Set Reminder',
+        'agents.builtin.set_reminder.desc': 'Allows the agent to create one-time reminders for future actions.',
+        'agents.policy.allow': 'Allow',
+        'agents.policy.ask': 'Ask',
+        'agents.policy.block': 'Block',
+        'agents.policy.global_default': 'Default',
+        'agents.policy.global_default_label': 'Global default',
+        'agents.policy.user_override': 'Custom',
+        'agents.policy.reset': 'Reset to default',
+        'agents.detail.global_perms': 'Default Permissions',
+        'agents.detail.global_perms_badge': 'For everyone',
+        'agents.detail.global_perms_desc': 'These permissions apply to all users by default. Individual users can override them for their own account.',
+        'agents.detail.your_perms': 'Your Permissions',
+        'agents.detail.your_perms_desc': 'Personal overrides for your account only. Tools without an override use the default.',
+        'agents.policy.using_default': 'Using default',
+        'agents.detail.networkactivity': 'Network Activity',
+        'agents.detail.last100': 'Last 100 requests',
+        'agents.detail.norequests': 'No network requests recorded yet.',
+        'agents.detail.time': 'Time',
+        'agents.detail.capability': 'Capability',
+        'agents.detail.method': 'Method',
+        'agents.detail.host': 'Host',
+        'agents.detail.port': 'Port',
+        'agents.detail.status': 'Status',
+        'agents.detail.allowed': 'Allowed',
+        'agents.detail.denied': 'Denied',
+        'agents.detail.secrets': 'Secrets',
+        'agents.detail.required': 'Required',
+        'agents.detail.optional': 'Optional',
+        'agents.detail.shared': 'Shared',
+        'agents.detail.personal': 'Personal',
+        'agents.detail.secret_set': 'Set',
+        'agents.detail.secret_missing': 'Missing',
+        'agents.detail.secret_placeholder': 'Enter secret value',
+        'agents.detail.secret_save': 'Save',
+        'agents.detail.secret_remove': 'Remove',
+        'agents.detail.section.network': 'Network',
+        'agents.detail.section.network_desc': 'Connectivity limits, host allowlists, and recent outbound requests.',
+        'agents.detail.section.storage': 'Storage',
+        'agents.detail.section.storage_desc': 'Values the agent has saved persistently with store_set.',
+        'agents.detail.section.memory': 'Memory',
+        'agents.detail.section.memory_desc': 'Long-term notes the agent saved with memory_remember and retrieves via BM25.',
+        'agents.detail.section.secrets': 'Secrets',
+        'agents.detail.section.secrets_desc': 'Credentials this agent can use to access external services.',
+        'agents.detail.section.permissions': 'Permissions',
+        'agents.detail.section.permissions_desc': 'Tool access controls for this agent.',
+        'agents.detail.automation.title': 'Managed Automation',
+        'agents.detail.automation.not_supported': 'This agent does not define managed schedules.',
+        'agents.detail.automation.enabled': 'Enabled',
+        'agents.detail.automation.disabled': 'Disabled',
+        'agents.detail.automation.active_count': 'Active schedules',
+        'agents.detail.automation.missing_pipe': 'Set at least one active pipe to this agent to enable automation.',
+        'agents.detail.automation.missing_credentials': 'Add all required secrets first.',
+        'agents.detail.automation.enable': 'Enable automation',
+        'agents.detail.automation.disable': 'Disable automation',
+        'agents.detail.runtime.title': 'Autonomy',
+        'agents.detail.runtime.desc': 'Controls how independently this agent can work and how many specialist handoffs it may run.',
+        'agents.detail.runtime.input_label': 'Autonomy level',
+        'agents.detail.runtime.level.low': 'Low',
+        'agents.detail.runtime.level.medium': 'Balanced (Recommended)',
+        'agents.detail.runtime.level.high': 'High',
+        'agents.detail.runtime.advanced.title': 'Advanced',
+        'agents.detail.runtime.advanced.enable': 'Use advanced limits for this agent',
+        'agents.detail.runtime.advanced.steps': 'Max tool steps per reply',
+        'agents.detail.runtime.advanced.hops': 'Max specialist handoffs',
+        'agents.detail.runtime.advanced.default_values': 'Default advanced',
+        'agents.detail.runtime.save': 'Save',
+        'agents.detail.runtime.default_badge': 'Agent default',
+        'agents.detail.runtime.override_badge': 'Your setting is active',
+        'agents.detail.runtime.using_default_badge': 'Using agent default',
+        'agents.detail.storage.updated': 'Updated',
+        'agents.detail.storage.user': 'User',
+        'agents.detail.storage.key': 'Key',
+        'agents.detail.storage.value': 'Value',
+        'agents.detail.storage.actions': 'Actions',
+        'agents.detail.storage.empty': 'No stored values yet.',
+        'agents.detail.storage.last500': 'Last 500 entries',
+        'agents.detail.storage.delete': 'Delete',
+        'agents.detail.memory.updated': 'Updated',
+        'agents.detail.memory.user': 'User',
+        'agents.detail.memory.note': 'Memory',
+        'agents.detail.memory.tags': 'Tags',
+        'agents.detail.memory.source': 'Source',
+        'agents.detail.memory.actions': 'Actions',
+        'agents.detail.memory.empty': 'No memory entries yet.',
+        'agents.detail.memory.last500': 'Last 500 entries',
+        'agents.detail.memory.delete': 'Delete',
+        'agents.detail.tab.overview': 'Overview',
+        'agents.detail.tab.storage': 'Storage',
+        'agents.detail.tab.memory': 'Memory',
+        'agents.detail.tab.secrets': 'Secrets',
+        'agents.detail.tab.network': 'Network',
+        'agents.detail.tab.permissions': 'Permissions',
+        'agents.detail.overview.title': 'Overview',
+        'agents.detail.overview.desc': 'A quick status snapshot. Use tabs for full details.',
+        'agents.detail.overview.capabilities': 'Capabilities',
+        'agents.detail.overview.storage_entries': 'Stored Entries',
+        'agents.detail.overview.memory_entries': 'Memory Entries',
+        'agents.detail.overview.network_requests': 'Network Requests',
+        'agents.detail.overview.secrets': 'Secrets',
+        'agents.detail.overview.permissions_summary': 'Permissions Summary',
+        'agents.detail.overview.open_storage': 'Open Storage',
+        'agents.detail.overview.open_memory': 'Open Memory',
+        'agents.detail.overview.open_secrets': 'Open Secrets',
+        'agents.detail.overview.open_network': 'Open Network',
+        'agents.detail.overview.open_permissions': 'Open Permissions',
+        'agents.setup.title': 'Setup',
+        'agents.setup.desc': 'Complete the following steps to finish installing this agent.',
+        'agents.setup.update_title': 'Finish Update',
+        'agents.setup.update_desc': 'The update is ready. Review anything new below to finish.',
+        'agents.setup.test': 'Test',
+        'agents.setup.config': 'Configuration',
+        'agents.setup.runtest': 'Run Test',
+        'agents.setup.toolpermissions': 'Tool Permissions',
+        'agents.setup.required': 'Required',
+        'agents.setup.toolpermissions.desc': 'Choose a security policy for each tool this agent can use. Tools without a policy will be blocked by default.',
+        'agents.setup.dynamic.discovery_warning': 'We could not refresh dynamic tools for some capabilities. Showing cached tools.',
+        'agents.setup.modelassignment': 'Model Assignment',
+        'agents.setup.modelassignment.desc': 'Assign a specific provider and model to this agent, or leave blank to use the global default.',
+        'agents.setup.finish_update': 'Finish Update',
+        'agents.useglobaldefault': '-- Use global default --',
+        'agents.success.setup_complete': 'Agent setup completed successfully.',
+        'agents.success.updated': 'Agent updated successfully.',
+        'agents.success.rating_saved': 'Thanks! Your rating was saved.',
+        'agents.success.global_default_model_updated': 'Global default model updated.',
+        'agents.success.secret_saved': 'Secret saved.',
+        'agents.success.secret_removed': 'Secret removed.',
+        'agents.success.automation_enabled': 'Managed automation enabled.',
+        'agents.success.automation_disabled': 'Managed automation disabled.',
+        'agents.success.runtime_settings_saved': 'Autonomy settings saved.',
+        'agents.error.encrypt_failed': 'Couldn\'t save the credential. Please try again.',
+        'agents.error.store_cred_failed': 'Couldn\'t store the credential. Please try again.',
+        'agents.error.save_perms_failed': 'Couldn\'t save tool permissions. Please try again.',
+        'agents.error.not_installed': 'This agent is not installed yet.',
+        'agents.error.rating_invalid': 'Please choose a rating between 1 and 5 stars.',
+        'agents.error.rating_submit_failed': 'Couldn\'t submit your rating. Please try again.',
+        'agents.error.rating_unavailable': 'Couldn\'t submit your rating right now.',
+        'agents.error.rating_save_failed': 'Couldn\'t save your rating. Please try again.',
+        'agents.error.secret_empty': 'Secret value cannot be empty.',
+        'agents.error.invalid_scope': 'Invalid credential scope.',
+        'agents.error.secret_save_failed': 'Couldn\'t save the secret. Please try again.',
+        'agents.error.automation_not_supported': 'This agent does not support managed automation.',
+        'agents.error.automation_missing_pipe': 'Set at least one active pipe to this agent before enabling automation.',
+        'agents.error.automation_missing_credentials': 'Set all required secrets before enabling automation.',
+        'agents.error.automation_invalid_cron': 'One of the automation schedules is invalid.',
+        'agents.error.automation_save_failed': 'Couldn\'t save automation schedules. Please try again.',
+        'agents.error.automation_invalid_action': 'Invalid automation action.',
+        'agents.error.runtime_settings_invalid': 'Please check autonomy and advanced limit values.',
+        'agents.error.runtime_settings_save_failed': 'Couldn\'t save these settings. Please try again.',
+        'agents.error.runtime_settings_save_failed': 'Couldn\'t save these settings. Please try again.',
+        'providers.title': 'LLM Providers',
+        'providers.desc': 'Configure API keys and endpoints for LLM providers. Keys are encrypted at rest with AES-256-GCM.',
+        'providers.new_desc': 'Choose where Selu should run AI responses. Add only the providers you want to use.',
+        'providers.active': 'Active Providers',
+        'providers.empty': 'No active providers yet. Add one to start chatting with your agents.',
+        'providers.add': 'Add Provider',
+        'providers.add_title': 'Add Provider',
+        'providers.add_desc': 'Pick a provider, then we will guide you through the required setup fields and run a connection check.',
+        'providers.back': 'Back to Providers',
+        'providers.back_to_add': 'Back to Add Provider',
+        'providers.already_added': 'Added',
+        'providers.ready': 'Ready',
+        'providers.setup': 'Set up',
+        'providers.setup_title': 'Set Up Provider',
+        'providers.edit': 'Edit',
+        'providers.disconnect': 'Disconnect',
+        'providers.check_and_save': 'Check & Save',
+        'providers.key_will_replace': 'A key already exists. Saving will replace it.',
+        'providers.field.api_key': 'API Key',
+        'providers.field.base_url': 'Base URL',
+        'providers.category.cloud': 'Cloud',
+        'providers.category.local': 'Local',
+        'providers.provider.custom.subtitle': 'Model provider',
+        'providers.provider.openai.subtitle': 'OpenAI API',
+        'providers.provider.openai.key_placeholder': 'Paste your OpenAI API key',
+        'providers.provider.openai.base_placeholder': 'https://api.openai.com',
+        'providers.provider.openai.base_hint': 'Optional. Leave empty to use the default OpenAI URL.',
+        'providers.provider.anthropic.subtitle': 'Anthropic Claude API',
+        'providers.provider.anthropic.key_placeholder': 'Paste your Anthropic API key',
+        'providers.provider.anthropic.base_placeholder': 'https://api.anthropic.com',
+        'providers.provider.anthropic.base_hint': 'Optional. Leave empty to use the default Anthropic URL.',
+        'providers.provider.grok.subtitle': 'xAI Grok API',
+        'providers.provider.grok.key_placeholder': 'Paste your xAI API key',
+        'providers.provider.grok.base_placeholder': 'https://api.x.ai',
+        'providers.provider.grok.base_hint': 'Optional. Leave empty to use the default xAI URL.',
+        'providers.provider.bedrock.subtitle': 'Amazon Bedrock Runtime',
+        'providers.provider.bedrock.token_label': 'AWS Access Token',
+        'providers.provider.bedrock.token_placeholder': 'Paste your Bedrock bearer token',
+        'providers.provider.bedrock.region_label': 'AWS Region',
+        'providers.provider.bedrock.region_placeholder': 'us-east-1',
+        'providers.provider.bedrock.region_hint': 'Required. Example: us-east-1, us-west-2, eu-west-1.',
+        'providers.provider.pico.subtitle': 'Free macOS AI server by Pico AI \u2014 supports 300+ models',
+        'providers.provider.pico.key_label': 'Auth Token',
+        'providers.provider.pico.key_placeholder': 'Not required',
+        'providers.provider.pico.url_label': 'Pico AI Server URL',
+        'providers.provider.pico.url_placeholder': 'http://192.168.1.100:8090',
+        'providers.provider.pico.url_hint': 'Required. Download the free Pico AI Server app from picoai.app, then enter the URL shown in its settings.',
+        'providers.success.connected': 'Provider connected successfully.',
+        'providers.success.disconnected': 'Provider disconnected.',
+        'providers.setkey': 'Set Key',
+        'providers.update': 'Update',
+        'providers.removekey': 'Remove',
+        'providers.apikey': 'API Key',
+        'updates.title': 'Settings',
+        'updates.subtitle': 'Manage updates and core system preferences.',
+        'updates.summary.title': 'Software update',
+        'updates.summary.subtitle': 'Everything important in one place: current version, new version, and changes.',
+        'updates.summary.current': 'Current version',
+        'updates.summary.new': 'New version',
+        'updates.summary.available': 'Update available',
+        'updates.summary.yes': 'Yes',
+        'updates.summary.no': 'No',
+        'updates.summary.changes': 'Changes',
+        'updates.summary.no_changes': 'You are already on the latest version.',
+        'updates.summary.manage': 'Manage update',
+        'updates.summary.manage_title': 'Manage update',
+        'updates.summary.manage_subtitle': 'Review changes and start the update when you are ready.',
+        'updates.settings.title': 'System preferences',
+        'updates.last_error': 'Last error:',
+        'updates.public_origin.title': 'Public web address',
+        'updates.public_origin.note': 'Selu uses this address when it creates download links and webhooks for other apps.',
+        'updates.public_origin.label': 'Web address',
+        'updates.public_origin.placeholder': 'https://selu.example.com',
+        'updates.public_origin.save': 'Save web address',
+        'updates.public_origin.apply_current': 'Apply current host',
+        'updates.public_origin.current': 'Current host:',
+        'updates.channel.title': 'Release channel',
+        'updates.channel.label': 'Channel',
+        'updates.channel.stable': 'Stable (recommended)',
+        'updates.channel.dev': 'Dev',
+        'updates.channel.nightly': 'Nightly',
+        'updates.channel.save': 'Save channel',
+        'updates.channel.note': 'Stable is safest. Dev has newer features. Nightly changes every day and may break.',
+        'updates.status.title': 'Status',
+        'updates.status.installed': 'Installed',
+        'updates.status.available': 'Available',
+        'updates.status.previous': 'Previous',
+        'updates.status.changelog': 'Changelog:',
+        'updates.status.changelog_open': 'Open changelog',
+        'updates.status.changelog_missing': 'Not available yet',
+        'updates.changelog.before_update': 'Before updating, check what changed:',
+        'updates.status.checked': 'Last checked:',
+        'updates.status.attempt': 'Last update attempt:',
+        'updates.status.active_job': 'Active job:',
+        'updates.status.never': 'Never',
+        'updates.banner.available': 'A new version is ready.',
+        'updates.check_now': 'Check now',
+        'updates.update_now': 'Update now',
+        'updates.rollback_now': 'Rollback',
+        'updates.modal.eyebrow': 'System update',
+        'updates.modal.title.update': 'Updating Selu',
+        'updates.modal.title.rollback': 'Rolling back Selu',
+        'updates.modal.description': 'Keep this page open. Selu will refresh this page when everything is ready.',
+        'updates.modal.status.working': 'This can take a minute.',
+        'updates.modal.status.reconnecting': 'Waiting for Selu to come back.',
+        'updates.modal.status.failed': 'Something went wrong.',
+        'updates.modal.hint': 'We’ll keep checking in the background.',
+        'updates.modal.close': 'Close',
+        'updates.auto.title': 'Automatic updates',
+        'updates.auto.enabled': 'Auto-update is on',
+        'updates.auto.disabled': 'Auto-update is off',
+        'updates.auto.check_label': 'Daily checks:',
+        'updates.auto.check_on': 'On',
+        'updates.auto.check_off': 'Off',
+        'updates.auto.note': 'Auto-update applies the selected release channel when new versions are detected.',
+        'updates.install_stats.title': 'Anonymous installation statistics',
+        'updates.install_stats.desc': 'Selu can send a daily anonymous heartbeat to selu.bot with only this installation ID and your Selu version. This helps show popularity statistics.',
+        'updates.install_stats.status_label': 'Status:',
+        'updates.install_stats.status_on': 'On',
+        'updates.install_stats.status_off': 'Off',
+        'updates.install_stats.button_on': 'Turn off anonymous statistics',
+        'updates.install_stats.button_off': 'Turn on anonymous statistics',
+        'updates.install_stats.note': 'No chats, prompts, user names, IP addresses, or credentials are sent.',
+        'updates.state.idle': 'Idle',
+        'updates.state.checking': 'Checking for updates',
+        'updates.state.update_available': 'Update available',
+        'updates.state.updating': 'Updating',
+        'updates.state.rollback_available': 'Rollback available',
+        'updates.state.failed': 'Needs attention',
+        'updates.progress.idle': 'Waiting for the next check.',
+        'updates.progress.checking': 'Checking release metadata.',
+        'updates.progress.check_failed': 'Could not check for updates.',
+        'updates.progress.update_available': 'A newer version is ready.',
+        'updates.progress.preparing': 'Preparing update settings.',
+        'updates.progress.pulling': 'Downloading the new image.',
+        'updates.progress.restarting': 'Restarting Selu.',
+        'updates.progress.health_check': 'Running health checks.',
+        'updates.progress.apply_done': 'Update finished successfully.',
+        'updates.progress.apply_failed': 'Update failed.',
+        'updates.progress.rollback_ready': 'A rollback is available.',
+        'updates.progress.rollback_start': 'Starting rollback.',
+        'updates.progress.rollback_restarting': 'Restarting previous version.',
+        'updates.progress.rollback_done': 'Rollback finished successfully.',
+        'updates.progress.already_current': 'You are already on the latest version.',
+        'updates.flash.channel_saved': 'Release channel saved.',
+        'updates.flash.public_origin_saved': 'Public web address saved.',
+        'updates.flash.public_origin_applied': 'Current host applied as the public web address.',
+        'updates.flash.auto_update_saved': 'Automatic update setting saved.',
+        'updates.flash.installation_telemetry_saved': 'Anonymous installation statistics setting saved.',
+        'updates.flash.check_available': 'Update check complete. A new version is available.',
+        'updates.flash.check_none': 'Update check complete. You are already up to date.',
+        'updates.flash.apply_started': 'Update started.',
+        'updates.flash.apply_done': 'Update complete.',
+        'updates.flash.rollback_started': 'Rollback started.',
+        'updates.flash.rollback_done': 'Rollback complete.',
+        'updates.error.invalid_channel': 'Please choose stable, dev, or nightly.',
+        'updates.error.channel_save_failed': 'Could not save your release channel.',
+        'updates.error.auto_update_save_failed': 'Could not save automatic updates.',
+        'updates.error.installation_telemetry_save_failed': 'Could not save anonymous installation statistics setting.',
+        'updates.error.public_origin_invalid': 'Enter a full web address like https://selu.example.com.',
+        'updates.error.public_origin_save_failed': 'Could not save the public web address.',
+        'updates.error.check_failed': 'Could not check for updates. Please try again.',
+        'updates.error.apply_failed': 'Update failed. Your previous version was kept when possible.',
+        'updates.error.rollback_failed': 'Rollback failed. Please check your Docker setup.',
+        'users.title': 'Users',
+        'users.desc': 'User accounts used by pipes, sessions, and credentials.',
+        'users.account.desc': 'Manage your account settings.',
+        'users.create': 'Create User',
+        'users.create.hint.username': 'Unique, lowercase, no spaces.',
+        'users.create.hint.displayname': 'Defaults to username if left blank.',
+        'users.username': 'Username',
+        'users.displayname': 'Display Name',
+        'users.password': 'Password',
+        'users.password.change.title': 'Change Password',
+        'users.password.change.open': 'Change password',
+        'users.password.change.desc': 'Use your current password to set a new one.',
+        'users.password.change.hint': 'For security, other active sessions will be signed out after password change.',
+        'users.password.change.submit': 'Update password',
+        'users.password.current': 'Current password',
+        'users.password.current.placeholder': 'Your current password',
+        'users.password.new': 'New password',
+        'users.password.new.placeholder': 'At least 8 characters',
+        'users.password.confirm': 'Confirm new password',
+        'users.password.confirm.placeholder': 'Type the new password again',
+        'users.delete': 'Delete',
+        'users.cancel': 'Cancel',
+        'users.role': 'Role',
+        'users.admin': 'Admin',
+        'users.user': 'User',
+        'users.makeadmin': 'Make this user an admin',
+        'users.you': '(you)',
+        'users.language': 'Language',
+        'users.language.hint': 'The language agents will reply in.',
+        'users.created': 'Created',
+        'users.agents': 'Agents',
+        'users.agents.all': 'All agents',
+        'users.agents.none': 'No agents',
+        'users.agents.edit': 'Edit',
+        'users.agents.save': 'Save',
+        'users.agents.modal_title': 'Choose agents for',
+        'users.empty': 'No users yet. Create one below.',
+        'users.success.saved': 'Saved.',
+        'users.success.password_changed': 'Password updated. Your other active sessions were signed out.',
+        'users.error.duplicate': 'Username is already taken. Please choose a different username.',
+        'users.error.hash_failed': 'Couldn\'t secure the password. Please try again.',
+        'users.error.username_required': 'Username and password are required.',
+        'users.error.create_failed': 'Couldn\'t create the user. Please try again.',
+        'users.error.agents_save_failed': 'Couldn\'t save agent access. Please try again.',
+        'users.error.current_password_required': 'Please enter your current password.',
+        'users.error.new_password_required': 'Please enter a new password.',
+        'users.error.confirm_password_required': 'Please confirm your new password.',
+        'users.error.password_mismatch': 'New passwords do not match.',
+        'users.error.password_too_short': 'New password must be at least 8 characters long.',
+        'users.error.wrong_current_password': 'Current password is incorrect.',
+        'users.error.verify_failed': 'Couldn\'t verify your current password. Please try again.',
+        'users.error.password_change_failed': 'Couldn\'t change your password. Please try again.',
+        'users.error.unexpected': 'Something went wrong. Please try again.',
+        'chat.nopipes.hint': 'Ask an admin to set up a pipe for you.',
+        'creds.title': 'Credentials',
+        'creds.desc': 'Encrypted secrets passed to capability containers. All values are AES-256-GCM encrypted at rest.',
+        'creds.system': 'System Credentials',
+        'creds.user': 'User Credentials',
+        'creds.set.system': 'Set System Credential',
+        'creds.set.user': 'Set User Credential',
+        'subs.title': 'Event Subscriptions',
+        'subs.desc': 'Trigger outbound notifications or agent invocations when agent events match a CEL filter expression.',
+        'subs.create': 'Create Subscription',
+        'subs.deactivate': 'Deactivate',
+        'personality.title': 'Memory',
+        'personality.desc': 'This is what your agents know about you. Facts are shared across all agents. You can edit or remove anything.',
+        'personality.add': 'Add a fact',
+        'personality.category': 'Category',
+        'personality.fact': 'Fact',
+        'personality.fact.placeholder': 'e.g. My name is Jan, I live in Berlin...',
+        'personality.edit': 'Edit',
+        'personality.delete': 'Remove',
+        'personality.empty': 'No facts yet.',
+        'personality.source.auto': 'Learned from conversation',
+        'personality.source.agent': 'Saved by agent',
+        'personality.source.manual': 'Added manually',
+        'personality.cat.personal': 'Personal',
+        'personality.cat.preferences': 'Preferences',
+        'personality.cat.location': 'Location',
+        'personality.cat.work': 'Work & Skills',
+        'personality.cat.other': 'Other',
+        'personality.error.empty': 'Please enter a fact.',
+        'personality.error.addfailed': 'Could not save the fact. Please try again.',
+        'personality.error.generic': 'Something went wrong. Please try again.',
+        'personality.success.added': 'Fact added.',
+        'personality.success.generic': 'Done.',
+        'schedules.title': 'Schedules',
+        'schedules.desc': 'Automate recurring tasks. Schedule results appear as new conversations in Chat.',
+        'schedules.add': 'Add Schedule',
+        'schedules.timezone': 'Timezone',
+        'schedules.empty': 'No schedules yet. Create one below or use /schedule add in chat.',
+        'schedules.on': 'On',
+        'schedules.off': 'Off',
+        'schedules.one_shot': 'Fires once',
+        'schedules.completed': 'Completed',
+        'schedules.col.name': 'Name',
+        'schedules.col.prompt': 'What it does',
+        'schedules.col.when': 'When',
+        'schedules.col.pipes': 'Pipes',
+        'schedules.col.nextrun': 'Next Run',
+        'schedules.col.lastrun': 'Last Run',
+        'schedules.col.status': 'Status',
+        'schedules.form.name': 'Name',
+        'schedules.form.name.placeholder': 'e.g. morning-report',
+        'schedules.form.when': 'When',
+        'schedules.form.when.placeholder': 'e.g. Every weekday at 6:45 AM',
+        'schedules.form.when.hint': 'Natural language is fine \u2014 recurring or one-time. Selu will figure it out.',
+        'schedules.form.prompt': 'What should happen',
+        'schedules.form.prompt.placeholder': 'e.g. Give me a summary of my calendar today, any new emails, and the weather.',
+        'schedules.form.pipes': 'Run on these pipes',
+        'schedules.nopipes': 'No pipes found.',
+        'schedules.nopipes.hint': 'Create a pipe first to use schedules.',
+        'schedules.chat.hint': 'Tip: You can also manage schedules from Chat with /schedule add, /schedule list, /schedule delete, and /remind.',
+        'common.optional': 'Optional',
+        'common.delete': 'Delete',
+        'common.change': 'Change',
+        'common.add': '+ Add',
+        'common.cancel': 'Cancel',
+        'common.retry': 'Retry',
+        'common.save': 'Save',
+        'common.back': 'Back',
+        'pipes.telegram': 'Telegram',
+        'pipes.telegram.desc': 'Connect a Telegram bot. Your agents can receive and reply to Telegram messages with streaming support.',
+        'pipes.telegram.via': 'Telegram Bot',
+        'pipes.telegram.https': 'Requires HTTPS. Access Selu via HTTPS or set SELU__EXTERNAL_URL to an https:// address.',
+        'tg.title': 'Set Up Telegram',
+        'tg.subtitle': 'Connect a Telegram bot to Selu. You\'ll need a bot token from @BotFather.',
+        'tg.subtitle.before_link': 'Connect a Telegram bot to Selu. You\'ll need a bot token from',
+        'tg.step1': 'Connect Bot',
+        'tg.step2': 'Pick Chat',
+        'tg.step3': 'Add People',
+        'tg.step1.title': 'Step 1: Connect Your Telegram Bot',
+        'tg.step1.desc': 'Enter the bot token you got from @BotFather. Open Telegram, search for @BotFather, and use /newbot to create a bot.',
+        'tg.bottoken': 'Bot Token',
+        'tg.bottoken.hint': 'You can find this in the BotFather chat in Telegram.',
+        'tg.connect': 'Connect to Telegram',
+        'tg.connecting': 'Connecting...',
+        'tg.verifying': 'Verifying bot token...',
+        'tg.connected': 'Connected!',
+        'tg.connected_btn': 'Connected',
+        'tg.retry': 'Retry',
+        'tg.error.notoken': 'Please enter a bot token.',
+        'tg.error.network': 'Network error. Is Selu running?',
+        'tg.step2.title': 'Step 2: Pick a Chat',
+        'tg.step2.desc': 'Choose which Telegram chat Selu should respond in. Send a message to your bot first to make it appear here.',
+        'tg.nochats.title': 'No chats found yet',
+        'tg.nochats.desc': 'Send a message to your bot in Telegram, then click "Refresh" below.',
+        'tg.refresh': 'Refresh',
+        'tg.chatid.manual': 'Or enter a Chat ID manually',
+        'tg.chatid.label': 'Chat ID',
+        'tg.chatid.hint': 'You can get the chat ID by forwarding a message from the chat to @userinfobot.',
+        'tg.use': 'Use',
+        'tg.change': 'Change',
+        'tg.pipename': 'Pipe Name',
+        'tg.pipename.placeholder': 'e.g. Family Bot',
+        'tg.whocan': 'Who Can Talk to Selu?',
+        'tg.whocan.desc': 'Restrict which Telegram users Selu responds to. Until you add someone, Selu will stay quiet.',
+        'tg.tguser': 'Telegram User ID',
+        'tg.tguser.hint': 'Send /start to @userinfobot to find your Telegram user ID.',
+        'tg.seluuser': 'Selu User',
+        'tg.setup': 'Set Up Telegram Bot',
+        'tg.detail.via': 'Telegram bot',
+        'tg.detail.connection': 'Connection',
+        'tg.detail.chatid': 'Telegram chat',
+        'tg.detail.agent': 'Agent',
+        'tg.detail.people': 'Who can use this pipe?',
+        'tg.detail.people.desc': 'Choose which Telegram people Selu should answer here. Until you add someone, Selu will not reply on Telegram.',
+        'tg.detail.everyone': 'No one is allowed yet. Add someone before Selu replies on Telegram.',
+        'tg.detail.sender.placeholder': '123456789',
+        'tg.detail.addperson': 'Add person',
+        'tg.detail.person.exists': 'This Telegram person has already been added.',
+        'tg.detail.danger': 'Remove this pipe',
+        'tg.detail.danger.desc': 'If you remove this pipe, your Telegram bot will stop replying.',
+        'tg.detail.remove': 'Remove Telegram pipe',
+        'tg.detail.remove.confirm': 'Remove this Telegram pipe?',
+        'tg.troubleshoot.title': 'Delivery check',
+        'tg.troubleshoot.desc': 'Use this if Telegram messages are not reaching Selu. We will check whether Telegram is still pointing to the right Selu address.',
+        'tg.troubleshoot.check': 'Check connection',
+        'tg.troubleshoot.hint': 'The current Telegram connection status will appear here.',
+        'tg.troubleshoot.waiting': 'Checking connection...',
+        'tg.troubleshoot.url': 'Webhook URL',
+        'tg.troubleshoot.pending': 'Waiting messages',
+        'tg.troubleshoot.nourl': 'No webhook URL set',
+        'tg.troubleshoot.reregister': 'Refresh Telegram connection',
+        'tg.troubleshoot.reregister.desc': 'If Telegram still points to an old address, you can refresh the connection here.',
+        'tg.troubleshoot.reregister.confirm': 'Refresh the Telegram connection now?',
+        'tg.troubleshoot.reregister.waiting': 'Refreshing connection...',
+        'tg.troubleshoot.httpsonly': 'To refresh the Telegram connection, open Selu over HTTPS first.',
+        'tg.troubleshoot.registered': 'Telegram connection refreshed.',
+        'tg.troubleshoot.error': 'Could not check the Telegram connection right now.',
+        'tg.troubleshoot.refresh_error': 'Could not refresh the Telegram connection right now.',
+        'wa.title': 'Set Up WhatsApp',
+        'wa.subtitle': 'Connect WhatsApp with Selu\'s managed bridge. Selu starts and updates the bridge automatically.',
+        'wa.step1': 'Create WhatsApp Pipe',
+        'wa.step2': 'Pair and Pick Chats',
+        'wa.step1.title': 'Step 1: Managed WhatsApp Bridge',
+        'wa.step1.desc': 'Selu manages the WhatsApp bridge container for you. No URL setup needed. After creating the pipe, open the next page to scan the QR code and pick chats.',
+        'wa.step1.discovery.hint': 'After pairing, chat search only shows conversations seen by the bridge. If a chat is missing, send one WhatsApp message first, then search again.',
+        'wa.self.warning': 'Messaging yourself on WhatsApp is experimental. Self-chat replies can be unreliable, especially on iPhone.',
+        'wa.pipename': 'Pipe Name',
+        'wa.pipename.placeholder': 'e.g. Team WhatsApp',
+        'wa.auth': 'Authorization Header',
+        'wa.auth.placeholder': 'Bearer your-bridge-secret',
+        'wa.auth.hint': 'Optional. If your bridge requires auth, include the full header value (for example: Bearer ...).',
+        'wa.single.limit': 'Only one WhatsApp pipe is supported right now. Remove the existing one before creating another.',
+        'wa.whocan': 'Who Can Talk to Selu?',
+        'wa.whocan.desc': 'Restrict which WhatsApp chats Selu responds to. Until you add a chat, Selu will stay quiet.',
+        'wa.chatsearch': 'Find a WhatsApp chat',
+        'wa.chatsearch.placeholder': 'Name, sender ID, or chat ID',
+        'wa.chatsearch.btn': 'Find',
+        'wa.chatsearch.hint': 'Search chats connected in your WhatsApp session, then add one to the allow list.',
+        'wa.chatsearch.discover.hint': 'Only chats discovered by the active WhatsApp session are listed here. If a chat is missing, send one message from that chat first, then search again.',
+        'wa.chatsearch.loading': 'Loading chats...',
+        'wa.chatsearch.empty': 'No chats found yet.',
+        'wa.chatsearch.error': 'Could not load chats.',
+        'wa.chatsearch.use': 'Use',
+        'wa.chatsearch.pickfirst': 'Please pick a chat first.',
+        'wa.sender': 'WhatsApp Sender',
+        'wa.sender.placeholder': '+491701234567 or 491701234567@s.whatsapp.net',
+        'wa.seluuser': 'Selu User',
+        'wa.addperson': 'Add person',
+        'wa.setup': 'Set Up WhatsApp',
+        'wa.detail.via': 'WhatsApp via Baileys',
+        'wa.detail.pairing': 'WhatsApp connection',
+        'wa.detail.state': 'Bridge',
+        'wa.detail.running': 'Ready',
+        'wa.detail.notrunning': 'Needs attention',
+        'wa.detail.connectionstate': 'Phone connection',
+        'wa.detail.connectedas': 'WhatsApp account',
+        'wa.detail.scan': 'Open WhatsApp on your phone, then scan this QR code from Settings > Linked Devices.',
+        'wa.detail.qrwait': 'Waiting for a QR code. Refresh this page in a few seconds.',
+        'wa.detail.status.unavailable': 'We could not check the WhatsApp connection right now.',
+        'wa.status.bridge_disabled': 'WhatsApp bridge is disabled',
+        'wa.status.bridge_not_running': 'WhatsApp bridge is not running',
+        'wa.status.bridge_running': 'WhatsApp bridge is running',
+        'wa.status.bridge_running_session_unavailable': 'WhatsApp bridge is running, but session status is unavailable',
+        'wa.status.chats_loaded': 'WhatsApp chats loaded',
+        'wa.status.bridge_running_chats_unavailable': 'WhatsApp bridge is running, but chats are unavailable',
+        'wa.connection.open': 'Connected',
+        'wa.connection.connected': 'Connected',
+        'wa.connection.connecting': 'Connecting',
+        'wa.connection.closed': 'Disconnected',
+        'wa.connection.disconnected': 'Disconnected',
+        'wa.connection.qr': 'Waiting for QR code',
+        'wa.connection.pairing': 'Pairing',
+        'wa.detail.connection': 'Advanced details',
+        'wa.detail.connection.desc': 'You usually only need these details when troubleshooting your WhatsApp bridge.',
+        'wa.detail.bridgeurl': 'Bridge address',
+        'wa.detail.inboundurl': 'Selu receiving address',
+        'wa.detail.token': 'Access token',
+        'wa.detail.agent': 'Agent',
+        'wa.detail.people': 'Who can use this pipe?',
+        'wa.detail.people.desc': 'Choose which WhatsApp chats Selu should answer. Until you add a chat here, Selu will not reply on WhatsApp.',
+        'wa.detail.everyone': 'No chats are allowed yet. Add a chat before Selu replies on WhatsApp.',
+        'wa.detail.person.missing': 'Choose a chat and a Selu user first.',
+        'wa.detail.person.exists': 'This WhatsApp chat has already been added.',
+        'wa.detail.danger': 'Remove this pipe',
+        'wa.detail.danger.desc': 'If you remove this pipe, WhatsApp messages will stop reaching Selu.',
+        'wa.detail.remove': 'Remove WhatsApp pipe',
+        'wa.detail.remove.confirm': 'Remove this WhatsApp pipe?',
+      },
+      de: {
+        'nav.main': 'Haupt',
+        'nav.chat': 'Chat',
+        'nav.personality': 'Ged\u00e4chtnis',
+        'nav.pipes': 'Pipes',
+        'nav.agents': 'Agenten',
+        'nav.providers': 'Anbieter',
+        'nav.system_updates': 'Einstellungen',
+        'nav.users': 'Benutzer',
+        'nav.advanced': 'Erweitert',
+        'nav.credentials': 'Zugangsdaten',
+        'nav.events': 'Ereignisse',
+        'nav.signout': 'Abmelden',
+        'nav.schedules': 'Zeitpl\u00e4ne',
+        'chat.conversations': 'Unterhaltungen',
+        'chat.new': 'Neue Unterhaltung',
+        'chat.nopipes': 'Noch keine Pipes.',
+        'chat.createone': 'Erstellen',
+        'chat.noconversations': 'Noch keine Unterhaltungen',
+        'chat.start': 'Unterhaltung starten',
+        'chat.select': 'Unterhaltung aus der Seitenleiste ausw\u00e4hlen',
+        'chat.selectpipe': 'W\u00e4hle eine Unterhaltung zum Chatten',
+        'chat.openconversations': 'Unterhaltungen \u00f6ffnen',
+        'chat.delete': 'Unterhaltung l\u00f6schen',
+        'chat.delete.confirm': 'Diese Unterhaltung l\u00f6schen? Das kann nicht r\u00fcckg\u00e4ngig gemacht werden.',
+        'chat.placeholder': 'Nachricht... (Shift+Enter f\u00fcr Zeilenumbruch)',
+        'chat.send': 'Senden',
+        'chat.attach_image': 'Bild anh\u00e4ngen',
+        'chat.image_preview': 'Bildvorschau',
+        'chat.remove_image': 'Bild entfernen',
+        'chat.image_selected_single': '1 Bild ausgew\u00e4hlt',
+        'chat.image_selected_multi': '{count} Bilder ausgew\u00e4hlt',
+        'chat.image_only_sent': '[Bild gesendet]',
+        'chat.image_attached_note': '[Bild angeh\u00e4ngt]',
+        'chat.confirm.title': 'Best\u00e4tigung erforderlich',
+        'chat.confirm.tool': 'Tool:',
+        'chat.confirm.approve': 'Genehmigen',
+        'chat.confirm.deny': 'Ablehnen',
+        'chat.confirm.approved': 'Genehmigt',
+        'chat.confirm.denied': 'Abgelehnt',
+        'chat.confirm.expired': 'Best\u00e4tigung abgelaufen oder bereits bearbeitet.',
+        'chat.confirm.queued': 'Genehmigung angefragt f\u00fcr {tool} (id: {id})',
+        'pipes.title': 'Pipes',
+        'pipes.desc': 'Pipes verbinden die Au\u00dfenwelt mit deinen Agenten. F\u00fcge f\u00fcr jeden Kommunikationsweg eine Pipe hinzu.',
+        'pipes.active': 'Aktive Pipes',
+        'pipes.empty': 'Noch keine aktiven Pipes. F\u00fcge eine hinzu, damit Menschen deine Agenten erreichen k\u00f6nnen.',
+        'pipes.add': 'Pipe hinzuf\u00fcgen',
+        'pipes.add_title': 'Pipe hinzuf\u00fcgen',
+        'pipes.add_desc': 'W\u00e4hle, wie Menschen Selu erreichen sollen. Danach f\u00fchrt Selu dich durch die Einrichtung dieses Pipe-Typs.',
+        'pipes.addnew': 'Neue Pipe hinzuf\u00fcgen',
+        'pipes.webui': 'Web UI',
+        'pipes.webui.desc': 'Chatte direkt \u00fcber die Selu-Weboberfl\u00e4che mit deinen Agenten.',
+        'pipes.imessage': 'iMessage',
+        'pipes.imessage.desc': 'Verbinde iMessage deines Mac \u00fcber BlueBubbles.',
+        'pipes.whatsapp': 'WhatsApp',
+        'pipes.whatsapp.desc': 'Verbinde WhatsApp \u00fcber eine Baileys-Bridge mit einem einfachen Assistenten.',
+        'pipes.whatsapp.single.desc': 'WhatsApp unterst\u00fctzt aktuell nur eine aktive Pipe pro Selu-Instanz.',
+        'pipes.whatsapp.single.manage': 'Verwalte deine bestehende WhatsApp-Pipe.',
+        'pipes.whatsapp.via': 'WhatsApp \u00fcber Baileys',
+        'pipes.webhook': 'Webhook',
+        'pipes.webhook.desc': 'F\u00fcr Entwickler: Externen Dienst via HTTP anbinden.',
+        'pipes.setup': 'Einrichten',
+        'pipes.comingsoon': 'Bald verf\u00fcgbar',
+        'pipes.remove': 'Entfernen',
+        'pipes.connected': 'Verbunden',
+        'pipes.inactive': 'Inaktiv',
+        'pipes.checking': 'Pr\u00fcfe',
+        'pipes.active_status': 'Aktiv',
+        'pipes.back': 'Zur\u00fcck zu Pipes',
+        'pipes.back_to_add': 'Zur\u00fcck zu Pipe hinzuf\u00fcgen',
+        'pipes.person.added': 'Person hinzugef\u00fcgt.',
+        'pipes.person.add.error': 'Diese Person konnte nicht hinzugef\u00fcgt werden. Bitte versuche es erneut.',
+        'pipes.person.remove.confirm': 'Diese Person entfernen?',
+        'pipes.form.no_users.title': 'Keine Benutzer gefunden.',
+        'pipes.form.no_users.before_link': 'Du brauchst mindestens ein Benutzerkonto, bevor du eine Pipe erstellen kannst.',
+        'pipes.form.no_users.link': 'Benutzer erstellen',
+        'pipes.form.select_user': '-- Benutzer ausw\u00e4hlen --',
+        'pipes.web.title': 'Neue Web UI Pipe',
+        'pipes.web.desc': 'Erstelle eine Pipe f\u00fcr den Chat mit deinen Agenten \u00fcber die Selu-Weboberfl\u00e4che.',
+        'pipes.web.config': 'Web UI Konfiguration',
+        'pipes.web.name_placeholder': 'z. B. Allgemein, Arbeit, Privat',
+        'pipes.web.name_hint': 'Ein freundlicher Name, der in der Chat-Seitenleiste erscheint.',
+        'pipes.webhook.title': 'Neue Webhook Pipe',
+        'pipes.webhook.desc': 'Verbinde einen externen Dienst mit Selu via HTTP.',
+        'pipes.webhook.config': 'Webhook Konfiguration',
+        'pipes.webhook.name_placeholder': 'z. B. Slack Bot, Telegram Bridge',
+        'pipes.webhook.name_hint': 'Ein freundlicher Name f\u00fcr diese Pipe.',
+        'pipes.webhook.callback_placeholder': 'https://dein-dienst.example.com/selu-replies',
+        'pipes.webhook.callback_hint': 'Selu sendet Antworten deiner Agenten als JSON an diese URL.',
+        'pipes.webhook.auth_placeholder': 'Bearer dein-secret-token',
+        'pipes.webhook.auth_hint': 'Falls deine R\u00fcckruf-URL Auth braucht, sendet Selu diesen Wert als Authorization-Header.',
+        'pipes.name': 'Name',
+        'pipes.owner': 'Eigent\u00fcmer',
+        'pipes.cancel': 'Abbrechen',
+        'pipes.create.web': 'Web Pipe erstellen',
+        'pipes.create.webhook': 'Webhook Pipe erstellen',
+        'pipes.callbackurl': 'R\u00fcckruf-URL',
+        'pipes.callbackauth': 'R\u00fcckruf Auth-Header',
+        'imsg.title': 'iMessage einrichten',
+        'imsg.desc': 'Verbinde iMessage mit Selu.',
+        'imsg.subtitle.before_link': 'Verbinde iMessage mit Selu. Du brauchst einen',
+        'imsg.subtitle.after_link': 'Server auf deinem Mac.',
+        'imsg.step1': 'Server verbinden',
+        'imsg.step1.title': 'Schritt 1: Mit BlueBubbles verbinden',
+        'imsg.step1.desc': 'Gib die Daten deines BlueBubbles-Servers ein. Du findest sie in der BlueBubbles-App unter Einstellungen > Verbindung.',
+        'imsg.step2': 'Chat ausw\u00e4hlen',
+        'imsg.step2.title': 'Schritt 2: Chat ausw\u00e4hlen',
+        'imsg.step2.desc': 'W\u00e4hle, welche iMessage-Unterhaltung Selu beobachten und beantworten soll.',
+        'imsg.step3': 'Personen hinzuf\u00fcgen',
+        'imsg.connect': 'Mit BlueBubbles verbinden',
+        'imsg.connecting': 'Verbinde...',
+        'imsg.verifying': 'BlueBubbles-Server wird erreicht...',
+        'imsg.connected_btn': 'Verbunden',
+        'imsg.connected_found': 'Verbunden! {count} Chat(s) gefunden.',
+        'imsg.error.missing_credentials': 'Bitte gib sowohl URL als auch Passwort ein.',
+        'imsg.error.network': 'Netzwerkfehler. L\u00e4uft Selu?',
+        'imsg.pipename': 'Pipe-Name',
+        'imsg.pipename.placeholder': 'z. B. Familienchat',
+        'imsg.server_url': 'Server-URL',
+        'imsg.server_url.placeholder': 'http://host.docker.internal:1234',
+        'imsg.server_url.hint': 'Wenn Selu in Docker auf deinem Mac l\u00e4uft, nutze http://host.docker.internal:PORT.',
+        'imsg.server_password': 'Server-Passwort',
+        'imsg.server_password.placeholder': 'Dein BlueBubbles-Passwort',
+        'imsg.chat_search.placeholder': 'Chats durchsuchen...',
+        'imsg.chat_search.empty': 'Keine passenden Chats gefunden.',
+        'imsg.people_in_chat': 'Personen in diesem Chat:',
+        'imsg.sender': 'Telefon / Apple-ID',
+        'imsg.sender.placeholder': '+491701234567 oder email@icloud.com',
+        'imsg.seluuser': 'Selu-Benutzer',
+        'imsg.whocan': 'Wer darf mit Selu sprechen?',
+        'imsg.setup': 'iMessage einrichten',
+        'imsg.detail.via': 'iMessage \u00fcber BlueBubbles',
+        'imsg.detail.connection': 'Verbindung',
+        'imsg.detail.server': 'BlueBubbles-Server',
+        'imsg.detail.chat': 'Ausgew\u00e4hlter Chat',
+        'imsg.detail.agent': 'Agent',
+        'imsg.detail.people': 'Wer darf diese Pipe nutzen?',
+        'imsg.detail.people.desc': 'W\u00e4hle, welchen Personen in diesem iMessage-Chat Selu antworten soll. Bis du hier jemanden hinzuf\u00fcgst, bleibt Selu still.',
+        'imsg.detail.everyone': 'Noch niemand ist erlaubt. F\u00fcge zuerst jemanden hinzu, bevor Selu in diesem Chat antwortet.',
+        'imsg.detail.sender': 'Telefonnummer oder Apple-ID',
+        'imsg.detail.sender.placeholder': '+491701234567 oder name@icloud.com',
+        'imsg.detail.seluuser': 'Selu-Benutzer',
+        'imsg.detail.addperson': 'Person hinzuf\u00fcgen',
+        'imsg.detail.person.exists': 'Diese Telefonnummer oder Apple-ID wurde bereits hinzugef\u00fcgt.',
+        'imsg.detail.danger': 'Diese Pipe entfernen',
+        'imsg.detail.danger.desc': 'Wenn du diese Pipe entfernst, antwortet Selu nicht mehr in diesem iMessage-Chat.',
+        'imsg.detail.remove': 'iMessage-Pipe entfernen',
+        'imsg.detail.remove.confirm': 'Diese iMessage-Pipe entfernen?',
+        'agents.title': 'Agenten',
+        'agents.desc': 'Installiere Agenten vom Marketplace und konfiguriere deren LLM-Anbieter und Modell.',
+        'agents.globalmodel': 'Globales Standardmodell',
+        'agents.globalimagemodel': 'Globales Standard-Bildmodell',
+        'agents.installed': 'Installierte Agenten',
+        'agents.marketplace': 'Marketplace',
+        'agents.install': 'Installieren',
+        'agents.uninstall': 'Deinstallieren',
+        'agents.setup': 'Einrichten',
+        'agents.model': 'Modell',
+        'agents.image_model': 'Bildmodell',
+        'agents.image_model_short': 'Bild:',
+        'agents.save': 'Speichern',
+        'agents.complete': 'Einrichtung abschlie\u00dfen',
+        'agents.noagents': 'Keine Agenten installiert. Besuche den Marketplace.',
+        'agents.globalmodel.hint': 'Wird verwendet, wenn kein Modell pro Agent gesetzt ist',
+        'agents.globalimagemodel.hint': 'Wird für Bilderzeugung und Bildbearbeitung genutzt, wenn kein Bildmodell pro Agent gesetzt ist',
+        'agents.provider': 'Anbieter',
+        'agents.selectprovider': '-- Anbieter ausw\u00e4hlen --',
+        'agents.selectproviderfirst': '-- Zuerst einen Anbieter ausw\u00e4hlen --',
+        'agents.temperature': 'Temperatur',
+        'agents.noproviders': 'Keine Anbieter konfiguriert. Gehe zu Anbieter, um einen API-Schl\u00fcssel einzurichten.',
+        'agents.table.id': 'ID',
+        'agents.table.name': 'Name',
+        'agents.table.providermodel': 'Anbieter / Modell',
+        'agents.table.capabilities': 'F\u00e4higkeiten',
+        'agents.table.status': 'Status',
+        'agents.table.actions': 'Aktionen',
+        'agents.bundled': 'Mitgeliefert',
+        'agents.globaldefault': 'Globaler Standard',
+        'agents.globaldefaultoption': '-- Globaler Standard --',
+        'agents.status.active': 'Aktiv',
+        'agents.status.pending': 'Einrichtung ausstehend',
+        'agents.uninstall.confirm': '{name} deinstallieren? Alle Agent-Dateien werden entfernt.',
+        'agents.marketplace.empty': 'Keine Agenten im Marketplace verf\u00fcgbar.',
+        'agents.installed.badge': 'Installiert',
+        'agents.loadingmodels': 'Modelle werden geladen...',
+        'agents.loadmodelsfailed': 'Modelle konnten nicht geladen werden',
+        'agents.success.global_default_image_model_updated': 'Globales Standard-Bildmodell aktualisiert.',
+        'agents.success.image_model_updated': 'Bildmodell aktualisiert.',
+        'agents.update': 'Aktualisieren',
+        'agents.update.confirm': '{name} auf Version {version} aktualisieren? Laufende Sitzungen werden unterbrochen.',
+        'agents.update.confirm_action': 'Update starten',
+        'agents.update.modal.title': 'Agent aktualisieren?',
+        'agents.update.progress.title': 'Wird im Hintergrund aktualisiert',
+        'agents.update.phase.preparing': 'Update wird vorbereitet...',
+        'agents.update.phase.downloading': 'Update-Dateien werden geladen...',
+        'agents.update.phase.finalizing': 'Update wird abgeschlossen...',
+        'agents.update.success.updated': 'Aktualisierung abgeschlossen.',
+        'agents.update.success.setup_required': 'Aktualisierung abgeschlossen. Ein weiterer Einrichtungsschritt ist erforderlich.',
+        'agents.update.error.invalid_payload': 'Update konnte nicht gestartet werden. Bitte neu laden und erneut versuchen.',
+        'agents.update.error.docker': 'Docker-Verbindung fehlgeschlagen. Bitte Docker prüfen und erneut versuchen.',
+        'agents.update.error.start': 'Update konnte nicht gestartet werden. Bitte erneut versuchen.',
+        'agents.update.error.failed': 'Update fehlgeschlagen. Bitte erneut versuchen.',
+        'agents.update.error.status': 'Update-Status nicht verfügbar. Bitte neu laden.',
+        'agents.update.refresh': 'Neu laden',
+        'agents.update.open_setup': 'Setup öffnen',
+        'agents.update.available': 'Update verf\u00fcgbar',
+        'agents.update.wizard.title': 'Agent aktualisieren',
+        'agents.update.wizard.desc': 'Du prüfst das Update, wartest kurz auf die Installation und siehst nur dann noch einen Schritt, wenn etwas Neues deine Aufmerksamkeit braucht.',
+        'agents.update.wizard.step1.label': 'Schritt 1',
+        'agents.update.wizard.step1.title': 'Prüfen',
+        'agents.update.wizard.step1.desc': 'Sieh dir an, auf welche Version du wechselst.',
+        'agents.update.wizard.step2.label': 'Schritt 2',
+        'agents.update.wizard.step2.title': 'Aktualisieren',
+        'agents.update.wizard.step2.desc': 'Selu lädt die neue Version und behält deine bisherigen Einstellungen, wenn das möglich ist.',
+        'agents.update.wizard.step3.label': 'Schritt 3',
+        'agents.update.wizard.step3.title': 'Abschließen',
+        'agents.update.wizard.step3.desc': 'Wenn das Update etwas Neues mitbringt, führt Selu dich direkt dorthin.',
+        'agents.update.wizard.from_version': 'Aktuelle Version',
+        'agents.update.wizard.to_version': 'Neue Version',
+        'agents.update.wizard.note': 'Gespeicherte Geheimnisse und Tool-Entscheidungen bleiben erhalten. Du wirst nur nach Dingen gefragt, die die neue Version zusätzlich braucht.',
+        'agents.update.wizard.progress_hint': 'Lass diese Seite bitte offen, bis das Update fertig ist.',
+        'agents.update.wizard.redirecting': 'Der letzte Schritt wird jetzt geöffnet...',
+        'agents.update.wizard.complete_title': 'Aktualisierung abgeschlossen',
+        'agents.update.wizard.done': 'Zurück zu Agenten',
+        'agents.update.wizard.error_title': 'Aktualisierung fehlgeschlagen',
+        'agents.autoupdate.short': 'Auto',
+        'agents.autoupdate.enable': 'Auto-Update aktivieren',
+        'agents.autoupdate.disable': 'Auto-Update deaktivieren',
+        'agents.filter.all': 'Alle',
+        'agents.filter.available': 'Verf\u00fcgbar',
+        'agents.filter.installed': 'Installiert',
+        'agents.filter.updates': 'Update verf\u00fcgbar',
+        'agents.rating.label': 'Bewerten:',
+        'agents.table.version': 'Version',
+        'agents.back': 'Zur\u00fcck zu Agenten',
+        'agents.detail.network': 'Netzwerk',
+        'agents.detail.allowedhosts': 'Erlaubte Hosts',
+        'agents.detail.network_access': 'Netzwerkzugriff',
+        'agents.detail.network_user_overrides': 'Deine Auswahl hier überschreibt die Standard-Netzwerkregel dieses Agenten.',
+        'agents.detail.network_access_hint': 'Wähle Verbieten, um den gesamten Netzwerkverkehr für diese Capability zu pausieren.',
+        'agents.detail.allowedhosts_hint': 'Standard-Hosts kommen vom Agenten. Setze einen Host auf Verbieten, um ihn zu blockieren.',
+        'agents.detail.host_default': 'Standard',
+        'agents.detail.host_custom': 'Eigene',
+        'agents.detail.add_host': 'Host hinzufügen',
+        'agents.detail.add_host_placeholder': 'pypi.org:443',
+        'agents.detail.add_host_hint': 'Nutze Host oder Host:Port (zum Beispiel pypi.org:443).',
+        'agents.detail.add': 'Hinzufügen',
+        'agents.detail.remove': 'Entfernen',
+        'agents.detail.deny': 'Verbieten',
+        'agents.detail.resources': 'Ressourcen',
+        'agents.detail.memory': 'Speicher',
+        'agents.detail.cpu': 'CPU',
+        'agents.detail.pids': 'PIDs',
+        'agents.detail.fs': 'FS',
+        'agents.detail.tools': 'Tools',
+        'agents.detail.tools.desc': 'Steuere, wie dieser Agent diese Tools nutzt. \u00c4nderungen wirken sofort.',
+        'agents.detail.tools.desc.admin': 'Standardberechtigungen f\u00fcr alle Nutzer festlegen. \u00c4nderungen wirken sofort.',
+        'agents.detail.admin_badge': 'Admin',
+        'agents.detail.tools.desc.user': 'Standardberechtigungen f\u00fcr dein Konto \u00fcberschreiben. \u00c4nderungen wirken sofort.',
+        'agents.detail.builtintools': 'Eingebaute Tool-Berechtigungen',
+        'agents.detail.builtintools.desc': 'Steuere, wie dieser Agent eingebaute Tools nutzt. \u00c4nderungen wirken sofort.',
+        'agents.detail.builtintools.desc.admin': 'Standardberechtigungen f\u00fcr alle Nutzer festlegen. \u00c4nderungen wirken sofort.',
+        'agents.detail.builtintools.desc.user': 'Standardberechtigungen f\u00fcr dein Konto \u00fcberschreiben. \u00c4nderungen wirken sofort.',
+        'agents.builtin.delegate_to_agent': 'An Agent delegieren',
+        'agents.builtin.delegate_to_agent.desc': 'Erlaubt dem Agenten, Aufgaben an andere Spezial-Agenten weiterzugeben.',
+        'agents.builtin.emit_event': 'Ereignis ausl\u00f6sen',
+        'agents.builtin.emit_event.desc': 'Erlaubt dem Agenten, Ereignisse auszul\u00f6sen, die andere Agenten oder Benachrichtigungen starten.',
+        'agents.builtin.store_get': 'Speicher abrufen',
+        'agents.builtin.store_get.desc': 'Erlaubt dem Agenten, dauerhaft gespeicherte Werte abzurufen.',
+        'agents.builtin.store_set': 'Speicher setzen',
+        'agents.builtin.store_set.desc': 'Erlaubt dem Agenten, Schl\u00fcssel-Wert-Paare dauerhaft zu speichern.',
+        'agents.builtin.store_delete': 'Speicher l\u00f6schen',
+        'agents.builtin.store_delete.desc': 'Erlaubt dem Agenten, dauerhaft gespeicherte Werte zu l\u00f6schen.',
+        'agents.builtin.store_list': 'Speicher auflisten',
+        'agents.builtin.store_list.desc': 'Erlaubt dem Agenten, alle dauerhaft gespeicherten Schl\u00fcssel-Wert-Paare aufzulisten.',
+        'agents.builtin.memory_remember': 'Memory speichern',
+        'agents.builtin.memory_remember.desc': 'Erlaubt dem Agenten, langfristige Notizen für spätere Unterhaltungen zu speichern.',
+        'agents.builtin.memory_forget': 'Memory löschen',
+        'agents.builtin.memory_forget.desc': 'Erlaubt dem Agenten, gespeicherte Notizen zu entfernen.',
+        'agents.builtin.memory_search': 'Memory durchsuchen',
+        'agents.builtin.memory_search.desc': 'Erlaubt dem Agenten, gespeicherte Notizen mit BM25-Relevanz zu durchsuchen.',
+        'agents.builtin.memory_list': 'Memory auflisten',
+        'agents.builtin.memory_list.desc': 'Erlaubt dem Agenten, gespeicherte Notizen aufzulisten.',
+        'agents.builtin.set_schedule': 'Zeitplan setzen',
+        'agents.builtin.set_schedule.desc': 'Erlaubt dem Agenten, wiederkehrende Zeitpl\u00e4ne aus nat\u00fcrlich formulierten Anfragen zu erstellen.',
+        'agents.builtin.set_reminder': 'Erinnerung setzen',
+        'agents.builtin.set_reminder.desc': 'Erlaubt dem Agenten, einmalige Erinnerungen f\u00fcr zuk\u00fcnftige Aufgaben zu erstellen.',
+        'agents.policy.allow': 'Erlauben',
+        'agents.policy.ask': 'Fragen',
+        'agents.policy.block': 'Blockieren',
+        'agents.policy.global_default': 'Standard',
+        'agents.policy.global_default_label': 'Globaler Standard',
+        'agents.policy.user_override': 'Eigene',
+        'agents.policy.reset': 'Auf Standard zur\u00fccksetzen',
+        'agents.detail.global_perms': 'Standardberechtigungen',
+        'agents.detail.global_perms_badge': 'F\u00fcr alle',
+        'agents.detail.global_perms_desc': 'Diese Berechtigungen gelten f\u00fcr alle Nutzer. Einzelne Nutzer k\u00f6nnen sie f\u00fcr ihr Konto \u00fcberschreiben.',
+        'agents.detail.your_perms': 'Deine Berechtigungen',
+        'agents.detail.your_perms_desc': 'Pers\u00f6nliche \u00c4nderungen nur f\u00fcr dein Konto. Tools ohne \u00c4nderung nutzen den Standard.',
+        'agents.policy.using_default': 'Standard',
+        'agents.detail.networkactivity': 'Netzwerkaktivit\u00e4t',
+        'agents.detail.last100': 'Letzte 100 Anfragen',
+        'agents.detail.norequests': 'Noch keine Netzwerkanfragen aufgezeichnet.',
+        'agents.detail.time': 'Zeit',
+        'agents.detail.capability': 'F\u00e4higkeit',
+        'agents.detail.method': 'Methode',
+        'agents.detail.host': 'Host',
+        'agents.detail.port': 'Port',
+        'agents.detail.status': 'Status',
+        'agents.detail.allowed': 'Erlaubt',
+        'agents.detail.denied': 'Abgelehnt',
+        'agents.detail.secrets': 'Geheimnisse',
+        'agents.detail.required': 'Erforderlich',
+        'agents.detail.optional': 'Optional',
+        'agents.detail.shared': 'Geteilt',
+        'agents.detail.personal': 'Pers\u00f6nlich',
+        'agents.detail.secret_set': 'Gesetzt',
+        'agents.detail.secret_missing': 'Fehlt',
+        'agents.detail.secret_placeholder': 'Geheimnis eingeben',
+        'agents.detail.secret_save': 'Speichern',
+        'agents.detail.secret_remove': 'Entfernen',
+        'agents.detail.section.network': 'Netzwerk',
+        'agents.detail.section.network_desc': 'Verbindungslimits, erlaubte Hosts und letzte ausgehende Anfragen.',
+        'agents.detail.section.storage': 'Speicher',
+        'agents.detail.section.storage_desc': 'Werte, die der Agent mit store_set dauerhaft gespeichert hat.',
+        'agents.detail.section.memory': 'Memory',
+        'agents.detail.section.memory_desc': 'Langfristige Notizen, die der Agent mit memory_remember speichert und per BM25 abruft.',
+        'agents.detail.section.secrets': 'Geheimnisse',
+        'agents.detail.section.secrets_desc': 'Zugangsdaten, die dieser Agent für externe Dienste nutzen kann.',
+        'agents.detail.section.permissions': 'Berechtigungen',
+        'agents.detail.section.permissions_desc': 'Tool-Zugriffsregeln für diesen Agenten.',
+        'agents.detail.automation.title': 'Verwaltete Automatisierung',
+        'agents.detail.automation.not_supported': 'Dieser Agent definiert keine verwalteten Zeitpläne.',
+        'agents.detail.automation.enabled': 'Aktiv',
+        'agents.detail.automation.disabled': 'Inaktiv',
+        'agents.detail.automation.active_count': 'Aktive Zeitpläne',
+        'agents.detail.automation.missing_pipe': 'Lege mindestens eine aktive Pipe für diesen Agenten fest, um die Automatisierung zu aktivieren.',
+        'agents.detail.automation.missing_credentials': 'Lege zuerst alle erforderlichen Geheimnisse fest.',
+        'agents.detail.automation.enable': 'Automatisierung aktivieren',
+        'agents.detail.automation.disable': 'Automatisierung deaktivieren',
+        'agents.detail.runtime.title': 'Autonomie',
+        'agents.detail.runtime.desc': 'Steuert, wie selbstständig dieser Agent arbeiten darf und wie viele Spezial-Agenten er einbinden kann.',
+        'agents.detail.runtime.input_label': 'Autonomie-Stufe',
+        'agents.detail.runtime.level.low': 'Niedrig',
+        'agents.detail.runtime.level.medium': 'Mittel (Empfohlen)',
+        'agents.detail.runtime.level.high': 'Hoch',
+        'agents.detail.runtime.advanced.title': 'Erweitert',
+        'agents.detail.runtime.advanced.enable': 'Erweiterte Limits für diesen Agenten verwenden',
+        'agents.detail.runtime.advanced.steps': 'Maximale Tool-Schritte pro Antwort',
+        'agents.detail.runtime.advanced.hops': 'Maximale Spezialisten-Übergaben',
+        'agents.detail.runtime.advanced.default_values': 'Erweitert-Standard',
+        'agents.detail.runtime.save': 'Speichern',
+        'agents.detail.runtime.default_badge': 'Agent-Standard',
+        'agents.detail.runtime.override_badge': 'Deine Einstellung ist aktiv',
+        'agents.detail.runtime.using_default_badge': 'Agent-Standard aktiv',
+        'agents.detail.storage.updated': 'Aktualisiert',
+        'agents.detail.storage.user': 'Nutzer',
+        'agents.detail.storage.key': 'Schlüssel',
+        'agents.detail.storage.value': 'Wert',
+        'agents.detail.storage.actions': 'Aktionen',
+        'agents.detail.storage.empty': 'Noch keine gespeicherten Werte.',
+        'agents.detail.storage.last500': 'Letzte 500 Einträge',
+        'agents.detail.storage.delete': 'Löschen',
+        'agents.detail.memory.updated': 'Aktualisiert',
+        'agents.detail.memory.user': 'Nutzer',
+        'agents.detail.memory.note': 'Memory',
+        'agents.detail.memory.tags': 'Tags',
+        'agents.detail.memory.source': 'Quelle',
+        'agents.detail.memory.actions': 'Aktionen',
+        'agents.detail.memory.empty': 'Noch keine Memory-Einträge.',
+        'agents.detail.memory.last500': 'Letzte 500 Einträge',
+        'agents.detail.memory.delete': 'Löschen',
+        'agents.detail.tab.overview': 'Übersicht',
+        'agents.detail.tab.storage': 'Speicher',
+        'agents.detail.tab.memory': 'Memory',
+        'agents.detail.tab.secrets': 'Geheimnisse',
+        'agents.detail.tab.network': 'Netzwerk',
+        'agents.detail.tab.permissions': 'Berechtigungen',
+        'agents.detail.overview.title': 'Übersicht',
+        'agents.detail.overview.desc': 'Schneller Statusüberblick. Für Details die Tabs nutzen.',
+        'agents.detail.overview.capabilities': 'Fähigkeiten',
+        'agents.detail.overview.storage_entries': 'Gespeicherte Einträge',
+        'agents.detail.overview.memory_entries': 'Memory-Einträge',
+        'agents.detail.overview.network_requests': 'Netzwerkanfragen',
+        'agents.detail.overview.secrets': 'Geheimnisse',
+        'agents.detail.overview.permissions_summary': 'Berechtigungsübersicht',
+        'agents.detail.overview.open_storage': 'Speicher öffnen',
+        'agents.detail.overview.open_memory': 'Memory öffnen',
+        'agents.detail.overview.open_secrets': 'Geheimnisse öffnen',
+        'agents.detail.overview.open_network': 'Netzwerk öffnen',
+        'agents.detail.overview.open_permissions': 'Berechtigungen öffnen',
+        'agents.setup.title': 'Einrichtung',
+        'agents.setup.desc': 'F\u00fchre die folgenden Schritte aus, um die Installation dieses Agenten abzuschlie\u00dfen.',
+        'agents.setup.update_title': 'Update abschließen',
+        'agents.setup.update_desc': 'Das Update ist bereit. Prüfe unten nur noch alles Neue und schließe es ab.',
+        'agents.setup.test': 'Test',
+        'agents.setup.config': 'Konfiguration',
+        'agents.setup.runtest': 'Test starten',
+        'agents.setup.toolpermissions': 'Tool-Berechtigungen',
+        'agents.setup.required': 'Erforderlich',
+        'agents.setup.toolpermissions.desc': 'W\u00e4hle eine Sicherheitsrichtlinie f\u00fcr jedes Tool. Tools ohne Richtlinie werden standardm\u00e4\u00dfig blockiert.',
+        'agents.setup.dynamic.discovery_warning': 'F\u00fcr einige Capabilities konnten die dynamischen Tools nicht aktualisiert werden. Es werden zwischengespeicherte Tools angezeigt.',
+        'agents.setup.modelassignment': 'Modellzuweisung',
+        'agents.setup.modelassignment.desc': 'Weise diesem Agenten einen bestimmten Anbieter und ein Modell zu, oder lasse es leer f\u00fcr den globalen Standard.',
+        'agents.setup.finish_update': 'Update abschließen',
+        'agents.useglobaldefault': '-- Globalen Standard verwenden --',
+        'agents.success.setup_complete': 'Agent-Einrichtung erfolgreich abgeschlossen.',
+        'agents.success.updated': 'Agent erfolgreich aktualisiert.',
+        'agents.success.rating_saved': 'Danke! Deine Bewertung wurde gespeichert.',
+        'agents.success.global_default_model_updated': 'Globales Standardmodell aktualisiert.',
+        'agents.success.secret_saved': 'Geheimnis gespeichert.',
+        'agents.success.secret_removed': 'Geheimnis entfernt.',
+        'agents.success.automation_enabled': 'Verwaltete Automatisierung aktiviert.',
+        'agents.success.automation_disabled': 'Verwaltete Automatisierung deaktiviert.',
+        'agents.success.runtime_settings_saved': 'Autonomie-Einstellungen gespeichert.',
+        'agents.error.encrypt_failed': 'Zugangsdaten konnten nicht gespeichert werden. Bitte versuche es erneut.',
+        'agents.error.store_cred_failed': 'Zugangsdaten konnten nicht gespeichert werden. Bitte versuche es erneut.',
+        'agents.error.save_perms_failed': 'Tool-Berechtigungen konnten nicht gespeichert werden. Bitte versuche es erneut.',
+        'agents.error.not_installed': 'Dieser Agent ist noch nicht installiert.',
+        'agents.error.rating_invalid': 'Bitte w\u00e4hle eine Bewertung zwischen 1 und 5 Sternen.',
+        'agents.error.rating_submit_failed': 'Bewertung konnte nicht gesendet werden. Bitte versuche es erneut.',
+        'agents.error.rating_unavailable': 'Bewertung kann gerade nicht gesendet werden.',
+        'agents.error.rating_save_failed': 'Bewertung konnte nicht gespeichert werden. Bitte versuche es erneut.',
+        'agents.error.secret_empty': 'Geheimnis darf nicht leer sein.',
+        'agents.error.invalid_scope': 'Ung\u00fcltiger Zugangsdaten-Bereich.',
+        'agents.error.secret_save_failed': 'Geheimnis konnte nicht gespeichert werden. Bitte versuche es erneut.',
+        'agents.error.automation_not_supported': 'Dieser Agent unterstützt keine verwaltete Automatisierung.',
+        'agents.error.automation_missing_pipe': 'Lege mindestens eine aktive Pipe für diesen Agenten fest, bevor du die Automatisierung aktivierst.',
+        'agents.error.automation_missing_credentials': 'Lege alle erforderlichen Geheimnisse fest, bevor du die Automatisierung aktivierst.',
+        'agents.error.automation_invalid_cron': 'Einer der Automatisierungs-Zeitpläne ist ungültig.',
+        'agents.error.automation_save_failed': 'Automatisierungs-Zeitpläne konnten nicht gespeichert werden. Bitte versuche es erneut.',
+        'agents.error.automation_invalid_action': 'Ungültige Automatisierungsaktion.',
+        'agents.error.runtime_settings_invalid': 'Bitte prüfe Autonomie-Stufe und erweiterte Limits.',
+        'agents.error.runtime_settings_save_failed': 'Diese Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut.',
+        'agents.error.runtime_settings_save_failed': 'Diese Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut.',
+        'providers.title': 'LLM-Anbieter',
+        'providers.desc': 'API-Schl\u00fcssel und Endpunkte f\u00fcr LLM-Anbieter konfigurieren. Schl\u00fcssel werden mit AES-256-GCM verschl\u00fcsselt.',
+        'providers.new_desc': 'W\u00e4hle aus, \u00fcber welche Anbieter Selu antworten soll. F\u00fcge nur die Anbieter hinzu, die du wirklich nutzen willst.',
+        'providers.active': 'Aktive Anbieter',
+        'providers.empty': 'Noch keine aktiven Anbieter. F\u00fcge einen hinzu, um mit deinen Agenten zu chatten.',
+        'providers.add': 'Anbieter hinzuf\u00fcgen',
+        'providers.add_title': 'Anbieter hinzuf\u00fcgen',
+        'providers.add_desc': 'W\u00e4hle einen Anbieter. Danach f\u00fchrt Selu dich durch die Pflichtfelder und pr\u00fcft die Verbindung.',
+        'providers.back': 'Zur\u00fcck zu Anbietern',
+        'providers.back_to_add': 'Zur\u00fcck zu Anbieter hinzuf\u00fcgen',
+        'providers.already_added': 'Bereits aktiv',
+        'providers.ready': 'Bereit',
+        'providers.setup': 'Einrichten',
+        'providers.setup_title': 'Anbieter einrichten',
+        'providers.edit': 'Bearbeiten',
+        'providers.disconnect': 'Trennen',
+        'providers.check_and_save': 'Pr\u00fcfen & speichern',
+        'providers.key_will_replace': 'Es ist bereits ein Schl\u00fcssel vorhanden. Beim Speichern wird er ersetzt.',
+        'providers.field.api_key': 'API-Schl\u00fcssel',
+        'providers.field.base_url': 'Basis-URL',
+        'providers.category.cloud': 'Cloud',
+        'providers.category.local': 'Lokal',
+        'providers.provider.custom.subtitle': 'Modellanbieter',
+        'providers.provider.openai.subtitle': 'OpenAI API',
+        'providers.provider.openai.key_placeholder': 'OpenAI API-Schl\u00fcssel einf\u00fcgen',
+        'providers.provider.openai.base_placeholder': 'https://api.openai.com',
+        'providers.provider.openai.base_hint': 'Optional. Leer lassen, um die Standard-OpenAI-URL zu verwenden.',
+        'providers.provider.anthropic.subtitle': 'Anthropic Claude API',
+        'providers.provider.anthropic.key_placeholder': 'Anthropic API-Schl\u00fcssel einf\u00fcgen',
+        'providers.provider.anthropic.base_placeholder': 'https://api.anthropic.com',
+        'providers.provider.anthropic.base_hint': 'Optional. Leer lassen, um die Standard-Anthropic-URL zu verwenden.',
+        'providers.provider.grok.subtitle': 'xAI Grok API',
+        'providers.provider.grok.key_placeholder': 'xAI API-Schl\u00fcssel einf\u00fcgen',
+        'providers.provider.grok.base_placeholder': 'https://api.x.ai',
+        'providers.provider.grok.base_hint': 'Optional. Leer lassen, um die Standard-xAI-URL zu verwenden.',
+        'providers.provider.bedrock.subtitle': 'Amazon Bedrock Runtime',
+        'providers.provider.bedrock.token_label': 'AWS-Zugriffstoken',
+        'providers.provider.bedrock.token_placeholder': 'Bedrock Bearer-Token einf\u00fcgen',
+        'providers.provider.bedrock.region_label': 'AWS-Region',
+        'providers.provider.bedrock.region_placeholder': 'us-east-1',
+        'providers.provider.bedrock.region_hint': 'Erforderlich. Beispiel: us-east-1, us-west-2, eu-west-1.',
+        'providers.provider.pico.subtitle': 'Kostenloser macOS-KI-Server von Pico AI \u2014 \u00fcber 300 Modelle',
+        'providers.provider.pico.key_label': 'Auth-Token',
+        'providers.provider.pico.key_placeholder': 'Nicht erforderlich',
+        'providers.provider.pico.url_label': 'Pico AI Server URL',
+        'providers.provider.pico.url_placeholder': 'http://192.168.1.100:8090',
+        'providers.provider.pico.url_hint': 'Erforderlich. Lade die kostenlose Pico AI Server App von picoai.app herunter und gib die URL aus den Einstellungen ein.',
+        'providers.success.connected': 'Anbieter erfolgreich verbunden.',
+        'providers.success.disconnected': 'Anbieter getrennt.',
+        'providers.setkey': 'Schl\u00fcssel setzen',
+        'providers.update': 'Aktualisieren',
+        'providers.removekey': 'Entfernen',
+        'providers.apikey': 'API-Schl\u00fcssel',
+        'updates.title': 'Einstellungen',
+        'updates.subtitle': 'Verwalte Updates und zentrale Systemeinstellungen.',
+        'updates.summary.title': 'Software-Update',
+        'updates.summary.subtitle': 'Alles Wichtige auf einen Blick: aktuelle Version, neue Version und \u00c4nderungen.',
+        'updates.summary.current': 'Aktuelle Version',
+        'updates.summary.new': 'Neue Version',
+        'updates.summary.available': 'Update verf\u00fcgbar',
+        'updates.summary.yes': 'Ja',
+        'updates.summary.no': 'Nein',
+        'updates.summary.changes': '\u00c4nderungen',
+        'updates.summary.no_changes': 'Du nutzt bereits die aktuelle Version.',
+        'updates.summary.manage': 'Update verwalten',
+        'updates.summary.manage_title': 'Update verwalten',
+        'updates.summary.manage_subtitle': 'Pr\u00fcfe die \u00c4nderungen und starte das Update, wenn du bereit bist.',
+        'updates.settings.title': 'Systemeinstellungen',
+        'updates.last_error': 'Letzter Fehler:',
+        'updates.public_origin.title': 'Öffentliche Webadresse',
+        'updates.public_origin.note': 'Selu nutzt diese Adresse für Download-Links und Webhooks für andere Apps.',
+        'updates.public_origin.label': 'Webadresse',
+        'updates.public_origin.placeholder': 'https://selu.example.com',
+        'updates.public_origin.save': 'Webadresse speichern',
+        'updates.public_origin.apply_current': 'Aktuellen Host übernehmen',
+        'updates.public_origin.current': 'Aktueller Host:',
+        'updates.channel.title': 'Release-Kanal',
+        'updates.channel.label': 'Kanal',
+        'updates.channel.stable': 'Stable (empfohlen)',
+        'updates.channel.dev': 'Dev',
+        'updates.channel.nightly': 'Nightly',
+        'updates.channel.save': 'Kanal speichern',
+        'updates.channel.note': 'Stable ist am sichersten. Dev hat neuere Funktionen. Nightly \u00e4ndert sich t\u00e4glich und kann instabil sein.',
+        'updates.status.title': 'Status',
+        'updates.status.installed': 'Installiert',
+        'updates.status.available': 'Verf\u00fcgbar',
+        'updates.status.previous': 'Vorherige Version',
+        'updates.status.changelog': 'Changelog:',
+        'updates.status.changelog_open': 'Changelog öffnen',
+        'updates.status.changelog_missing': 'Noch nicht verfügbar',
+        'updates.changelog.before_update': 'Bitte prüfe vor dem Update, was sich geändert hat:',
+        'updates.status.checked': 'Zuletzt gepr\u00fcft:',
+        'updates.status.attempt': 'Letzter Update-Versuch:',
+        'updates.status.active_job': 'Aktiver Job:',
+        'updates.status.never': 'Nie',
+        'updates.banner.available': 'Eine neue Version ist bereit.',
+        'updates.check_now': 'Jetzt pr\u00fcfen',
+        'updates.update_now': 'Jetzt aktualisieren',
+        'updates.rollback_now': 'Rollback',
+        'updates.modal.eyebrow': 'System-Update',
+        'updates.modal.title.update': 'Selu wird aktualisiert',
+        'updates.modal.title.rollback': 'Selu wird zurückgesetzt',
+        'updates.modal.description': 'Lass diese Seite offen. Selu lädt sie neu, sobald alles bereit ist.',
+        'updates.modal.status.working': 'Das kann einen Moment dauern.',
+        'updates.modal.status.reconnecting': 'Warte, bis Selu wieder erreichbar ist.',
+        'updates.modal.status.failed': 'Etwas ist schiefgelaufen.',
+        'updates.modal.hint': 'Wir prüfen im Hintergrund weiter.',
+        'updates.modal.close': 'Schließen',
+        'updates.auto.title': 'Automatische Updates',
+        'updates.auto.enabled': 'Auto-Update ist aktiv',
+        'updates.auto.disabled': 'Auto-Update ist deaktiviert',
+        'updates.auto.check_label': 'Tägliche Prüfung:',
+        'updates.auto.check_on': 'An',
+        'updates.auto.check_off': 'Aus',
+        'updates.auto.note': 'Auto-Update \u00fcbernimmt den gew\u00e4hlten Release-Kanal, sobald neue Versionen gefunden werden.',
+        'updates.install_stats.title': 'Anonyme Installationsstatistik',
+        'updates.install_stats.desc': 'Selu kann einmal täglich ein anonymes Signal an selu.bot senden: nur diese Installations-ID und deine Selu-Version. Damit zeigen wir Popularitätsstatistiken.',
+        'updates.install_stats.status_label': 'Status:',
+        'updates.install_stats.status_on': 'An',
+        'updates.install_stats.status_off': 'Aus',
+        'updates.install_stats.button_on': 'Anonyme Statistik ausschalten',
+        'updates.install_stats.button_off': 'Anonyme Statistik einschalten',
+        'updates.install_stats.note': 'Es werden keine Chats, Prompts, Nutzernamen, IP-Adressen oder Zugangsdaten gesendet.',
+        'updates.state.idle': 'Bereit',
+        'updates.state.checking': 'Suche nach Updates',
+        'updates.state.update_available': 'Update verf\u00fcgbar',
+        'updates.state.updating': 'Aktualisierung l\u00e4uft',
+        'updates.state.rollback_available': 'Rollback verf\u00fcgbar',
+        'updates.state.failed': 'Aktion erforderlich',
+        'updates.progress.idle': 'Wartet auf die n\u00e4chste Pr\u00fcfung.',
+        'updates.progress.checking': 'Release-Metadaten werden gepr\u00fcft.',
+        'updates.progress.check_failed': 'Updates konnten nicht gepr\u00fcft werden.',
+        'updates.progress.update_available': 'Eine neuere Version ist verf\u00fcgbar.',
+        'updates.progress.preparing': 'Update wird vorbereitet.',
+        'updates.progress.pulling': 'Neues Image wird heruntergeladen.',
+        'updates.progress.restarting': 'Selu wird neu gestartet.',
+        'updates.progress.health_check': 'Systemcheck wird ausgef\u00fchrt.',
+        'updates.progress.apply_done': 'Update erfolgreich abgeschlossen.',
+        'updates.progress.apply_failed': 'Update fehlgeschlagen.',
+        'updates.progress.rollback_ready': 'Ein Rollback ist verf\u00fcgbar.',
+        'updates.progress.rollback_start': 'Rollback wird gestartet.',
+        'updates.progress.rollback_restarting': 'Vorherige Version wird gestartet.',
+        'updates.progress.rollback_done': 'Rollback erfolgreich abgeschlossen.',
+        'updates.progress.already_current': 'Du nutzt bereits die aktuelle Version.',
+        'updates.flash.channel_saved': 'Release-Kanal gespeichert.',
+        'updates.flash.public_origin_saved': 'Öffentliche Webadresse gespeichert.',
+        'updates.flash.public_origin_applied': 'Aktueller Host als öffentliche Webadresse übernommen.',
+        'updates.flash.auto_update_saved': 'Automatische Updates gespeichert.',
+        'updates.flash.installation_telemetry_saved': 'Einstellung für anonyme Installationsstatistik gespeichert.',
+        'updates.flash.check_available': 'Pr\u00fcfung abgeschlossen. Eine neue Version ist verf\u00fcgbar.',
+        'updates.flash.check_none': 'Pr\u00fcfung abgeschlossen. Du bist auf dem neuesten Stand.',
+        'updates.flash.apply_started': 'Update gestartet.',
+        'updates.flash.apply_done': 'Update abgeschlossen.',
+        'updates.flash.rollback_started': 'Rollback gestartet.',
+        'updates.flash.rollback_done': 'Rollback abgeschlossen.',
+        'updates.error.invalid_channel': 'Bitte w\u00e4hle stable, dev oder nightly.',
+        'updates.error.channel_save_failed': 'Release-Kanal konnte nicht gespeichert werden.',
+        'updates.error.auto_update_save_failed': 'Automatische Updates konnten nicht gespeichert werden.',
+        'updates.error.installation_telemetry_save_failed': 'Einstellung für anonyme Installationsstatistik konnte nicht gespeichert werden.',
+        'updates.error.public_origin_invalid': 'Gib eine vollständige Webadresse wie https://selu.example.com ein.',
+        'updates.error.public_origin_save_failed': 'Die öffentliche Webadresse konnte nicht gespeichert werden.',
+        'updates.error.check_failed': 'Updates konnten nicht gepr\u00fcft werden. Bitte versuche es erneut.',
+        'updates.error.apply_failed': 'Update fehlgeschlagen. Die vorige Version wurde wenn m\u00f6glich beibehalten.',
+        'updates.error.rollback_failed': 'Rollback fehlgeschlagen. Bitte pr\u00fcfe deine Docker-Umgebung.',
+        'users.title': 'Benutzer',
+        'users.desc': 'Benutzerkonten f\u00fcr Pipes, Sitzungen und Zugangsdaten.',
+        'users.account.desc': 'Verwalte deine Kontoeinstellungen.',
+        'users.create': 'Benutzer erstellen',
+        'users.create.hint.username': 'Eindeutig, klein geschrieben, ohne Leerzeichen.',
+        'users.create.hint.displayname': 'Wenn leer, wird der Benutzername verwendet.',
+        'users.username': 'Benutzername',
+        'users.displayname': 'Anzeigename',
+        'users.password': 'Passwort',
+        'users.password.change.title': 'Passwort ändern',
+        'users.password.change.open': 'Passwort ändern',
+        'users.password.change.desc': 'Gib dein aktuelles Passwort ein und setze ein neues.',
+        'users.password.change.hint': 'Aus Sicherheitsgründen werden andere aktive Sitzungen nach der Änderung abgemeldet.',
+        'users.password.change.submit': 'Passwort aktualisieren',
+        'users.password.current': 'Aktuelles Passwort',
+        'users.password.current.placeholder': 'Dein aktuelles Passwort',
+        'users.password.new': 'Neues Passwort',
+        'users.password.new.placeholder': 'Mindestens 8 Zeichen',
+        'users.password.confirm': 'Neues Passwort bestätigen',
+        'users.password.confirm.placeholder': 'Neues Passwort erneut eingeben',
+        'users.delete': 'L\u00f6schen',
+        'users.cancel': 'Abbrechen',
+        'users.role': 'Rolle',
+        'users.admin': 'Admin',
+        'users.user': 'Benutzer',
+        'users.makeadmin': 'Diesen Benutzer zum Admin machen',
+        'users.you': '(du)',
+        'users.language': 'Sprache',
+        'users.language.hint': 'In dieser Sprache antwortet der Agent.',
+        'users.created': 'Erstellt',
+        'users.agents': 'Agenten',
+        'users.agents.all': 'Alle Agenten',
+        'users.agents.none': 'Keine Agenten',
+        'users.agents.edit': 'Bearbeiten',
+        'users.agents.save': 'Speichern',
+        'users.agents.modal_title': 'Agenten wählen für',
+        'users.empty': 'Noch keine Benutzer. Erstelle einen unten.',
+        'users.success.saved': 'Gespeichert.',
+        'users.success.password_changed': 'Passwort aktualisiert. Andere aktive Sitzungen wurden abgemeldet.',
+        'users.error.duplicate': 'Der Benutzername ist bereits vergeben. Bitte wähle einen anderen.',
+        'users.error.hash_failed': 'Das Passwort konnte nicht sicher gespeichert werden. Bitte versuche es erneut.',
+        'users.error.username_required': 'Benutzername und Passwort sind erforderlich.',
+        'users.error.create_failed': 'Benutzer konnte nicht erstellt werden. Bitte versuche es erneut.',
+        'users.error.agents_save_failed': 'Agentenzugriff konnte nicht gespeichert werden. Bitte versuche es erneut.',
+        'users.error.current_password_required': 'Bitte gib dein aktuelles Passwort ein.',
+        'users.error.new_password_required': 'Bitte gib ein neues Passwort ein.',
+        'users.error.confirm_password_required': 'Bitte bestätige dein neues Passwort.',
+        'users.error.password_mismatch': 'Die neuen Passwörter stimmen nicht überein.',
+        'users.error.password_too_short': 'Das neue Passwort muss mindestens 8 Zeichen lang sein.',
+        'users.error.wrong_current_password': 'Das aktuelle Passwort ist falsch.',
+        'users.error.verify_failed': 'Dein aktuelles Passwort konnte nicht geprüft werden. Bitte versuche es erneut.',
+        'users.error.password_change_failed': 'Passwort konnte nicht geändert werden. Bitte versuche es erneut.',
+        'users.error.unexpected': 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
+        'chat.nopipes.hint': 'Bitte einen Admin, eine Pipe f\u00fcr dich einzurichten.',
+        'creds.title': 'Zugangsdaten',
+        'creds.desc': 'Verschl\u00fcsselte Geheimnisse f\u00fcr Capability-Container. AES-256-GCM verschl\u00fcsselt.',
+        'creds.system': 'System-Zugangsdaten',
+        'creds.user': 'Benutzer-Zugangsdaten',
+        'creds.set.system': 'System-Zugangsdaten setzen',
+        'creds.set.user': 'Benutzer-Zugangsdaten setzen',
+        'subs.title': 'Ereignis-Abonnements',
+        'subs.desc': 'L\u00f6se Benachrichtigungen oder Agenten-Aufrufe aus, wenn Agenten-Ereignisse einem CEL-Filter entsprechen.',
+        'subs.create': 'Abonnement erstellen',
+        'subs.deactivate': 'Deaktivieren',
+        'personality.title': 'Ged\u00e4chtnis',
+        'personality.desc': 'Das ist, was deine Agenten \u00fcber dich wissen. Fakten werden zwischen allen Agenten geteilt. Du kannst alles bearbeiten oder entfernen.',
+        'personality.add': 'Fakt hinzuf\u00fcgen',
+        'personality.category': 'Kategorie',
+        'personality.fact': 'Fakt',
+        'personality.fact.placeholder': 'z.B. Mein Name ist Jan, ich wohne in Berlin...',
+        'personality.edit': 'Bearbeiten',
+        'personality.delete': 'Entfernen',
+        'personality.empty': 'Noch keine Fakten.',
+        'personality.source.auto': 'Aus Gespr\u00e4ch gelernt',
+        'personality.source.agent': 'Vom Agenten gespeichert',
+        'personality.source.manual': 'Manuell hinzugef\u00fcgt',
+        'personality.cat.personal': 'Pers\u00f6nliches',
+        'personality.cat.preferences': 'Vorlieben',
+        'personality.cat.location': 'Standort',
+        'personality.cat.work': 'Arbeit & F\u00e4higkeiten',
+        'personality.cat.other': 'Sonstiges',
+        'personality.error.empty': 'Bitte gib einen Fakt ein.',
+        'personality.error.addfailed': 'Fakt konnte nicht gespeichert werden. Bitte versuche es erneut.',
+        'personality.error.generic': 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
+        'personality.success.added': 'Fakt hinzugef\u00fcgt.',
+        'personality.success.generic': 'Erledigt.',
+        'schedules.title': 'Zeitpl\u00e4ne',
+        'schedules.desc': 'Automatisiere wiederkehrende Aufgaben. Ergebnisse erscheinen als neue Unterhaltungen im Chat.',
+        'schedules.add': 'Zeitplan hinzuf\u00fcgen',
+        'schedules.timezone': 'Zeitzone',
+        'schedules.empty': 'Noch keine Zeitpl\u00e4ne. Erstelle einen unten oder nutze /schedule add im Chat.',
+        'schedules.on': 'An',
+        'schedules.off': 'Aus',
+        'schedules.one_shot': 'Einmalig',
+        'schedules.completed': 'Abgeschlossen',
+        'schedules.col.name': 'Name',
+        'schedules.col.prompt': 'Was passiert',
+        'schedules.col.when': 'Wann',
+        'schedules.col.pipes': 'Pipes',
+        'schedules.col.nextrun': 'N\u00e4chster Lauf',
+        'schedules.col.lastrun': 'Letzter Lauf',
+        'schedules.col.status': 'Status',
+        'schedules.form.name': 'Name',
+        'schedules.form.name.placeholder': 'z.B. morgen-bericht',
+        'schedules.form.when': 'Wann',
+        'schedules.form.when.placeholder': 'z.B. Jeden Werktag um 6:45 Uhr',
+        'schedules.form.when.hint': 'Nat\u00fcrliche Sprache ist in Ordnung \u2014 wiederkehrend oder einmalig. Selu erkennt es.',
+        'schedules.form.prompt': 'Was soll passieren',
+        'schedules.form.prompt.placeholder': 'z.B. Gib mir eine Zusammenfassung meines Kalenders, neuer E-Mails und des Wetters.',
+        'schedules.form.pipes': 'Auf diesen Pipes ausf\u00fchren',
+        'schedules.nopipes': 'Keine Pipes gefunden.',
+        'schedules.nopipes.hint': 'Erstelle zuerst eine Pipe, um Zeitpl\u00e4ne zu nutzen.',
+        'schedules.chat.hint': 'Tipp: Du kannst Zeitpl\u00e4ne auch im Chat mit /schedule add, /schedule list, /schedule delete und /remind verwalten.',
+        'common.optional': 'Optional',
+        'common.delete': 'L\u00f6schen',
+        'common.change': '\u00c4ndern',
+        'common.add': '+ Hinzuf\u00fcgen',
+        'common.cancel': 'Abbrechen',
+        'common.retry': 'Erneut versuchen',
+        'common.save': 'Speichern',
+        'common.back': 'Zur\u00fcck',
+        'pipes.telegram': 'Telegram',
+        'pipes.telegram.desc': 'Verbinde einen Telegram-Bot. Deine Agenten k\u00f6nnen Telegram-Nachrichten empfangen und mit Streaming beantworten.',
+        'pipes.telegram.via': 'Telegram-Bot',
+        'pipes.telegram.https': 'Erfordert HTTPS. Greife \u00fcber HTTPS auf Selu zu oder setze SELU__EXTERNAL_URL auf eine https://-Adresse.',
+        'tg.title': 'Telegram einrichten',
+        'tg.subtitle': 'Verbinde einen Telegram-Bot mit Selu. Du brauchst einen Bot-Token von @BotFather.',
+        'tg.subtitle.before_link': 'Verbinde einen Telegram-Bot mit Selu. Du brauchst einen Bot-Token von',
+        'tg.step1': 'Bot verbinden',
+        'tg.step2': 'Chat ausw\u00e4hlen',
+        'tg.step3': 'Personen hinzuf\u00fcgen',
+        'tg.step1.title': 'Schritt 1: Telegram-Bot verbinden',
+        'tg.step1.desc': 'Gib den Bot-Token ein, den du von @BotFather erhalten hast. \u00d6ffne Telegram, suche nach @BotFather und nutze /newbot.',
+        'tg.bottoken': 'Bot-Token',
+        'tg.bottoken.hint': 'Du findest den Token im BotFather-Chat in Telegram.',
+        'tg.connect': 'Mit Telegram verbinden',
+        'tg.connecting': 'Verbinde...',
+        'tg.verifying': 'Bot-Token wird \u00fcberpr\u00fcft...',
+        'tg.connected': 'Verbunden!',
+        'tg.connected_btn': 'Verbunden',
+        'tg.retry': 'Erneut versuchen',
+        'tg.error.notoken': 'Bitte gib einen Bot-Token ein.',
+        'tg.error.network': 'Netzwerkfehler. L\u00e4uft Selu?',
+        'tg.step2.title': 'Schritt 2: Chat ausw\u00e4hlen',
+        'tg.step2.desc': 'W\u00e4hle, in welchem Telegram-Chat Selu antworten soll. Sende zuerst eine Nachricht an den Bot.',
+        'tg.nochats.title': 'Noch keine Chats gefunden',
+        'tg.nochats.desc': 'Sende eine Nachricht an deinen Bot in Telegram, dann klicke unten auf \u201eAktualisieren\u201c.',
+        'tg.refresh': 'Aktualisieren',
+        'tg.chatid.manual': 'Oder Chat-ID manuell eingeben',
+        'tg.chatid.label': 'Chat-ID',
+        'tg.chatid.hint': 'Du erh\u00e4ltst die Chat-ID, indem du eine Nachricht an @userinfobot weiterleitest.',
+        'tg.use': 'Verwenden',
+        'tg.change': '\u00c4ndern',
+        'tg.pipename': 'Pipe-Name',
+        'tg.pipename.placeholder': 'z. B. Familienbot',
+        'tg.whocan': 'Wer darf mit Selu sprechen?',
+        'tg.whocan.desc': 'Beschr\u00e4nke, auf welche Telegram-Nutzer Selu antwortet. Bis du jemanden hinzuf\u00fcgst, bleibt Selu still.',
+        'tg.tguser': 'Telegram-Benutzer-ID',
+        'tg.tguser.hint': 'Sende /start an @userinfobot, um deine Telegram-Benutzer-ID zu finden.',
+        'tg.seluuser': 'Selu-Benutzer',
+        'tg.setup': 'Telegram-Bot einrichten',
+        'tg.detail.via': 'Telegram-Bot',
+        'tg.detail.connection': 'Verbindung',
+        'tg.detail.chatid': 'Telegram-Chat',
+        'tg.detail.agent': 'Agent',
+        'tg.detail.people': 'Wer darf diese Pipe nutzen?',
+        'tg.detail.people.desc': 'W\u00e4hle, welchen Telegram-Personen Selu hier antworten soll. Bis du jemanden hinzuf\u00fcgst, antwortet Selu nicht auf Telegram.',
+        'tg.detail.everyone': 'Noch niemand ist erlaubt. F\u00fcge zuerst jemanden hinzu, bevor Selu auf Telegram antwortet.',
+        'tg.detail.sender.placeholder': '123456789',
+        'tg.detail.addperson': 'Person hinzuf\u00fcgen',
+        'tg.detail.person.exists': 'Diese Telegram-Person wurde bereits hinzugef\u00fcgt.',
+        'tg.detail.danger': 'Diese Pipe entfernen',
+        'tg.detail.danger.desc': 'Wenn du diese Pipe entfernst, antwortet dein Telegram-Bot nicht mehr.',
+        'tg.detail.remove': 'Telegram-Pipe entfernen',
+        'tg.detail.remove.confirm': 'Diese Telegram-Pipe entfernen?',
+        'tg.troubleshoot.title': 'Zustellung pr\u00fcfen',
+        'tg.troubleshoot.desc': 'Nutze das hier, wenn Telegram-Nachrichten Selu nicht erreichen. Wir pr\u00fcfen, ob Telegram noch auf die richtige Selu-Adresse zeigt.',
+        'tg.troubleshoot.check': 'Verbindung pr\u00fcfen',
+        'tg.troubleshoot.hint': 'Der aktuelle Telegram-Verbindungsstatus erscheint hier.',
+        'tg.troubleshoot.waiting': 'Verbindung wird gepr\u00fcft...',
+        'tg.troubleshoot.url': 'Webhook-URL',
+        'tg.troubleshoot.pending': 'Wartende Nachrichten',
+        'tg.troubleshoot.nourl': 'Keine Webhook-URL gesetzt',
+        'tg.troubleshoot.reregister': 'Telegram-Verbindung aktualisieren',
+        'tg.troubleshoot.reregister.desc': 'Wenn Telegram noch auf eine alte Adresse zeigt, kannst du die Verbindung hier aktualisieren.',
+        'tg.troubleshoot.reregister.confirm': 'Telegram-Verbindung jetzt aktualisieren?',
+        'tg.troubleshoot.reregister.waiting': 'Verbindung wird aktualisiert...',
+        'tg.troubleshoot.httpsonly': 'Um die Telegram-Verbindung zu aktualisieren, \u00f6ffne Selu zuerst \u00fcber HTTPS.',
+        'tg.troubleshoot.registered': 'Telegram-Verbindung wurde aktualisiert.',
+        'tg.troubleshoot.error': 'Die Telegram-Verbindung konnte gerade nicht gepr\u00fcft werden.',
+        'tg.troubleshoot.refresh_error': 'Die Telegram-Verbindung konnte gerade nicht aktualisiert werden.',
+        'wa.title': 'WhatsApp einrichten',
+        'wa.subtitle': 'Verbinde WhatsApp mit Selus verwalteter Bridge. Selu startet und aktualisiert die Bridge automatisch.',
+        'wa.step1': 'WhatsApp-Pipe erstellen',
+        'wa.step2': 'Koppeln und Chats ausw\u00e4hlen',
+        'wa.step1.title': 'Schritt 1: Verwaltete WhatsApp-Bridge',
+        'wa.step1.desc': 'Selu verwaltet den WhatsApp-Bridge-Container f\u00fcr dich. Keine URL-Konfiguration n\u00f6tig. Nach dem Erstellen der Pipe \u00f6ffnest du die n\u00e4chste Seite, scannst den QR-Code und w\u00e4hlst Chats aus.',
+        'wa.step1.discovery.hint': 'Nach dem Koppeln zeigt die Chatsuche nur Unterhaltungen, die von der Bridge bereits gesehen wurden. Wenn ein Chat fehlt, sende zuerst eine WhatsApp-Nachricht und suche dann erneut.',
+        'wa.self.warning': 'Sich selbst auf WhatsApp zu schreiben ist experimentell. Antworten im Selbst-Chat k\u00f6nnen unzuverl\u00e4ssig sein, besonders auf dem iPhone.',
+        'wa.pipename': 'Pipe-Name',
+        'wa.pipename.placeholder': 'z. B. Team WhatsApp',
+        'wa.auth': 'Authorization-Header',
+        'wa.auth.placeholder': 'Bearer dein-bridge-secret',
+        'wa.auth.hint': 'Optional. Falls deine Bridge Auth ben\u00f6tigt, gib den kompletten Header-Wert an (z. B. Bearer ...).',
+        'wa.single.limit': 'Derzeit wird nur eine WhatsApp-Pipe unterst\u00fctzt. Entferne zuerst die bestehende Pipe.',
+        'wa.whocan': 'Wer darf mit Selu sprechen?',
+        'wa.whocan.desc': 'Beschr\u00e4nke, auf welche WhatsApp-Chats Selu antwortet. Bis du einen Chat hinzuf\u00fcgst, bleibt Selu still.',
+        'wa.chatsearch': 'WhatsApp-Chat finden',
+        'wa.chatsearch.placeholder': 'Name, Absender-ID oder Chat-ID',
+        'wa.chatsearch.btn': 'Finden',
+        'wa.chatsearch.hint': 'Suche Chats aus deiner verbundenen WhatsApp-Sitzung und f\u00fcge einen zur Erlaubnisliste hinzu.',
+        'wa.chatsearch.discover.hint': 'Hier werden nur Chats angezeigt, die in der aktiven WhatsApp-Sitzung erkannt wurden. Wenn ein Chat fehlt, sende zuerst eine Nachricht aus diesem Chat und suche dann erneut.',
+        'wa.chatsearch.loading': 'Chats werden geladen...',
+        'wa.chatsearch.empty': 'Noch keine Chats gefunden.',
+        'wa.chatsearch.error': 'Chats konnten nicht geladen werden.',
+        'wa.chatsearch.use': 'Verwenden',
+        'wa.chatsearch.pickfirst': 'Bitte zuerst einen Chat ausw\u00e4hlen.',
+        'wa.sender': 'WhatsApp-Absender',
+        'wa.sender.placeholder': '+491701234567 oder 491701234567@s.whatsapp.net',
+        'wa.seluuser': 'Selu-Benutzer',
+        'wa.addperson': 'Person hinzuf\u00fcgen',
+        'wa.setup': 'WhatsApp einrichten',
+        'wa.detail.via': 'WhatsApp \u00fcber Baileys',
+        'wa.detail.pairing': 'WhatsApp-Verbindung',
+        'wa.detail.state': 'Bridge',
+        'wa.detail.running': 'Bereit',
+        'wa.detail.notrunning': 'Ben\u00f6tigt Aufmerksamkeit',
+        'wa.detail.connectionstate': 'Handy-Verbindung',
+        'wa.detail.connectedas': 'WhatsApp-Konto',
+        'wa.detail.scan': '\u00d6ffne WhatsApp auf deinem Handy und scanne dann diesen QR-Code unter Einstellungen > Verkn\u00fcpfte Ger\u00e4te.',
+        'wa.detail.qrwait': 'Warte auf einen QR-Code. Lade diese Seite in ein paar Sekunden neu.',
+        'wa.detail.status.unavailable': 'Die WhatsApp-Verbindung konnte gerade nicht gepr\u00fcft werden.',
+        'wa.status.bridge_disabled': 'Die WhatsApp-Bridge ist deaktiviert',
+        'wa.status.bridge_not_running': 'Die WhatsApp-Bridge l\u00e4uft nicht',
+        'wa.status.bridge_running': 'Die WhatsApp-Bridge l\u00e4uft',
+        'wa.status.bridge_running_session_unavailable': 'Die WhatsApp-Bridge l\u00e4uft, aber der Sitzungsstatus ist gerade nicht verf\u00fcgbar',
+        'wa.status.chats_loaded': 'WhatsApp-Chats wurden geladen',
+        'wa.status.bridge_running_chats_unavailable': 'Die WhatsApp-Bridge l\u00e4uft, aber die Chats sind gerade nicht verf\u00fcgbar',
+        'wa.connection.open': 'Verbunden',
+        'wa.connection.connected': 'Verbunden',
+        'wa.connection.connecting': 'Verbindet',
+        'wa.connection.closed': 'Getrennt',
+        'wa.connection.disconnected': 'Getrennt',
+        'wa.connection.qr': 'Wartet auf QR-Code',
+        'wa.connection.pairing': 'Koppelt',
+        'wa.detail.connection': 'Erweiterte Details',
+        'wa.detail.connection.desc': 'Diese Angaben brauchst du normalerweise nur zur Fehlersuche an deiner WhatsApp-Bridge.',
+        'wa.detail.bridgeurl': 'Bridge-Adresse',
+        'wa.detail.inboundurl': 'Selu-Empfangsadresse',
+        'wa.detail.token': 'Zugriffstoken',
+        'wa.detail.agent': 'Agent',
+        'wa.detail.people': 'Wer darf diese Pipe nutzen?',
+        'wa.detail.people.desc': 'W\u00e4hle, welchen WhatsApp-Chats Selu antworten soll. Bis du hier einen Chat hinzuf\u00fcgst, antwortet Selu nicht auf WhatsApp.',
+        'wa.detail.everyone': 'Noch keine Chats erlaubt. F\u00fcge zuerst einen Chat hinzu, bevor Selu auf WhatsApp antwortet.',
+        'wa.detail.person.missing': 'W\u00e4hle zuerst einen Chat und einen Selu-Benutzer aus.',
+        'wa.detail.person.exists': 'Dieser WhatsApp-Chat wurde bereits hinzugef\u00fcgt.',
+        'wa.detail.danger': 'Diese Pipe entfernen',
+        'wa.detail.danger.desc': 'Wenn du diese Pipe entfernst, erreichen WhatsApp-Nachrichten Selu nicht mehr.',
+        'wa.detail.remove': 'WhatsApp-Pipe entfernen',
+        'wa.detail.remove.confirm': 'Diese WhatsApp-Pipe entfernen?',
+      }
+    };
+
+    function getCurrentLang() {
+      return localStorage.getItem('selu-lang') || 'en';
+    }
+    function setLang(lang) {
+      localStorage.setItem('selu-lang', lang);
+      document.documentElement.lang = lang;
+      applyTranslations(lang);
+      var label = document.getElementById('lang-label');
+      if (label) label.textContent = lang.toUpperCase();
+      // Also update theme label to match language
+      applyTheme(getTheme());
+    }
+    function toggleLang() {
+      setLang(getCurrentLang() === 'en' ? 'de' : 'en');
+    }
+    function t(key) {
+      var lang = getCurrentLang();
+      return (translations[lang] && translations[lang][key]) || (translations.en[key]) || key;
+    }
+    function applyTranslations(lang) {
+      document.querySelectorAll('[data-i18n]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n');
+        var val = (translations[lang] && translations[lang][key]) || translations.en[key];
+        if (val) el.textContent = val;
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n-placeholder');
+        var val = (translations[lang] && translations[lang][key]) || translations.en[key];
+        if (val) el.placeholder = val;
+      });
+      document.querySelectorAll('[data-i18n-title]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n-title');
+        var val = (translations[lang] && translations[lang][key]) || translations.en[key];
+        if (val) el.title = val;
+      });
+    }
+
+    // ── Markdown rendering ─────────────────────────────────────────
+    marked.setOptions({ breaks: true, gfm: true });
+    function renderMarkdown(el) {
+      if (!el || el.dataset.mdRendered) return;
+      var raw = el.textContent || '';
+      el.innerHTML = marked.parse(raw);
+      el.dataset.mdRendered = '1';
+    }
+    function renderAllMarkdown() {
+      document.querySelectorAll('.md-source:not([data-md-rendered])').forEach(renderMarkdown);
+    }
+    function appendStreamToken(el, tokenText) {
+      if (!el) return;
+      var raw = (el.dataset.rawContent || '') + tokenText;
+      el.dataset.rawContent = raw;
+      el.innerHTML = marked.parse(raw);
+      // Show the wrapper on first token
+      var wrap = el.closest('[id^="stream-wrap-"]');
+      if (wrap && wrap.style.display === 'none') wrap.style.display = '';
+    }
+    function finalizeStream(streamId) {
+      var el = document.getElementById('stream-' + streamId);
+      if (el) {
+        el.classList.remove('streaming');
+        var raw = el.dataset.rawContent || el.textContent || '';
+        if (raw.trim()) { el.innerHTML = marked.parse(raw); }
+        el.dataset.mdRendered = '1';
+        // Remove the wrapper if empty; otherwise ensure it is visible
+        var wrap = document.getElementById('stream-wrap-' + streamId);
+        if (!raw.trim()) {
+          if (wrap) wrap.remove();
+        } else if (wrap) {
+          wrap.style.display = '';
+        }
+      }
+      document.querySelectorAll('.tool-status').forEach(function(pill) {
+        var wrapper = pill.closest('.flex.justify-start');
+        if (wrapper) wrapper.remove();
+      });
+      document.querySelectorAll('[id^="cont-"]').forEach(function(contEl) {
+        contEl.classList.remove('streaming');
+        var contRaw = contEl.dataset.rawContent || '';
+        if (contRaw.trim()) {
+          contEl.innerHTML = marked.parse(contRaw);
+          contEl.dataset.mdRendered = '1';
+        } else {
+          var contBubble = contEl.closest('.flex.justify-start');
+          if (contBubble) contBubble.remove();
+        }
+      });
+    }
+
+    // ── Auto-resize textarea ────────────────────────────────────────
+    document.addEventListener('input', function(e) {
+      if (e.target.tagName === 'TEXTAREA') {
+        e.target.style.height = 'auto';
+        e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+      }
+    });
+    // Re-apply translations on HTMX swaps (for dynamically injected i18n elements)
+    document.addEventListener('htmx:afterSettle', function() {
+      applyTranslations(getCurrentLang());
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.target.tagName === 'TEXTAREA' && e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        var form = e.target.closest('form');
+        if (form) form.requestSubmit();
+      }
+    });
+
+    // ── Init ────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+      renderAllMarkdown();
+      var msgs = document.getElementById('messages');
+      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+      var lang = getCurrentLang();
+      document.documentElement.lang = lang;
+      var label = document.getElementById('lang-label');
+      if (label) label.textContent = lang.toUpperCase();
+      applyTranslations(lang);
+      applyTheme(getTheme());
+    });
+    // Apply theme immediately to prevent flash
+    (function() {
+      var t = localStorage.getItem('selu-theme') || 'dark';
+      document.documentElement.classList.remove('dark','light');
+      document.documentElement.classList.add(t);
+    })();
+  </script>
+</body>
+</html>

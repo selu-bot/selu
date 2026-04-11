@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM schedules WHERE one_shot = 1 AND active = 0 AND last_run_at < datetime('now', '-7 days')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "c92e43efc03d8e6eb1154c77af862bda80849473c1e65111bf35a63f0c5eba9b"
+}

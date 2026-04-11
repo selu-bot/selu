@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO schedule_pipes (schedule_id, pipe_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "24c0dd33aaabe936f8a561a32446480915e5a186013860bfcb3336da339d1ff1"
+}

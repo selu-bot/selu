@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT active, cron_expression, one_shot FROM schedules WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "active",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cron_expression",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "one_shot",
+        "ordinal": 2,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d8f7c98a6a5d295dc1d4b67ba369f08c894b889b2933f600e53073206c730078"
+}

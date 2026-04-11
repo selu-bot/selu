@@ -1,0 +1,336 @@
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
+use std::collections::HashMap;
+use std::path::Path;
+use tokio::fs;
+
+use crate::agents::localization::{self, AgentI18nConfig, AgentLocaleBundle};
+use crate::capabilities::manifest::{CapabilityManifest, load_for_agent};
+
+// ── Routing mode ──────────────────────────────────────────────────────────────
+
+/// Controls how the default agent accesses this agent's tools.
+///
+/// - `Inline`: Tools are exposed directly on the default agent's tool list,
+///   eliminating the delegation round-trip (2+ fewer LLM calls).
+/// - `Delegate`: Full delegation via `delegate_to_agent` (original behavior).
+///   The specialist gets its own LLM context with its own system prompt.
+/// - `Auto` (default): The runtime decides based on heuristics — simple agents
+///   with few tools are inlined, complex agents are delegated.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingMode {
+    Inline,
+    Delegate,
+    #[default]
+    Auto,
+}
+
+// ── Agent definition ──────────────────────────────────────────────────────────
+
+/// Parsed agent definition loaded from the installed agents directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentDefinition {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub i18n: AgentI18nConfig,
+    /// Model configuration is now optional — marketplace agents ship without a
+    /// model. The actual model is resolved at runtime via `agents::model::resolve_model()`.
+    #[serde(default)]
+    pub model: Option<ModelConfig>,
+    #[serde(default)]
+    pub routing: RoutingMode,
+    #[serde(default)]
+    pub session: SessionConfig,
+    /// System prompt loaded from agent.md
+    #[serde(skip_deserializing)]
+    pub system_prompt: String,
+    #[serde(default)]
+    pub capabilities: Vec<CapabilityRef>,
+    /// Capability manifests loaded from the agent's capabilities/ subdirectory
+    #[serde(skip)]
+    pub capability_manifests: HashMap<String, CapabilityManifest>,
+    /// Installation steps for the setup wizard (optional, defined in agent.yaml)
+    #[serde(default)]
+    pub install_steps: Vec<InstallStep>,
+    /// Optional agent-managed schedule presets (opt-in per user from settings).
+    #[serde(default)]
+    pub automation: AgentAutomationConfig,
+    #[serde(skip_deserializing, default)]
+    pub locales: HashMap<String, AgentLocaleBundle>,
+    #[serde(skip_deserializing, default)]
+    pub localized_system_prompts: HashMap<String, String>,
+}
+
+impl AgentDefinition {
+    /// Resolve the effective routing mode, applying heuristics for `Auto`.
+    ///
+    /// An agent is inlined when **all** of:
+    /// - It has ≤ 3 tools across all capabilities
+    /// - It has no custom model override
+    /// - Its combined capability prompt text is < 2000 characters
+    ///
+    /// Otherwise it is delegated (preserving the full specialist context).
+    pub fn effective_routing(&self) -> RoutingMode {
+        match self.routing {
+            RoutingMode::Inline => RoutingMode::Inline,
+            RoutingMode::Delegate => RoutingMode::Delegate,
+            RoutingMode::Auto => {
+                let tool_count: usize = self
+                    .capability_manifests
+                    .values()
+                    .map(|m| m.tools.len())
+                    .sum();
+                let prompt_len: usize = self
+                    .capability_manifests
+                    .values()
+                    .map(|m| m.prompt.len())
+                    .sum();
+
+                if tool_count <= 3 && self.model.is_none() && prompt_len < 2000 {
+                    RoutingMode::Inline
+                } else {
+                    RoutingMode::Delegate
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelConfig {
+    pub provider: String,
+    pub model_id: String,
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+}
+
+fn default_temperature() -> f32 {
+    0.7
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SessionConfig {
+    #[serde(default = "default_trigger")]
+    pub trigger: String,
+    #[serde(default = "default_idle_timeout")]
+    pub idle_timeout_minutes: u32,
+    #[serde(default)]
+    pub isolation: SessionIsolationMode,
+}
+
+fn default_trigger() -> String {
+    "mention".to_string()
+}
+fn default_idle_timeout() -> u32 {
+    30
+}
+
+/// Controls whether sessions are shared across threads or isolated per thread.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionIsolationMode {
+    /// Reuse the most recent active session for this user+agent when possible.
+    #[default]
+    Shared,
+    /// Always create/resume a dedicated session per thread.
+    PerThread,
+}
+
+impl SessionConfig {
+    pub fn requires_thread_isolation(&self) -> bool {
+        matches!(self.isolation, SessionIsolationMode::PerThread)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapabilityRef {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentAutomationConfig {
+    #[serde(default)]
+    pub schedules: Vec<AgentSchedulePreset>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSchedulePreset {
+    /// Stable identifier used for deterministic schedule naming.
+    pub id: String,
+    /// Human-readable label for settings UI.
+    pub label: String,
+    /// Prompt executed on each run.
+    pub prompt: String,
+    /// Cron expression in Selu 6-field format.
+    pub cron_expression: String,
+    /// Human-readable timing text shown in schedules UI.
+    pub cron_description: String,
+}
+
+// ── Install steps (generic wizard framework) ──────────────────────────────────
+
+/// A single step in the post-install setup wizard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstallStep {
+    /// Unique step ID (used in template variable substitution, e.g. `{{step_id}}`)
+    pub id: String,
+    /// Step type: `input` (user fills in a value) or `test` (run a verification check)
+    #[serde(rename = "type")]
+    pub step_type: StepType,
+    /// Human-readable label shown in the wizard
+    pub label: String,
+    /// Longer description / help text
+    #[serde(default)]
+    pub description: String,
+    /// Default value for input steps
+    #[serde(default)]
+    pub default: Option<String>,
+    /// Validation hint: "url", "not_empty", etc.
+    #[serde(default)]
+    pub validation: Option<String>,
+    /// Where to store the value (for input steps)
+    #[serde(default)]
+    pub store_as: Option<CredentialTarget>,
+    /// HTTP request to execute (for test steps)
+    #[serde(default)]
+    pub request: Option<TestRequest>,
+    /// Step ID that must be completed before this step can run
+    #[serde(default)]
+    pub depends_on: Option<String>,
+}
+
+/// Where to persist a step's value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CredentialTarget {
+    /// "system_credential" or "user_credential"
+    pub scope: String,
+    pub capability_id: String,
+    pub credential_name: String,
+}
+
+/// HTTP request for a test step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestRequest {
+    pub method: String,
+    /// URL template — supports `{{step_id}}` for variable substitution
+    pub url: String,
+    pub expect_status: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum StepType {
+    Input,
+    Test,
+}
+
+// ── Loading ───────────────────────────────────────────────────────────────────
+
+/// Load all installed agent definitions.
+///
+/// Reads the `agents` DB table to find installed agents with `setup_complete = 1`,
+/// then loads each agent's files from the `installed_dir`.
+///
+/// The bundled default agent is NOT loaded here — it is injected separately by
+/// `agents::bundled::default_agent()`.
+pub async fn load_installed(
+    db: &SqlitePool,
+    installed_dir: &str,
+) -> Result<HashMap<String, AgentDefinition>> {
+    let mut agents = HashMap::new();
+
+    let rows = sqlx::query_as::<_, (String,)>(
+        "SELECT id FROM agents WHERE setup_complete = 1 AND is_bundled = 0",
+    )
+    .fetch_all(db)
+    .await
+    .context("Failed to query installed agents")?;
+
+    let dir = Path::new(installed_dir);
+
+    for (agent_id,) in rows {
+        let agent_dir = dir.join(&agent_id);
+        match load_one(&agent_dir).await {
+            Ok(mut agent) => {
+                // The DB ID (= marketplace ID) is authoritative.  Override the
+                // YAML id so the in-memory map is keyed consistently with the
+                // DB and filesystem.
+                if agent.id != agent_id {
+                    tracing::warn!(
+                        db_id = %agent_id,
+                        yaml_id = %agent.id,
+                        "agent.yaml id differs from DB id — using DB id"
+                    );
+                    agent.id = agent_id.clone();
+                }
+                tracing::info!(agent = %agent.id, "Loaded installed agent");
+                agents.insert(agent.id.clone(), agent);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    agent = %agent_id,
+                    dir = %agent_dir.display(),
+                    "Failed to load installed agent: {e}"
+                );
+            }
+        }
+    }
+
+    Ok(agents)
+}
+
+/// Load a single agent definition from a directory.
+///
+/// Public so that the marketplace installer can use it after extracting an
+/// agent archive.
+pub async fn load_one(dir: &Path) -> Result<AgentDefinition> {
+    let yaml_path = dir.join("agent.yaml");
+    let md_path = dir.join("agent.md");
+
+    let yaml_content = fs::read_to_string(&yaml_path)
+        .await
+        .with_context(|| format!("Missing agent.yaml in {}", dir.display()))?;
+
+    let mut agent: AgentDefinition = serde_yaml::from_str(&yaml_content)
+        .with_context(|| format!("Invalid agent.yaml in {}", dir.display()))?;
+
+    if md_path.exists() {
+        agent.system_prompt = fs::read_to_string(&md_path)
+            .await
+            .with_context(|| format!("Failed to read agent.md in {}", dir.display()))?;
+    }
+
+    agent.locales = localization::load_locale_bundles(dir).await?;
+    agent.localized_system_prompts =
+        localization::load_localized_markdown_files(dir, "agent").await?;
+
+    // Load capability manifests from capabilities/ subdirectory
+    let cap_list = load_for_agent(dir).await.unwrap_or_default();
+    agent.capability_manifests = cap_list.into_iter().map(|m| (m.id.clone(), m)).collect();
+
+    Ok(agent)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SessionConfig, SessionIsolationMode};
+
+    #[test]
+    fn session_config_defaults_to_shared_isolation() {
+        let cfg = SessionConfig::default();
+        assert_eq!(cfg.isolation, SessionIsolationMode::Shared);
+        assert!(!cfg.requires_thread_isolation());
+    }
+
+    #[test]
+    fn session_config_per_thread_isolation_is_detected() {
+        let cfg = SessionConfig {
+            isolation: SessionIsolationMode::PerThread,
+            ..SessionConfig::default()
+        };
+        assert!(cfg.requires_thread_isolation());
+    }
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT bot_token FROM telegram_configs WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "bot_token",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "11997f66db81b9f90ee7e595bc1c1a11c553b1dca2c870ae32bf40c63b2424dc"
+}

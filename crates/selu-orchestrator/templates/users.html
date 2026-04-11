@@ -1,0 +1,335 @@
+{% extends "layout.html" %}
+
+{% block title %}Users{% endblock %}
+
+{% block head %}
+<script>
+function openAgentsModal(userId) {
+  document.getElementById('agent-modal-' + userId).classList.remove('hidden');
+}
+function closeAgentsModal(userId) {
+  document.getElementById('agent-modal-' + userId).classList.add('hidden');
+}
+function prepareAgentsForm(form) {
+  var values = Array.from(form.querySelectorAll('input[data-agent-option]:checked'))
+    .map(function(i) { return i.value; })
+    .join(',');
+  form.querySelector('input[name=agents]').value = values;
+  return true;
+}
+
+function openCreateUserModal() {
+  document.getElementById('create-user-modal').classList.remove('hidden');
+}
+function closeCreateUserModal() {
+  document.getElementById('create-user-modal').classList.add('hidden');
+}
+function openPasswordModal() {
+  document.getElementById('password-modal').classList.remove('hidden');
+}
+function closePasswordModal() {
+  document.getElementById('password-modal').classList.add('hidden');
+}
+</script>
+{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-6xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="users.title">Users</h1>
+        {% if is_admin %}
+        <p class="text-sm text-txt-muted mt-1" data-i18n="users.desc">User accounts used by pipes, sessions, and credentials.</p>
+        {% else %}
+        <p class="text-sm text-txt-muted mt-1" data-i18n="users.account.desc">Manage your account settings.</p>
+        {% endif %}
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="openPasswordModal()"
+                class="text-sm text-coral hover:text-coral/80 border border-coral/25 hover:border-coral/40 px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
+                data-i18n="users.password.change.open">Change password</button>
+        {% if is_admin %}
+        <button onclick="openCreateUserModal()"
+                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                data-i18n="users.create">Create User</button>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if let Some(key) = error_key %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm" data-i18n="{{ key }}">Something went wrong. Please try again.</div>
+    {% endif %}
+    {% if let Some(key) = success_key %}
+    <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm" data-i18n="{{ key }}">Saved.</div>
+    {% endif %}
+
+    {% if is_admin %}
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[860px] text-sm">
+          <thead>
+            <tr class="border-b border-edge">
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.username">Username</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.displayname">Display Name</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.role">Role</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.language">Language</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.agents">Agents</th>
+              <th class="hidden lg:table-cell px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted" data-i18n="users.created">Created</th>
+              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-edge">
+            {% for user in users %}
+            <tr class="hover:bg-sidebar-hover transition-colors">
+              <td class="px-5 py-3.5 font-mono text-sm text-txt">{{ user.username }}</td>
+              <td class="px-5 py-3.5 text-txt-heading">{{ user.display_name }}</td>
+              <td class="px-5 py-3.5">
+                {% if user.id == current_user_id %}
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-coral/10 text-coral border border-coral/20">
+                  <span data-i18n="users.admin">Admin</span>
+                  <span class="text-[10px] text-coral/60" data-i18n="users.you">(you)</span>
+                </span>
+                {% else if user.is_admin %}
+                <button class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-coral/10 text-coral border border-coral/20 cursor-pointer hover:bg-coral/20 transition-colors"
+                        hx-post="{{ base_path }}/users/{{ user.id }}/toggle-admin"
+                        hx-target="closest td"
+                        hx-swap="innerHTML"
+                        data-i18n="users.admin">Admin</button>
+                {% else %}
+                <button class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-alt text-txt-muted border border-edge cursor-pointer hover:bg-sidebar-hover transition-colors"
+                        hx-post="{{ base_path }}/users/{{ user.id }}/toggle-admin"
+                        hx-target="closest td"
+                        hx-swap="innerHTML"
+                        data-i18n="users.user">User</button>
+                {% endif %}
+              </td>
+              <td class="px-5 py-3.5">
+                <select name="language"
+                        hx-post="{{ base_path }}/users/{{ user.id }}/language"
+                        hx-target="closest td"
+                        hx-swap="innerHTML"
+                        class="bg-surface-input border border-edge rounded-lg px-2 py-1 text-xs text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition cursor-pointer">
+                  <option value="de" {% if user.language == "de" %}selected{% endif %}>Deutsch</option>
+                  <option value="en" {% if user.language == "en" %}selected{% endif %}>English</option>
+                </select>
+              </td>
+              <td class="px-5 py-3.5">
+                {% if all_agents.is_empty() %}
+                <span class="text-xs text-txt-faint">—</span>
+                {% else %}
+                <div class="flex flex-wrap items-center gap-2">
+                  <div id="agents-summary-{{ user.id }}" class="flex flex-wrap gap-1">
+                    {% if user.allowed_agents.is_empty() %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-i18n="users.agents.all">All agents</span>
+                    {% else if user.has_no_agents() %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-surface-alt text-txt-muted border border-edge" data-i18n="users.agents.none">No agents</span>
+                    {% else %}
+                    {% for agent in all_agents %}
+                    {% if user.has_agent(agent.id) %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-coral/10 text-coral border border-coral/20">{{ agent.name }}</span>
+                    {% endif %}
+                    {% endfor %}
+                    {% endif %}
+                  </div>
+                  <button type="button"
+                          onclick="openAgentsModal('{{ user.id }}')"
+                          class="text-xs text-coral hover:text-coral/80 border border-coral/20 hover:border-coral/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                          data-i18n="users.agents.edit">Edit</button>
+                </div>
+                {% endif %}
+              </td>
+              <td class="hidden lg:table-cell px-5 py-3.5 font-mono text-xs text-txt-muted">{{ user.created_at }}</td>
+              <td class="px-5 py-3.5 text-right">
+                {% if user.id != current_user_id %}
+                <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        hx-delete="{{ base_path }}/users/{{ user.id }}"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete user {{ user.username }}? This cannot be undone."
+                        data-i18n="users.delete">Delete</button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            {% if users.is_empty() %}
+            <tr>
+              <td colspan="7" class="px-5 py-8 text-center text-txt-muted text-sm" data-i18n="users.empty">No users yet.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div id="password-modal" class="hidden fixed inset-0 z-[120] flex items-center justify-center">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closePasswordModal()"></div>
+  <div class="relative bg-surface-raised border border-edge rounded-2xl shadow-2xl w-full max-w-2xl mx-4 animate-fadein">
+    <div class="px-5 py-4 border-b border-edge flex items-center justify-between">
+      <div>
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="users.password.change.title">Change Password</span>
+        <p class="text-[11px] text-txt-faint mt-0.5">{{ current_username }}</p>
+      </div>
+      <button type="button" onclick="closePasswordModal()" class="text-txt-muted hover:text-txt transition-colors cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form method="post" action="{{ base_path }}/users/change-password">
+      <div class="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label for="current-password" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.password.current">Current password</label>
+          <input id="current-password"
+                 name="current_password"
+                 type="password"
+                 required
+                 autocomplete="current-password"
+                 data-i18n-placeholder="users.password.current.placeholder"
+                 placeholder="Your current password"
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+        </div>
+        <div>
+          <label for="new-password" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.password.new">New password</label>
+          <input id="new-password"
+                 name="new_password"
+                 type="password"
+                 required
+                 minlength="8"
+                 autocomplete="new-password"
+                 data-i18n-placeholder="users.password.new.placeholder"
+                 placeholder="At least 8 characters"
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+        </div>
+        <div>
+          <label for="confirm-password" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.password.confirm">Confirm new password</label>
+          <input id="confirm-password"
+                 name="confirm_password"
+                 type="password"
+                 required
+                 minlength="8"
+                 autocomplete="new-password"
+                 data-i18n-placeholder="users.password.confirm.placeholder"
+                 placeholder="Type the new password again"
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+        </div>
+        <div class="sm:col-span-3 flex items-center justify-between gap-3">
+          <p class="text-[11px] text-txt-faint" data-i18n="users.password.change.hint">For security, other active sessions will be signed out after password change.</p>
+          <div class="flex items-center gap-3">
+            <button type="button"
+                    onclick="closePasswordModal()"
+                    class="text-sm text-txt-muted hover:text-txt px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
+                    data-i18n="users.cancel">Cancel</button>
+            <button type="submit"
+                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    data-i18n="users.password.change.submit">Update password</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if is_admin %}
+<div id="create-user-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeCreateUserModal()"></div>
+  <div class="relative bg-surface-raised border border-edge rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-fadein">
+    <div class="px-5 py-4 border-b border-edge flex items-center justify-between">
+      <span class="text-sm font-semibold text-txt-heading" data-i18n="users.create">Create User</span>
+      <button onclick="closeCreateUserModal()" class="text-txt-muted hover:text-txt transition-colors cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form method="post" action="{{ base_path }}/users">
+      <div class="p-5 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="u-username" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.username">Username</label>
+            <input id="u-username" name="username" type="text" placeholder="alice" required autocomplete="off"
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+            <p class="text-[11px] text-txt-faint mt-1" data-i18n="users.create.hint.username">Unique, lowercase, no spaces.</p>
+          </div>
+          <div>
+            <label for="u-display" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.displayname">Display Name</label>
+            <input id="u-display" name="display_name" type="text" placeholder="Alice Smith" autocomplete="off"
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+            <p class="text-[11px] text-txt-faint mt-1" data-i18n="users.create.hint.displayname">Defaults to username if left blank.</p>
+          </div>
+          <div>
+            <label for="u-password" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.password">Password</label>
+            <input id="u-password" name="password" type="password" required autocomplete="new-password"
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+          </div>
+          <div>
+            <label for="u-language" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.language">Language</label>
+            <select id="u-language" name="language"
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+              <option value="de">Deutsch</option>
+              <option value="en">English</option>
+            </select>
+            <p class="text-[11px] text-txt-faint mt-1" data-i18n="users.language.hint">The language agents will reply in.</p>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" name="is_admin" class="w-4 h-4 rounded border-edge text-coral focus:ring-coral/50" />
+          <span class="text-sm text-txt" data-i18n="users.makeadmin">Make this user an admin</span>
+        </label>
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="closeCreateUserModal()"
+                  class="text-sm text-txt-muted hover:text-txt px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
+                  data-i18n="users.cancel">Cancel</button>
+          <button type="submit"
+                  class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                  data-i18n="users.create">Create User</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if is_admin && !all_agents.is_empty() %}
+{% for user in users %}
+<div id="agent-modal-{{ user.id }}" class="hidden fixed inset-0 z-[110] flex items-center justify-center">
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeAgentsModal('{{ user.id }}')"></div>
+  <div class="relative bg-surface-raised border border-edge rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-fadein">
+    <div class="px-5 py-4 border-b border-edge flex items-center justify-between">
+      <div class="text-sm font-semibold text-txt-heading">
+        <span data-i18n="users.agents.modal_title">Choose agents for</span>
+        <span class="font-mono">{{ user.username }}</span>
+      </div>
+      <button type="button" onclick="closeAgentsModal('{{ user.id }}')" class="text-txt-muted hover:text-txt transition-colors cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form method="post" action="{{ base_path }}/users/{{ user.id }}/agents" onsubmit="return prepareAgentsForm(this)">
+      <input type="hidden" name="agents" />
+      <div class="p-5 max-h-[60vh] overflow-y-auto space-y-1">
+        {% for agent in all_agents %}
+        <label class="flex items-center gap-3 px-3 py-2 hover:bg-sidebar-hover rounded-lg cursor-pointer transition-colors">
+          <input type="checkbox"
+                 data-agent-option
+                 value="{{ agent.id }}"
+                 {% if user.allowed_agents.is_empty() || user.has_agent(agent.id) %}checked{% endif %}
+                 class="w-4 h-4 rounded border-edge text-coral focus:ring-coral/50" />
+          <span class="text-sm text-txt">{{ agent.name }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="px-5 py-4 border-t border-edge flex justify-end gap-3">
+        <button type="button"
+                onclick="closeAgentsModal('{{ user.id }}')"
+                class="text-sm text-txt-muted hover:text-txt px-4 py-2 rounded-xl transition-colors cursor-pointer"
+                data-i18n="users.cancel">Cancel</button>
+        <button type="submit"
+                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                data-i18n="users.agents.save">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

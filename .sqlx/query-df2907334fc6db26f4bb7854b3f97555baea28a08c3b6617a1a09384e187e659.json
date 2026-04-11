@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE bluebubbles_configs SET active = 0 WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "df2907334fc6db26f4bb7854b3f97555baea28a08c3b6617a1a09384e187e659"
+}

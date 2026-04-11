@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% block title %}Add Pipe{% endblock %}
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-4xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <div>
+      <a href="{{ base_path }}/pipes" class="inline-flex items-center gap-1.5 text-xs text-txt-muted hover:text-txt-heading transition-colors mb-3">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5m7 7-7-7 7-7"/></svg>
+        <span data-i18n="pipes.back">Back to Pipes</span>
+      </a>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="pipes.add_title">Add Pipe</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="pipes.add_desc">Choose how people should reach Selu. We’ll guide you through the setup for that pipe type.</p>
+    </div>
+
+    {% if let Some(err) = error %}
+    <div class="px-4 py-3 rounded-xl bg-rosie/10 border border-rosie/20 text-rosie text-sm">{{ err }}</div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {% for pipe in pipes %}
+      {% if let Some(href) = pipe.href %}
+      <a href="{{ href }}"
+         class="bg-surface-raised border border-edge rounded-2xl p-5 {% if pipe.available %}hover:border-coral/40{% else %}opacity-80{% endif %} transition-all group flex flex-col gap-3">
+      {% else %}
+      <div class="bg-surface-alt border border-edge border-dashed rounded-2xl p-5 opacity-60 flex flex-col gap-3">
+      {% endif %}
+        <div class="space-y-2">
+          <div class="text-sm font-semibold text-txt-heading {% if pipe.available %}group-hover:text-coral{% endif %} transition-colors">{{ pipe.display_name }}</div>
+          {% if let Some(status_key) = pipe.status_key %}
+          <span class="inline-flex max-w-full px-2.5 py-1 rounded-full text-[10px] leading-relaxed font-medium bg-surface-alt text-txt-muted break-words" data-i18n="{{ status_key }}">Status</span>
+          {% endif %}
+        </div>
+        <p class="text-xs text-txt-muted leading-relaxed" data-i18n="{{ pipe.subtitle_key }}">Pipe description</p>
+        <span class="inline-flex items-center gap-1 text-xs {% if pipe.available %}font-medium text-coral{% else %}text-txt-muted{% endif %} mt-auto">
+          <span data-i18n="{{ pipe.action_key }}">Set up</span>
+          {% if pipe.available %}
+          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          {% endif %}
+        </span>
+      {% if pipe.href.is_some() %}
+      </a>
+      {% else %}
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT file_path\n         FROM thread_artifacts\n         WHERE id = ? AND user_id = ?\n         LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_path",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "173197a8ed0f9af35f857dc3595182f329475a2826ed86b047a0e35ab9fd7c16"
+}

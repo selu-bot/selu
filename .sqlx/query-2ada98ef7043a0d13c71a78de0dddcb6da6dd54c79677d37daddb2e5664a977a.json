@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT bc.id, bc.name, bc.server_url, bc.server_password, bc.chat_guid,\n                bc.pipe_id, bc.bb_webhook_id, p.inbound_token\n         FROM bluebubbles_configs bc\n         JOIN pipes p ON p.id = bc.pipe_id\n         WHERE bc.id = ? AND bc.active = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_url",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_password",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "chat_guid",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "bb_webhook_id",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "inbound_token",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "2ada98ef7043a0d13c71a78de0dddcb6da6dd54c79677d37daddb2e5664a977a"
+}
