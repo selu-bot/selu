@@ -62,7 +62,7 @@ jobs:
             echo "channel=stable" >> "$GITHUB_OUTPUT"
             echo "channel_tag=${VERSION}" >> "$GITHUB_OUTPUT"
             echo "### Stable release build: \`${VERSION}\` + \`stable\` + \`latest\`" >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "${{ github.ref_name }}" =~ ^release/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+          elif [[ "${{ github.ref_name }}" =~ ^release/v?([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             VERSION="${BASH_REMATCH[1]}"
             echo "tags=${IMAGE}:${VERSION}-dev" >> "$GITHUB_OUTPUT"
             echo "channel=${VERSION}-dev" >> "$GITHUB_OUTPUT"
