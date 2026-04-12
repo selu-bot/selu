@@ -186,90 +186,6 @@ pub async fn search_memories(
         .collect())
 }
 
-pub async fn search_for_context(
-    db: &SqlitePool,
-    user_id: &str,
-    latest_message: &str,
-    limit: i64,
-) -> Result<Vec<AgentMemoryHit>> {
-    // Skip trivial/short messages that produce poor BM25 results.
-    let trimmed = latest_message.trim();
-    if trimmed.len() < 3 {
-        return Ok(Vec::new());
-    }
-    let stop_words: &[&str] = &[
-        "ok",
-        "okay",
-        "yes",
-        "no",
-        "ja",
-        "nein",
-        "hi",
-        "hey",
-        "hello",
-        "hallo",
-        "thanks",
-        "danke",
-        "cool",
-        "nice",
-        "sure",
-        "yep",
-        "yeah",
-        "nope",
-        "gut",
-        "klar",
-        "alles klar",
-        "passt",
-        "mhm",
-    ];
-    let lower = trimmed.to_lowercase();
-    if stop_words.contains(&lower.as_str()) {
-        return Ok(Vec::new());
-    }
-
-    let mut hits = search_memories(db, user_id, latest_message, limit).await?;
-    if hits.len() >= limit as usize {
-        return Ok(hits);
-    }
-
-    // Always backfill a few stable profile facts (location, preferences, etc.)
-    // so the agent knows core user context even when BM25 matched on
-    // unrelated terms.  Deduplicate against existing hits.
-    const MAX_PROFILE_FACTS: usize = 4;
-    let mut added = 0usize;
-    let seen_ids: std::collections::HashSet<String> =
-        hits.iter().map(|h| h.id.clone()).collect();
-    for m in list_memories(db, user_id, 100).await? {
-        if added >= MAX_PROFILE_FACTS || hits.len() >= limit as usize {
-            break;
-        }
-        if !matches!(
-            m.category.as_str(),
-            "" | "personal" | "preferences" | "location" | "work" | "other"
-        ) {
-            continue;
-        }
-        if seen_ids.contains(&m.id) {
-            continue;
-        }
-        hits.push(AgentMemoryHit {
-            id: m.id,
-            memory: m.memory,
-            tags: if m.category.is_empty() {
-                m.tags
-            } else {
-                m.category
-            },
-            source: m.source,
-            score: 0.0,
-            updated_at: m.updated_at,
-        });
-        added += 1;
-    }
-
-    Ok(hits)
-}
-
 pub fn remember_tool_spec() -> ToolSpec {
     ToolSpec {
         name: "memory_remember".to_string(),
@@ -314,8 +230,9 @@ pub fn forget_tool_spec() -> ToolSpec {
 pub fn search_tool_spec() -> ToolSpec {
     ToolSpec {
         name: "memory_search".to_string(),
-        description: "Search memories about this user using keyword relevance (BM25). \
-             Memories are shared across all agents."
+        description: "Search agent-saved notes and operational knowledge using keyword \
+             relevance (BM25). Use this for recalling things you or other agents have \
+             noted — NOT for user profile facts (those are always available automatically)."
             .to_string(),
         parameters: serde_json::json!({
             "type": "object",
@@ -400,7 +317,7 @@ pub async fn dispatch_search(
         .ok_or_else(|| anyhow::anyhow!("memory_search: missing 'query' string"))?;
 
     let limit = args["limit"].as_i64().unwrap_or(5).clamp(1, 10);
-    let hits = search_for_context(db, user_id, query, limit).await?;
+    let hits = search_memories(db, user_id, query, limit).await?;
 
     let entries: Vec<serde_json::Value> = hits
         .into_iter()
@@ -580,71 +497,4 @@ mod tests {
         assert_eq!(all.len(), 2);
     }
 
-    #[tokio::test]
-    async fn auto_extracted_facts_searchable() {
-        let db = test_db().await;
-        // Simulate auto-extracted personality fact (source = "auto", with category)
-        add_memory(
-            &db,
-            "system",
-            "user-1",
-            "Name is Jan",
-            "personal",
-            "auto",
-            "personal",
-        )
-        .await
-        .unwrap();
-
-        let hits = search_memories(&db, "user-1", "Jan", 5).await.unwrap();
-        assert_eq!(hits.len(), 1);
-        assert!(hits[0].memory.contains("Jan"));
-        assert_eq!(hits[0].source, "auto");
-    }
-
-    #[tokio::test]
-    async fn search_for_context_falls_back_to_profile_facts() {
-        let db = test_db().await;
-        add_memory(
-            &db,
-            "system",
-            "user-1",
-            "User lives in Berlin",
-            "location",
-            "auto",
-            "location",
-        )
-        .await
-        .unwrap();
-
-        // "living" does not necessarily match "lives" with strict FTS query terms.
-        let hits = search_for_context(&db, "user-1", "Where am I living these days?", 5)
-            .await
-            .unwrap();
-        assert!(!hits.is_empty());
-        assert!(hits.iter().any(|h| h.memory.contains("Berlin")));
-    }
-
-    #[tokio::test]
-    async fn search_for_context_backfills_agent_saved_memories() {
-        let db = test_db().await;
-        // Agent-saved memories have empty category — must still be backfilled.
-        add_memory(
-            &db,
-            "default",
-            "user-1",
-            "User lives in Greven (Germany)",
-            "",
-            "agent",
-            "",
-        )
-        .await
-        .unwrap();
-
-        let hits = search_for_context(&db, "user-1", "What is the weather like?", 5)
-            .await
-            .unwrap();
-        assert!(!hits.is_empty());
-        assert!(hits.iter().any(|h| h.memory.contains("Greven")));
-    }
 }

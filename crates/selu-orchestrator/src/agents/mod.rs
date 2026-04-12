@@ -12,6 +12,7 @@ pub mod marketplace;
 pub mod memory;
 pub mod model;
 pub mod personality;
+pub mod profile;
 pub mod router;
 pub mod runtime_limits;
 pub mod session;

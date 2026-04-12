@@ -8,7 +8,6 @@ use tracing::debug;
 
 use crate::agents::delegation;
 use crate::agents::loader::AgentDefinition;
-use crate::agents::memory;
 use crate::capabilities::manifest::CapabilityManifest;
 use crate::llm::provider::{ChatMessage, ToolCall};
 use sqlx::Row;
@@ -61,7 +60,7 @@ pub async fn build(
     thread_id: Option<&str>,
     user_id: &str,
     user_language: &str,
-    latest_message: &str,
+    _latest_message: &str,
     inlined_manifests: &HashMap<String, CapabilityManifest>,
     delegated_agents: Option<&HashMap<String, Arc<AgentDefinition>>>,
 ) -> Result<Vec<ChatMessage>> {
@@ -220,39 +219,16 @@ pub async fn build(
 
     messages.push(ChatMessage::system(system));
 
-    // ── Unified memory (BM25 retrieval, user-scoped) ──────────────────────────
-    // Single injection point replacing the old separate personality + memory
-    // blocks.  Memories are shared across all agents for this user.
-    match memory::search_for_context(db, user_id, latest_message, 8).await {
-        Ok(hits) if !hits.is_empty() => {
-            debug!(count = hits.len(), "Injecting memory into context");
-            let mut ctx = String::from("## What you know about this user\n\n");
-            ctx.push_str("These facts and notes have been learned about the user over time. ");
-            ctx.push_str(
-                "Use them naturally when relevant, but do not repeat them back to the user.\n\n",
-            );
-
-            for hit in &hits {
-                let category_label = match hit.tags.trim() {
-                    "personal" => Some("Personal"),
-                    "preferences" => Some("Preferences"),
-                    "location" => Some("Location"),
-                    "work" => Some("Work & Skills"),
-                    "other" => Some("Other"),
-                    _ => None,
-                };
-                if let Some(label) = category_label {
-                    ctx.push_str(&format!("- [{}] {}\n", label, hit.memory));
-                } else {
-                    ctx.push_str(&format!("- {}\n", hit.memory));
-                }
-            }
-
+    // ── User profile (always-on, unconditional) ────────────────────────────────
+    // All profile facts are injected into every turn — no BM25 gate, no search.
+    // The agent always knows who the user is.
+    match super::profile::build_context_block(db, user_id).await {
+        Ok(Some(ctx)) => {
             messages.push(ChatMessage::system(ctx));
         }
-        Ok(_) => {}
+        Ok(None) => {}
         Err(e) => {
-            debug!("Memory loading failed (non-fatal): {e}");
+            debug!("Profile loading failed (non-fatal): {e}");
         }
     }
 

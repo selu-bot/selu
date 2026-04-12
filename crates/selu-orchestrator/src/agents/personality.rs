@@ -1,15 +1,14 @@
 /// User fact extraction: auto-extracts facts about users from conversations
-/// and stores them in the unified agent_memories table.
+/// and stores them in the `user_profile` table.
 ///
-/// Previously managed a separate `user_personality` table. Now writes directly
-/// to `agent_memories` with `source = 'auto'` and a category tag, so facts
-/// are BM25-searchable and shared across all agents.
+/// Profile facts are always injected into agent context unconditionally,
+/// ensuring the agent always knows who the user is.
 use anyhow::Result;
 use serde::Deserialize;
 use sqlx::SqlitePool;
 use tracing::{debug, warn};
 
-use crate::agents::memory;
+use crate::agents::profile;
 use crate::llm::provider::{ChatMessage, LlmResponse};
 use crate::llm::registry::load_provider;
 use crate::permissions::store::CredentialStore;
@@ -35,20 +34,13 @@ pub async fn extract_from_conversation(
         return Ok(());
     }
 
-    // Load existing auto-extracted facts from unified memory to avoid duplicates
-    let existing = memory::list_memories(db, user_id, 100)
+    // Load existing profile facts to avoid duplicates
+    let existing = profile::list_facts(db, user_id, 100)
         .await
         .unwrap_or_default();
     let existing_summary: String = existing
         .iter()
-        .filter(|m| m.source == "auto")
-        .map(|m| {
-            if m.category.is_empty() {
-                format!("- {}", m.memory)
-            } else {
-                format!("- [{}] {}", m.category, m.memory)
-            }
-        })
+        .map(|f| format!("- [{}] {}", f.category, f.fact))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -143,7 +135,7 @@ Respond ONLY with the JSON array, nothing else."#,
         }
 
         if let Err(e) =
-            memory::add_memory(db, agent_id, user_id, fact.fact.trim(), cat, "auto", cat).await
+            profile::add_fact(db, user_id, fact.fact.trim(), cat, "auto", agent_id).await
         {
             warn!("Failed to store extracted fact: {e}");
         } else {
