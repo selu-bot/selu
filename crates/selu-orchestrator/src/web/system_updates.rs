@@ -1304,21 +1304,24 @@ async fn ensure_defaults(state: &AppState) -> Result<()> {
     .await
     .context("Failed to seed system_update_settings")?;
 
-    // Sync the release channel from the environment if it changed (e.g. reinstall
-    // with a different channel). INSERT OR IGNORE above won't update existing rows.
-    let result = sqlx::query(
-        "UPDATE system_update_settings
-         SET release_channel = ?, updated_at = datetime('now')
-         WHERE id = 'global' AND release_channel != ?",
-    )
-    .bind(&seeded_channel)
-    .bind(&seeded_channel)
-    .execute(&state.db)
-    .await
-    .context("Failed to sync release channel from environment")?;
+    // Sync the release channel from the environment only when the env var is
+    // explicitly set (not the default).  This handles reinstalls with a different
+    // channel while still respecting user-selected channel preferences.
+    if std::env::var("SELU_RELEASE_CHANNEL").is_ok() {
+        let result = sqlx::query(
+            "UPDATE system_update_settings
+             SET release_channel = ?, updated_at = datetime('now')
+             WHERE id = 'global' AND release_channel != ?",
+        )
+        .bind(&seeded_channel)
+        .bind(&seeded_channel)
+        .execute(&state.db)
+        .await
+        .context("Failed to sync release channel from environment")?;
 
-    if result.rows_affected() > 0 {
-        info!("ensure_defaults: synced release channel to '{seeded_channel}'");
+        if result.rows_affected() > 0 {
+            info!("ensure_defaults: synced release channel to '{seeded_channel}'");
+        }
     }
 
     sqlx::query(
