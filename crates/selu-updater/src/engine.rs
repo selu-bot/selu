@@ -984,7 +984,7 @@ fn should_pull_whatsapp_bridge_image(image: &str) -> bool {
     looks_like_registry
 }
 
-pub async fn stop_whatsapp_bridge(state: &AppState) -> Result<()> {
+pub async fn stop_whatsapp_bridge(state: &AppState, channel: &str) -> Result<()> {
     if !state.config.whatsapp_bridge_enabled {
         return Ok(());
     }
@@ -999,17 +999,17 @@ pub async fn stop_whatsapp_bridge(state: &AppState) -> Result<()> {
     }
 
     match run_docker_cmd(state, &["rm", "-f", container]).await {
-        Ok(_) => clear_whatsapp_bridge_auth(state, volume).await,
+        Ok(_) => clear_whatsapp_bridge_auth(state, volume, channel).await,
         Err(e) if e.to_string().contains("No such container") => {
-            clear_whatsapp_bridge_auth(state, volume).await
+            clear_whatsapp_bridge_auth(state, volume, channel).await
         }
         Err(e) => Err(e),
     }
 }
 
-async fn clear_whatsapp_bridge_auth(state: &AppState, volume: &str) -> Result<()> {
+async fn clear_whatsapp_bridge_auth(state: &AppState, volume: &str, channel: &str) -> Result<()> {
     if is_bind_mount_source(volume) {
-        clear_whatsapp_bridge_bind_mount(state, volume).await?;
+        clear_whatsapp_bridge_bind_mount(state, volume, channel).await?;
         return Ok(());
     }
 
@@ -1026,10 +1026,15 @@ async fn clear_whatsapp_bridge_auth(state: &AppState, volume: &str) -> Result<()
     Ok(())
 }
 
-async fn clear_whatsapp_bridge_bind_mount(state: &AppState, mount_path: &str) -> Result<()> {
+async fn clear_whatsapp_bridge_bind_mount(
+    state: &AppState,
+    mount_path: &str,
+    channel: &str,
+) -> Result<()> {
+    let channel = if channel.trim().is_empty() { "stable" } else { channel.trim() };
     let image = resolve_whatsapp_bridge_image_ref(
         &state.config.whatsapp_bridge_image_repo,
-        &std::env::var("SELU_RELEASE_CHANNEL").unwrap_or_else(|_| "stable".to_string()),
+        channel,
     )?;
 
     let helper_name = format!(

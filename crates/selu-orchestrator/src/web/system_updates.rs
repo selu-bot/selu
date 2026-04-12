@@ -482,8 +482,7 @@ pub async fn updates_job_status(user: AuthUser, State(state): State<AppState>) -
     match load_state(&state).await {
         Ok(mut s) => {
             let settings = load_settings(&state).await.unwrap_or(UpdateSettings {
-                release_channel: std::env::var("SELU_RELEASE_CHANNEL")
-                    .unwrap_or_else(|_| "stable".to_string()),
+                release_channel: "stable".to_string(),
                 auto_check: true,
                 auto_update: false,
                 installation_telemetry_opt_out: false,

@@ -18,6 +18,7 @@ use crate::updater::types::{
     SidecarWhatsappBridgeChatsResponse, SidecarWhatsappBridgeStatusResponse,
 };
 use crate::web::auth::AuthUser;
+use crate::web::system_updates;
 use crate::web::{BasePath, prefixed_redirect};
 
 const DEFAULT_BRIDGE_OUTBOUND_URL_DOCKER: &str =
@@ -251,7 +252,7 @@ pub async fn whatsapp_setup_submit(
 
     // Make sidecar startup transparent: ensure bridge image is pulled and running.
     // If this fails, block setup with a user-friendly action message.
-    let channel = std::env::var("SELU_RELEASE_CHANNEL").unwrap_or_else(|_| "stable".to_string());
+    let channel = system_updates::release_channel(&state).await;
     if let Ok(client) = SidecarUpdaterClient::from_config(&state.config) {
         let ack = client
             .ensure_whatsapp_bridge(&SidecarEnsureWhatsappBridgeRequest {
@@ -851,6 +852,7 @@ async fn stop_bridge_if_no_active_pipe(state: &AppState) -> Result<()> {
 
     let req = SidecarStopWhatsappBridgeRequest {
         request_id: Uuid::new_v4().to_string(),
+        channel: system_updates::release_channel(state).await,
     };
     match client.stop_whatsapp_bridge(&req).await {
         Ok(a) if a.accepted => {
@@ -901,7 +903,7 @@ pub async fn ensure_bridge_for_active_pipe(state: &AppState) {
         return;
     };
 
-    let channel = std::env::var("SELU_RELEASE_CHANNEL").unwrap_or_else(|_| "stable".to_string());
+    let channel = system_updates::release_channel(&state).await;
     let inbound_url = format!(
         "{}",
         managed_bridge_inbound_url(&state.config, &state.public_base_url(), &active.pipe_id)

@@ -40,6 +40,7 @@ pub struct SidecarEnsureWhatsappBridgeRequest {
 #[derive(Debug, Clone, Serialize)]
 pub struct SidecarStopWhatsappBridgeRequest {
     pub request_id: String,
+    pub channel: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
