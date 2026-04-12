@@ -56,7 +56,7 @@ jobs:
 
             TAGS="${IMAGE}:${VERSION},${IMAGE}:stable,${IMAGE}:latest"
             echo "### Stable WhatsApp bridge build: \`${VERSION}\` + \`stable\` + \`latest\`" >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "${{ github.ref_name }}" =~ ^release/([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+          elif [[ "${{ github.ref_name }}" =~ ^release/v?([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             VERSION="${BASH_REMATCH[1]}"
             TAGS="${IMAGE}:${VERSION}-dev"
             echo "### Dev WhatsApp bridge build: \`${VERSION}-dev\`" >> "$GITHUB_STEP_SUMMARY"
