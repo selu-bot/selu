@@ -413,7 +413,7 @@ async fn stop_whatsapp_bridge(
         );
     }
 
-    match engine::stop_whatsapp_bridge(&state).await {
+    match engine::stop_whatsapp_bridge(&state, &req.channel).await {
         Ok(()) => (
             StatusCode::OK,
             Json(AckResponse {

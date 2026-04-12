@@ -13,7 +13,6 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-const MAX_ARTIFACT_BYTES: usize = 5 * 1024 * 1024;
 const ARTIFACT_TTL: Duration = Duration::from_secs(60 * 60 * 6);
 const DOWNLOAD_URL_TTL: Duration = Duration::from_secs(60 * 60);
 
@@ -566,13 +565,6 @@ pub async fn store_inbound_attachment(
     if data.is_empty() {
         return Err(anyhow!("Attachment payload is empty"));
     }
-    if data.len() > MAX_ARTIFACT_BYTES {
-        return Err(anyhow!(
-            "Attachment too large ({} bytes). Maximum allowed is {} bytes",
-            data.len(),
-            MAX_ARTIFACT_BYTES
-        ));
-    }
 
     cleanup_expired_force(store).await;
     let artifact_id = Uuid::new_v4().to_string();
@@ -649,13 +641,6 @@ where
     );
     if data.is_empty() {
         return Err(anyhow!("Artifact payload is empty"));
-    }
-    if data.len() > MAX_ARTIFACT_BYTES {
-        return Err(anyhow!(
-            "Artifact too large ({} bytes). Maximum allowed is {} bytes",
-            data.len(),
-            MAX_ARTIFACT_BYTES
-        ));
     }
 
     let artifact_id = Uuid::new_v4().to_string();

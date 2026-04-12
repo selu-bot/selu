@@ -8,7 +8,7 @@ use axum::{
 use serde::Deserialize;
 use tracing::error;
 
-use crate::agents::memory;
+use crate::agents::profile;
 use crate::state::AppState;
 use crate::web::BasePath;
 use crate::web::auth::AuthUser;
@@ -92,31 +92,30 @@ fn category_label(cat: &str) -> &'static str {
     }
 }
 
-fn group_memories(memories: Vec<memory::AgentMemory>) -> Vec<FactGroup> {
+fn group_facts(facts: Vec<profile::ProfileFact>) -> Vec<FactGroup> {
     let categories = ["personal", "preferences", "location", "work", "other"];
     let mut groups = Vec::new();
 
     for cat in &categories {
-        let cat_facts: Vec<FactRow> = memories
+        let cat_facts: Vec<FactRow> = facts
             .iter()
-            .filter(|m| {
-                if m.category.is_empty() {
-                    // Uncategorized memories go into "other"
+            .filter(|f| {
+                if f.category.is_empty() {
                     *cat == "other"
                 } else {
-                    m.category == *cat
+                    f.category == *cat
                 }
             })
-            .map(|m| FactRow {
-                id: m.id.clone(),
-                category: if m.category.is_empty() {
+            .map(|f| FactRow {
+                id: f.id.clone(),
+                category: if f.category.is_empty() {
                     "other".to_string()
                 } else {
-                    m.category.clone()
+                    f.category.clone()
                 },
-                fact: m.memory.clone(),
-                source: m.source.clone(),
-                created_at: m.created_at.clone(),
+                fact: f.fact.clone(),
+                source: f.source.clone(),
+                created_at: f.created_at.clone(),
             })
             .collect();
 
@@ -139,11 +138,11 @@ pub async fn personality_index(
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
 ) -> Response {
-    let memories = memory::list_memories(&state.db, &user.user_id, 200)
+    let facts = profile::list_facts(&state.db, &user.user_id, 200)
         .await
         .unwrap_or_default();
 
-    let groups = group_memories(memories);
+    let groups = group_facts(facts);
 
     match (PersonalityTemplate {
         active_nav: "personality",
@@ -181,20 +180,19 @@ pub async fn personality_add(
         "other"
     };
 
-    match memory::add_memory(
+    match profile::add_fact(
         &state.db,
-        "system",
         &user.user_id,
         form.fact.trim(),
-        category, // category as tag for BM25
-        "manual",
         category,
+        "manual",
+        "system",
     )
     .await
     {
         Ok(_) => Redirect::to(&format!("{}/personality?success=added", base_path)).into_response(),
         Err(e) => {
-            error!("Failed to add memory: {e}");
+            error!("Failed to add profile fact: {e}");
             Redirect::to(&format!("{}/personality?error=add_failed", base_path)).into_response()
         }
     }
@@ -206,8 +204,8 @@ pub async fn personality_delete(
     Path(memory_id): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
-    if let Err(e) = memory::delete_memory(&state.db, &user.user_id, &memory_id).await {
-        error!("Failed to delete memory {memory_id}: {e}");
+    if let Err(e) = profile::delete_fact(&state.db, &user.user_id, &memory_id).await {
+        error!("Failed to delete profile fact {memory_id}: {e}");
     }
     Html("").into_response()
 }
@@ -220,7 +218,7 @@ pub async fn personality_edit_form(
     BasePath(base_path): BasePath,
 ) -> Response {
     let row = sqlx::query_as::<_, (String, String, String, String, String)>(
-        "SELECT id, category, memory_text, source, created_at FROM agent_memories WHERE id = ?",
+        "SELECT id, category, fact_text, source, created_at FROM user_profile WHERE id = ?",
     )
     .bind(&memory_id)
     .fetch_optional(&state.db)
@@ -256,7 +254,7 @@ pub async fn personality_edit_form(
     }
 }
 
-/// PUT /personality/{id} — update a memory (HTMX)
+/// PUT /personality/{id} — update a profile fact (HTMX)
 pub async fn personality_update(
     _user: AuthUser,
     Path(memory_id): Path<String>,
@@ -271,29 +269,21 @@ pub async fn personality_update(
         "other"
     };
 
-    if let Err(e) = sqlx::query(
-        "UPDATE agent_memories SET memory_text = ?, category = ?, tags = ?, updated_at = datetime('now') WHERE id = ?",
-    )
-    .bind(form.fact.trim())
-    .bind(category)
-    .bind(category) // tags = category for BM25
-    .bind(&memory_id)
-    .execute(&state.db)
-    .await
-    {
-        error!("Failed to update memory {memory_id}: {e}");
+    if let Err(e) = profile::update_fact(&state.db, &memory_id, form.fact.trim(), category).await {
+        error!("Failed to update profile fact {memory_id}: {e}");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
     // Return the updated row fragment
-    let source = sqlx::query_as::<_, (String,)>("SELECT source FROM agent_memories WHERE id = ?")
-        .bind(&memory_id)
-        .fetch_optional(&state.db)
-        .await
-        .ok()
-        .flatten()
-        .map(|(s,)| s)
-        .unwrap_or_else(|| "manual".to_string());
+    let source =
+        sqlx::query_as::<_, (String,)>("SELECT source FROM user_profile WHERE id = ?")
+            .bind(&memory_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .map(|(s,)| s)
+            .unwrap_or_else(|| "manual".to_string());
 
     let row = FactRow {
         id: memory_id,
@@ -324,7 +314,7 @@ pub async fn personality_row(
     BasePath(base_path): BasePath,
 ) -> Response {
     let row = sqlx::query_as::<_, (String, String, String, String, String)>(
-        "SELECT id, category, memory_text, source, created_at FROM agent_memories WHERE id = ?",
+        "SELECT id, category, fact_text, source, created_at FROM user_profile WHERE id = ?",
     )
     .bind(&memory_id)
     .fetch_optional(&state.db)

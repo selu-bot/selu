@@ -45,6 +45,8 @@ pub struct EnsureWhatsappBridgeRequest {
 #[derive(Debug, Clone, Deserialize)]
 pub struct StopWhatsappBridgeRequest {
     pub request_id: String,
+    #[serde(default)]
+    pub channel: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

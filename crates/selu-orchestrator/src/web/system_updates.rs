@@ -482,8 +482,7 @@ pub async fn updates_job_status(user: AuthUser, State(state): State<AppState>) -
     match load_state(&state).await {
         Ok(mut s) => {
             let settings = load_settings(&state).await.unwrap_or(UpdateSettings {
-                release_channel: std::env::var("SELU_RELEASE_CHANNEL")
-                    .unwrap_or_else(|_| "stable".to_string()),
+                release_channel: "stable".to_string(),
                 auto_check: true,
                 auto_update: false,
                 installation_telemetry_opt_out: false,
@@ -1304,23 +1303,6 @@ async fn ensure_defaults(state: &AppState) -> Result<()> {
     .await
     .context("Failed to seed system_update_settings")?;
 
-    // Sync the release channel from the environment if it changed (e.g. reinstall
-    // with a different channel). INSERT OR IGNORE above won't update existing rows.
-    let result = sqlx::query(
-        "UPDATE system_update_settings
-         SET release_channel = ?, updated_at = datetime('now')
-         WHERE id = 'global' AND release_channel != ?",
-    )
-    .bind(&seeded_channel)
-    .bind(&seeded_channel)
-    .execute(&state.db)
-    .await
-    .context("Failed to sync release channel from environment")?;
-
-    if result.rows_affected() > 0 {
-        info!("ensure_defaults: synced release channel to '{seeded_channel}'");
-    }
-
     sqlx::query(
         "INSERT OR IGNORE INTO system_update_state
          (id, installed_version, installed_digest, available_version, available_digest, previous_version, previous_digest, last_error, status, progress_key)
@@ -1331,6 +1313,18 @@ async fn ensure_defaults(state: &AppState) -> Result<()> {
     .context("Failed to seed system_update_state")?;
 
     Ok(())
+}
+
+/// Returns the release channel stored in the database, falling back to "stable".
+pub async fn release_channel(state: &AppState) -> String {
+    sqlx::query_scalar::<_, String>(
+        "SELECT release_channel FROM system_update_settings WHERE id = 'global'",
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| "stable".to_string())
 }
 
 async fn load_settings(state: &AppState) -> Result<UpdateSettings> {
