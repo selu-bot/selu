@@ -330,6 +330,26 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Profile fact optimization: runs at startup and then every 24 hours.
+    // Deduplicates, recategorizes, and consolidates user profile facts via LLM.
+    let profile_state = state.clone();
+    tokio::spawn(async move {
+        // Short delay to let the system settle before first run.
+        tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60 * 24));
+        loop {
+            if let Err(e) = crate::agents::profile::run_optimization(
+                &profile_state.db,
+                &profile_state.credentials,
+            )
+            .await
+            {
+                tracing::debug!("Profile optimization failed (non-fatal): {e}");
+            }
+            interval.tick().await;
+        }
+    });
+
     let shutdown_state = state.clone();
 
     let app = axum::Router::new()
