@@ -35,7 +35,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}/messages", get(list_messages))
         .route(
             "/api/mobile/pipes/{pipe_id}/threads/{thread_id}/send",
-            post(send_message).layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
+            post(send_message).layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
         )
         .route("/api/mobile/pipes/{pipe_id}/stream/{stream_id}", get(stream_response))
         .route("/api/mobile/approvals/{confirmation_id}", post(resolve_approval))
