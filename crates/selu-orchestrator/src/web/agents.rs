@@ -3239,6 +3239,7 @@ pub async fn uninstall_agent(
         &state.config.installed_agents_dir,
         &state.db,
         &state.agents,
+        &state.capabilities,
     )
     .await
     {

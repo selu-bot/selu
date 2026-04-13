@@ -734,6 +734,7 @@ pub async fn uninstall_agent(
     installed_dir: &str,
     db: &SqlitePool,
     agents: &Arc<ArcSwap<AgentMap>>,
+    capabilities: &CapabilityEngine,
 ) -> Result<()> {
     // Don't allow uninstalling the bundled default
     let row = sqlx::query_as::<_, (i32,)>("SELECT is_bundled FROM agents WHERE id = ?")
@@ -817,12 +818,22 @@ pub async fn uninstall_agent(
         .await
         .context("Failed to delete agent storage")?;
 
+    // Remove improvement data (turn signals, insights, metrics)
+    crate::agents::improvement::delete_all_for_agent(db, agent_id)
+        .await
+        .context("Failed to delete improvement data")?;
+
     // Remove agent DB row
     sqlx::query("DELETE FROM agents WHERE id = ?")
         .bind(agent_id)
         .execute(db)
         .await
         .context("Failed to delete agent from DB")?;
+
+    // Stop running capability containers before removing files on disk
+    for cap_id in &cap_ids {
+        capabilities.close_capability(cap_id).await;
+    }
 
     // Remove filesystem
     let agent_dir = Path::new(installed_dir).join(agent_id);

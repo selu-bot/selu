@@ -452,7 +452,6 @@ pub async fn reset_all(db: &SqlitePool, agent_id: &str, user_id: &str) -> Result
 }
 
 /// Delete all improvement data for an agent (called on uninstall).
-#[allow(dead_code)]
 pub async fn delete_all_for_agent(db: &SqlitePool, agent_id: &str) -> Result<()> {
     sqlx::query("DELETE FROM turn_signals WHERE agent_id = ?")
         .bind(agent_id)
