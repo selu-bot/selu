@@ -302,6 +302,7 @@ async fn handle_inbound(
             enable_streaming: true,
             inbound_attachments,
             delegation_trace: Vec::new(),
+            location_context: None,
         };
 
         let reply = run_turn(&state, params, noop_sender()).await;

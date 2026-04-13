@@ -391,6 +391,11 @@
         <span data-i18n="nav.users">Users</span>
       </a>
 
+      <a href="{{ base_path }}/mobile" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "mobile" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        <span data-i18n="nav.mobile">Mobile App</span>
+      </a>
+
       {% if is_admin %}
       <a href="{{ base_path }}/pipes" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "pipes" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
@@ -1355,6 +1360,23 @@
         'wa.detail.danger.desc': 'If you remove this pipe, WhatsApp messages will stop reaching Selu.',
         'wa.detail.remove': 'Remove WhatsApp pipe',
         'wa.detail.remove.confirm': 'Remove this WhatsApp pipe?',
+        'nav.mobile': 'Mobile App',
+        'mobile.title': 'Mobile App',
+        'mobile.desc': 'Connect the selu iOS app to this instance by scanning a QR code.',
+        'mobile.setup_title': 'Quick Setup',
+        'mobile.step1_title': 'Install the selu app',
+        'mobile.step1_desc': 'Download selu from the App Store on your iPhone or iPad.',
+        'mobile.step2_title': 'Scan this QR code',
+        'mobile.step2_desc': 'Open the selu app, tap "Scan QR Code", and point your camera at the code below.',
+        'mobile.step3_title': 'Start chatting',
+        'mobile.step3_desc': 'Once connected, you can chat with your agents, share photos, attach your location, and approve tool calls \u2014 all from your phone.',
+        'mobile.generate_qr': 'Generate QR Code',
+        'mobile.regenerate_qr': 'Generate New Code',
+        'mobile.qr_expires': 'This code expires in {minutes} minutes. Generate a new one if it expires.',
+        'mobile.qr_expired': 'This code has expired. Generate a new one.',
+        'mobile.manual_title': 'Manual Connection',
+        'mobile.manual_desc': 'You can also enter these details manually in the selu app:',
+        'mobile.username': 'Username',
       },
       de: {
         'nav.main': 'Haupt',
@@ -2215,6 +2237,23 @@
         'wa.detail.danger.desc': 'Wenn du diese Pipe entfernst, erreichen WhatsApp-Nachrichten Selu nicht mehr.',
         'wa.detail.remove': 'WhatsApp-Pipe entfernen',
         'wa.detail.remove.confirm': 'Diese WhatsApp-Pipe entfernen?',
+        'nav.mobile': 'Mobile App',
+        'mobile.title': 'Mobile App',
+        'mobile.desc': 'Verbinde die selu iOS-App mit dieser Instanz, indem du einen QR-Code scannst.',
+        'mobile.setup_title': 'Schnelleinrichtung',
+        'mobile.step1_title': 'selu App installieren',
+        'mobile.step1_desc': 'Lade selu aus dem App Store auf dein iPhone oder iPad herunter.',
+        'mobile.step2_title': 'QR-Code scannen',
+        'mobile.step2_desc': '\u00d6ffne die selu App, tippe auf \u201eQR-Code scannen\u201c und richte die Kamera auf den Code unten.',
+        'mobile.step3_title': 'Loschatten',
+        'mobile.step3_desc': 'Sobald verbunden, kannst du mit deinen Agenten chatten, Fotos teilen, deinen Standort anh\u00e4ngen und Tool-Aufrufe genehmigen \u2014 alles vom Handy aus.',
+        'mobile.generate_qr': 'QR-Code generieren',
+        'mobile.regenerate_qr': 'Neuen Code generieren',
+        'mobile.qr_expires': 'Dieser Code l\u00e4uft in {minutes} Minuten ab. Generiere einen neuen, falls er abl\u00e4uft.',
+        'mobile.qr_expired': 'Dieser Code ist abgelaufen. Generiere einen neuen.',
+        'mobile.manual_title': 'Manuelle Verbindung',
+        'mobile.manual_desc': 'Du kannst diese Daten auch manuell in der selu App eingeben:',
+        'mobile.username': 'Benutzername',
       }
     };
 

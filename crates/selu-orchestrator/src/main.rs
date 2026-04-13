@@ -355,6 +355,7 @@ async fn main() -> Result<()> {
     let app = axum::Router::new()
         .merge(web::router(state.clone()))
         .merge(api::router(state.clone()))
+        .merge(api::mobile::router())
         .merge(pipes::inbound::router())
         .merge(bluebubbles::adapter::router())
         .merge(telegram::adapter::router())

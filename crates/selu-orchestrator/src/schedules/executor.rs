@@ -186,6 +186,7 @@ async fn execute_on_pipe(
         enable_streaming: true,
         inbound_attachments: Vec::new(),
         delegation_trace: Vec::new(),
+        location_context: None,
     };
 
     let output = match run_turn(state, params, noop_sender()).await {

@@ -6,6 +6,7 @@ use axum::{
 
 pub mod artifacts;
 pub mod credentials;
+pub mod mobile;
 pub mod pipes;
 pub mod providers;
 pub mod tool_policies;

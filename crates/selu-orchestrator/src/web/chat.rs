@@ -906,6 +906,7 @@ async fn process_message(
         enable_streaming: true,
         inbound_attachments,
         delegation_trace: Vec::new(),
+        location_context: None,
     };
 
     tracing::debug!(

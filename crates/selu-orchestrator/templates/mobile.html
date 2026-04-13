@@ -1,0 +1,147 @@
+{% extends "layout.html" %}
+
+{% block title %}Mobile App{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-2xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <!-- Header -->
+    <div>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="mobile.title">Mobile App</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="mobile.desc">Connect the selu iOS app to this instance by scanning a QR code.</p>
+    </div>
+
+    <!-- Steps -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="mobile.setup_title">Quick Setup</span>
+      </div>
+      <div class="p-6 space-y-6">
+
+        <!-- Step 1 -->
+        <div class="flex gap-4">
+          <div class="flex-shrink-0 w-8 h-8 rounded-full bg-coral/20 text-coral flex items-center justify-center text-sm font-bold">1</div>
+          <div>
+            <p class="text-sm font-medium text-txt-heading" data-i18n="mobile.step1_title">Install the selu app</p>
+            <p class="text-xs text-txt-muted mt-0.5" data-i18n="mobile.step1_desc">Download selu from the App Store on your iPhone or iPad.</p>
+          </div>
+        </div>
+
+        <!-- Step 2: Generate QR -->
+        <div class="flex gap-4">
+          <div class="flex-shrink-0 w-8 h-8 rounded-full bg-coral/20 text-coral flex items-center justify-center text-sm font-bold">2</div>
+          <div class="flex-1">
+            <p class="text-sm font-medium text-txt-heading" data-i18n="mobile.step2_title">Scan this QR code</p>
+            <p class="text-xs text-txt-muted mt-0.5 mb-4" data-i18n="mobile.step2_desc">Open the selu app, tap "Scan QR Code", and point your camera at the code below.</p>
+
+            <div id="qr-container" class="hidden">
+              <div class="inline-block bg-white p-4 rounded-2xl shadow-lg">
+                <div id="qr-code"></div>
+              </div>
+              <div class="mt-3 flex items-center gap-2">
+                <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <p class="text-xs text-amber-400" id="qr-expiry"></p>
+              </div>
+            </div>
+
+            <button id="btn-generate" onclick="generateSetupCode()"
+                    class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 hover:from-coral/90 hover:to-amber/90">
+              <span data-i18n="mobile.generate_qr">Generate QR Code</span>
+            </button>
+
+            <button id="btn-regenerate" onclick="generateSetupCode()" class="hidden text-sm text-coral hover:text-coral/80 border border-coral/25 hover:border-coral/40 px-4 py-2.5 rounded-xl transition-colors cursor-pointer mt-3">
+              <span data-i18n="mobile.regenerate_qr">Generate New Code</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="flex gap-4">
+          <div class="flex-shrink-0 w-8 h-8 rounded-full bg-coral/20 text-coral flex items-center justify-center text-sm font-bold">3</div>
+          <div>
+            <p class="text-sm font-medium text-txt-heading" data-i18n="mobile.step3_title">Start chatting</p>
+            <p class="text-xs text-txt-muted mt-0.5" data-i18n="mobile.step3_desc">Once connected, you can chat with your agents, share photos, attach your location, and approve tool calls — all from your phone.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Manual connection info -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge">
+        <span class="text-sm font-semibold text-txt-heading" data-i18n="mobile.manual_title">Manual Connection</span>
+      </div>
+      <div class="p-5 space-y-3">
+        <p class="text-xs text-txt-muted" data-i18n="mobile.manual_desc">You can also enter these details manually in the selu app:</p>
+        <div class="bg-surface-input border border-edge rounded-xl px-4 py-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-txt-muted">Server URL</span>
+            <code class="text-xs text-txt-heading font-mono" id="server-url">{{ origin }}</code>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-txt-muted" data-i18n="mobile.username">Username</span>
+            <code class="text-xs text-txt-heading font-mono">{{ username }}</code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+async function generateSetupCode() {
+  const btn = document.getElementById('btn-generate');
+  const btnRegen = document.getElementById('btn-regenerate');
+  const container = document.getElementById('qr-container');
+  const qrEl = document.getElementById('qr-code');
+  const expiryEl = document.getElementById('qr-expiry');
+
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    const res = await fetch('{{ base_path }}/mobile/setup-token', { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to generate setup token');
+    const data = await res.json();
+
+    // Build QR payload
+    const payload = JSON.stringify({
+      url: data.server_url,
+      token: data.token
+    });
+
+    // Generate QR code
+    qrEl.innerHTML = '';
+    var qr = qrcode(0, 'M');
+    qr.addData(payload);
+    qr.make();
+    qrEl.innerHTML = qr.createSvgTag(6, 0);
+
+    // Show expiry
+    expiryEl.textContent = t('mobile.qr_expires').replace('{minutes}', '5');
+
+    container.classList.remove('hidden');
+    btn.classList.add('hidden');
+    btnRegen.classList.remove('hidden');
+
+    // Auto-expire after 5 minutes
+    setTimeout(function() {
+      expiryEl.textContent = t('mobile.qr_expired');
+      expiryEl.classList.add('text-rosie');
+      expiryEl.classList.remove('text-amber-400');
+    }, 5 * 60 * 1000);
+
+  } catch (e) {
+    btn.textContent = 'Error — try again';
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}

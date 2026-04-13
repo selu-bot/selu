@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, username, display_name, is_admin FROM users WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "username",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "display_name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_admin",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1ebd14277e2d520e14c7616284ea1f4f11c39ca817998dc41610015c4963e186"
+}

@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id, t.pipe_id, t.title, t.status, t.created_at,\n                  (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as \"last_activity_at?: String\"\n           FROM threads t\n           WHERE t.pipe_id = ? AND t.user_id = ?\n           ORDER BY COALESCE(\n               (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id),\n               t.created_at\n           ) DESC\n           LIMIT 50",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "last_activity_at?: String",
+        "ordinal": 5,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "64e46ed53fbb53b15638f0b60b0a4275de3228a1f03a101ba1052fbeeb91db49"
+}

@@ -224,6 +224,7 @@ async fn dispatch_agent_invocation(
         enable_streaming: true,
         inbound_attachments: Vec::new(),
         delegation_trace: Vec::new(),
+        location_context: None,
     };
 
     // Clone for the log lines below (config is moved into the spawn)

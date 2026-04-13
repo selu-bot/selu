@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id FROM threads t WHERE t.id = ? AND t.pipe_id = ? AND t.user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "14c39ac90c2117e8207b12d8b801d5d0ef50261da06ae16fbc99fff11206c0e0"
+}

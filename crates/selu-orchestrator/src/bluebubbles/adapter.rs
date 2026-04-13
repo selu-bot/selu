@@ -936,6 +936,7 @@ async fn dispatch_message(
         enable_streaming: true,
         inbound_attachments: inbound_attachment_inputs,
         delegation_trace: Vec::new(),
+        location_context: None,
     };
 
     let reply = run_turn(&state, params, noop_sender()).await;

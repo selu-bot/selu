@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, role, content, created_at, tool_calls_json, tool_call_id\n         FROM messages WHERE thread_id = ? ORDER BY created_at LIMIT 200",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "role",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "content",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "tool_calls_json",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "tool_call_id",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "4c9d052391d6cdbe7b68dbc6f229552d79a627d5eeb4ea1301f0abd9dec8bc91"
+}

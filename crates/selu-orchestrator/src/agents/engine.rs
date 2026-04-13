@@ -90,6 +90,9 @@ pub struct TurnParams {
     /// Delegation ancestry (agent IDs) carried across nested delegated turns.
     /// Used for generic delegation-cycle prevention.
     pub delegation_trace: Vec<String>,
+    /// Optional pre-formatted location context string injected into the system
+    /// prompt so the LLM knows the user's current location (mobile only).
+    pub location_context: Option<String>,
 }
 
 pub struct TurnOutput {
@@ -131,6 +134,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         enable_streaming,
         inbound_attachments,
         delegation_trace,
+        location_context,
     } = params;
     // Only treat the message as an explicit confirmation when it comes from the
     // actual user (chain_depth == 0).  Delegation messages are LLM-generated
@@ -353,6 +357,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             &effective_user_text,
             &inlined_manifests,
             delegated_ref,
+            location_context.as_deref(),
         )
         .await;
         (start.elapsed().as_millis(), result)
@@ -2048,6 +2053,7 @@ fn dispatch_delegation(
             enable_streaming: true,
             inbound_attachments: Vec::new(),
             delegation_trace: next_delegation_trace,
+            location_context: None,
         };
 
         // Create a filtered sender that forwards only confirmation events

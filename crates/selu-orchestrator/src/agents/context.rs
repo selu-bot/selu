@@ -63,6 +63,7 @@ pub async fn build(
     _latest_message: &str,
     inlined_manifests: &HashMap<String, CapabilityManifest>,
     delegated_agents: Option<&HashMap<String, Arc<AgentDefinition>>>,
+    location_context: Option<&str>,
 ) -> Result<Vec<ChatMessage>> {
     let mut messages = Vec::new();
     // ── System prompt ─────────────────────────────────────────────────────────
@@ -119,6 +120,12 @@ pub async fn build(
         user_language,
         Utc::now(),
     ));
+
+    // ── User location (mobile only) ──────────────────────────────────────────
+    if let Some(loc) = location_context {
+        system.push_str("\n\n## Current user location\n");
+        system.push_str(loc);
+    }
 
     // ── User language preference ──────────────────────────────────────────────
     // Instruct the model to respond in the user's preferred language.
