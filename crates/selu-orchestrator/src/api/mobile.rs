@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Sse},
     routing::{delete, get, post},
@@ -33,7 +33,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/mobile/pipes/{pipe_id}/threads", get(list_threads).post(create_thread))
         .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}", delete(delete_thread))
         .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}/messages", get(list_messages))
-        .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}/send", post(send_message))
+        .route(
+            "/api/mobile/pipes/{pipe_id}/threads/{thread_id}/send",
+            post(send_message).layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
+        )
         .route("/api/mobile/pipes/{pipe_id}/stream/{stream_id}", get(stream_response))
         .route("/api/mobile/approvals/{confirmation_id}", post(resolve_approval))
 }
