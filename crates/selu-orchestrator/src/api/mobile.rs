@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Sse},
+    response::{IntoResponse, Response, Sse},
     routing::{delete, get, post},
     Router,
 };
@@ -39,6 +39,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/mobile/pipes/{pipe_id}/stream/{stream_id}", get(stream_response))
         .route("/api/mobile/approvals/{confirmation_id}", post(resolve_approval))
+        .route("/api/mobile/artifacts/{artifact_id}", get(get_artifact))
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -779,6 +780,48 @@ async fn resolve_approval(
         }
         None => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+// ── GET /api/mobile/artifacts/{artifact_id} ─────────────────────────────────
+
+async fn get_artifact(
+    Path(artifact_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    let _user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    // Try in-memory store first, then persisted
+    let artifact = if let Some(a) =
+        crate::agents::artifacts::get_by_id(&state.artifacts, &artifact_id).await
+    {
+        a
+    } else {
+        match crate::agents::artifacts::get_persisted_by_id(&state.db, &artifact_id).await {
+            Ok(Some(p)) => crate::agents::artifacts::StoredArtifact {
+                user_id: p.user_id,
+                session_id: String::new(),
+                filename: p.filename,
+                mime_type: p.mime_type,
+                data: p.data,
+                created_at: std::time::Instant::now(),
+            },
+            _ => return StatusCode::NOT_FOUND.into_response(),
+        }
+    };
+
+    (
+        StatusCode::OK,
+        [
+            ("content-type", artifact.mime_type.as_str()),
+            ("cache-control", "private, max-age=3600"),
+        ],
+        artifact.data,
+    )
+        .into_response()
 }
 
 // ── POST /api/mobile/redeem ──────────────────────────────────────────────────
