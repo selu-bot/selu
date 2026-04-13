@@ -35,7 +35,7 @@ use crate::permissions::tool_policy::{
     self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_IMAGE_EDIT, BUILTIN_IMAGE_GENERATE,
     BUILTIN_MEMORY_FORGET, BUILTIN_MEMORY_LIST, BUILTIN_MEMORY_REMEMBER, BUILTIN_MEMORY_SEARCH,
     BUILTIN_SET_REMINDER, BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET,
-    BUILTIN_STORE_LIST, BUILTIN_STORE_SET, ToolPolicy,
+    BUILTIN_STORE_LIST, BUILTIN_STORE_SET, BUILTIN_SUBMIT_FEEDBACK, ToolPolicy,
 };
 use crate::state::AppState;
 
@@ -457,6 +457,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     tool_specs.push(memory::list_tool_spec());
     tool_specs.push(crate::schedules::set_schedule_tool_spec());
     tool_specs.push(crate::schedules::set_reminder_tool_spec());
+    tool_specs.push(crate::web::feedback::submit_feedback_tool_spec());
 
     // Image tools: only exposed when the agent has an image model configured.
     let image_model_for_tools =
@@ -752,6 +753,43 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                             Box::pin(async move {
                                 crate::schedules::dispatch_set_reminder(
                                     &db, &user, &pipe, &agent_id, &args,
+                                )
+                                .await
+                            })
+                        },
+                    )
+                    .await;
+                    return result;
+                }
+
+                // ── Built-in tool: submit_feedback ───────────────────
+                if name == "submit_feedback" {
+                    let result = check_policy_and_dispatch(
+                        &state,
+                        &user,
+                        &current_agent,
+                        &preferred_language,
+                        BUILTIN_CAPABILITY_ID,
+                        BUILTIN_SUBMIT_FEEDBACK,
+                        &name,
+                        &args,
+                        &channel,
+                        &session,
+                        &pipe,
+                        &agent_id_copy,
+                        approved,
+                        user_confirmed_this_turn,
+                        false,
+                        || {
+                            let marketplace_url = state.config.marketplace_url.clone();
+                            let db = state.db.clone();
+                            let args = invoke_args.clone();
+                            Box::pin(async move {
+                                let args_str = args.to_string();
+                                crate::web::feedback::dispatch_submit_feedback(
+                                    &marketplace_url,
+                                    &db,
+                                    &args_str,
                                 )
                                 .await
                             })

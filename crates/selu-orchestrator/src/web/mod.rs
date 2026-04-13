@@ -2,6 +2,7 @@ pub mod agents;
 pub mod auth;
 pub mod chat;
 pub mod credentials;
+pub mod feedback;
 pub mod integrations;
 pub mod mobile;
 pub mod personality;
@@ -581,6 +582,11 @@ pub fn router(state: AppState) -> Router<AppState> {
             get(personality::personality_edit_form),
         )
         .route("/personality/{id}/row", get(personality::personality_row))
+        // Feedback
+        .route(
+            "/feedback",
+            get(feedback::feedback_page).post(feedback::feedback_submit),
+        )
         // Mobile app setup
         .route("/mobile", get(mobile::mobile_page))
         .route("/mobile/setup-token", post(mobile::create_setup_token))

@@ -118,6 +118,8 @@ pub async fn get_effective_policy(
             BUILTIN_IMAGE_GENERATE | BUILTIN_IMAGE_EDIT => {
                 return Ok(Some(ToolPolicy::Allow));
             }
+            // Feedback: default to Ask — user must confirm before public posting.
+            BUILTIN_SUBMIT_FEEDBACK => return Ok(Some(ToolPolicy::Ask)),
             _ => {}
         }
     }
@@ -467,6 +469,10 @@ pub async fn has_all_policies(
         BUILTIN_CAPABILITY_ID.to_string(),
         BUILTIN_IMAGE_EDIT.to_string(),
     ));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_SUBMIT_FEEDBACK.to_string(),
+    ));
 
     if required.is_empty() {
         return Ok(true);
@@ -527,3 +533,6 @@ pub const BUILTIN_IMAGE_GENERATE: &str = "image_generate";
 
 /// Tool name for the image_edit built-in (image editing).
 pub const BUILTIN_IMAGE_EDIT: &str = "image_edit";
+
+/// Tool name for the submit_feedback built-in (public GitHub issue creation).
+pub const BUILTIN_SUBMIT_FEEDBACK: &str = "submit_feedback";
