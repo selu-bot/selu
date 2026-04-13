@@ -188,6 +188,7 @@ struct BbConfig {
     pipe_id: String,
     bb_webhook_id: Option<String>,
     inbound_token: String,
+    callback_base_url: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +235,7 @@ pub async fn init_all(state: AppState) {
 
 /// Register a single adapter: set up channel sender + ensure webhook is
 /// registered with BlueBubbles.
-async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
+async fn register_adapter(state: &AppState, cfg: &BbConfig, _base_url: &str) {
     let sent_guids: SentGuids = Arc::new(RwLock::new(HashSet::new()));
 
     // Store in module-level registry for the webhook handler
@@ -267,9 +268,20 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, base_url: &str) {
     // Ensure webhook is registered with BlueBubbles.
     // If we already have a webhook ID, delete and re-register to make sure
     // the event subscription is correct (handles upgrades from older formats).
+    //
+    // Default to localhost since BlueBubbles runs on the same machine — avoids
+    // an unnecessary internet round trip through the public URL.
+    let callback_base = if let Some(ref url) = cfg.callback_base_url {
+        url.trim_end_matches('/').to_string()
+    } else {
+        format!(
+            "http://localhost:{}{}",
+            state.config.server.port, state.base_path
+        )
+    };
     let callback_url = format!(
         "{}/api/bb/webhook/{}?token={}",
-        base_url, cfg.id, cfg.inbound_token
+        callback_base, cfg.id, cfg.inbound_token
     );
 
     // Clean up any stale webhook first
@@ -1443,7 +1455,7 @@ pub async fn send_outbound(
 async fn load_active_configs(state: &AppState) -> Result<Vec<BbConfig>> {
     let rows = sqlx::query!(
         "SELECT bc.id, bc.name, bc.server_url, bc.server_password, bc.chat_guid,
-                bc.pipe_id, bc.bb_webhook_id, p.inbound_token
+                bc.pipe_id, bc.bb_webhook_id, bc.callback_base_url, p.inbound_token
          FROM bluebubbles_configs bc
          JOIN pipes p ON p.id = bc.pipe_id
          WHERE bc.active = 1"
@@ -1463,6 +1475,7 @@ async fn load_active_configs(state: &AppState) -> Result<Vec<BbConfig>> {
             pipe_id: r.pipe_id,
             bb_webhook_id: r.bb_webhook_id,
             inbound_token: r.inbound_token,
+            callback_base_url: r.callback_base_url,
         })
         .collect())
 }
@@ -1470,7 +1483,7 @@ async fn load_active_configs(state: &AppState) -> Result<Vec<BbConfig>> {
 async fn load_config_by_id(state: &AppState, config_id: &str) -> Result<BbConfig> {
     let row = sqlx::query!(
         "SELECT bc.id, bc.name, bc.server_url, bc.server_password, bc.chat_guid,
-                bc.pipe_id, bc.bb_webhook_id, p.inbound_token
+                bc.pipe_id, bc.bb_webhook_id, bc.callback_base_url, p.inbound_token
          FROM bluebubbles_configs bc
          JOIN pipes p ON p.id = bc.pipe_id
          WHERE bc.id = ? AND bc.active = 1",
@@ -1492,6 +1505,7 @@ async fn load_config_by_id(state: &AppState, config_id: &str) -> Result<BbConfig
         pipe_id: row.pipe_id,
         bb_webhook_id: row.bb_webhook_id,
         inbound_token: row.inbound_token,
+        callback_base_url: row.callback_base_url,
     })
 }
 

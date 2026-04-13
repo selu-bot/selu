@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT default_agent_id FROM pipes WHERE id = ?",
+  "query": "SELECT id FROM pipes WHERE user_id = ? AND transport = 'web' AND active = 1 LIMIT 1",
   "describe": {
     "columns": [
       {
-        "name": "default_agent_id",
+        "name": "id",
         "ordinal": 0,
         "type_info": "Text"
       }
@@ -16,5 +16,5 @@
       true
     ]
   },
-  "hash": "9e161b5634b7c4fee375e2c55415fe848b620dd74f4619139e7df037cdc11cc0"
+  "hash": "b60cf37e4a8145c0e66863d439e6d8087fed7636ff7b6587803b6985a14304aa"
 }

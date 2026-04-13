@@ -226,6 +226,15 @@ pub async fn telegram_setup_submit(
         return StatusCode::FORBIDDEN.into_response();
     }
 
+    // Only one Telegram pipe is allowed at a time.
+    if let Some(config_id) = has_active_telegram_pipe(&state.db).await {
+        return Redirect::to(&format!(
+            "{}/pipes/telegram/{}?error=Telegram+is+already+set+up.+Remove+the+existing+pipe+first.",
+            base_path, config_id
+        ))
+        .into_response();
+    }
+
     // Telegram requires HTTPS for webhooks
     if !external_origin.starts_with("https://") {
         return Redirect::to(&format!(
@@ -615,6 +624,22 @@ pub async fn telegram_reregister_webhook(
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
+
+/// Returns Some(config_id) if an active Telegram pipe exists, None otherwise.
+pub async fn has_active_telegram_pipe(db: &sqlx::SqlitePool) -> Option<String> {
+    sqlx::query!(
+        r#"SELECT tc.id as "id!: String"
+           FROM telegram_configs tc
+           JOIN pipes p ON p.id = tc.pipe_id
+           WHERE tc.active = 1 AND p.active = 1
+           LIMIT 1"#
+    )
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
+    .map(|r| r.id)
+}
 
 pub async fn load_telegram_configs(db: &sqlx::SqlitePool) -> Vec<TelegramDetail> {
     sqlx::query!(

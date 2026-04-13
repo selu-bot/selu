@@ -148,7 +148,7 @@ pub struct SimpleErrorQuery {
 }
 
 const PIPE_TYPES: &[(&str, &str, &str)] = &[
-    ("web", "Web UI", "pipes.webui.desc"),
+    // Web pipes are auto-created per user — not shown in the catalog.
     ("imessage", "iMessage", "pipes.imessage.desc"),
     ("telegram", "Telegram", "pipes.telegram.desc"),
     ("whatsapp", "WhatsApp", "pipes.whatsapp.desc"),
@@ -383,22 +383,62 @@ pub async fn pipes_new(
     }
 
     let https_available = external_origin.starts_with("https://");
+
+    // Check for existing single-instance pipes.
     let whatsapp_configs = super::whatsapp::load_whatsapp_configs(&state.db).await;
     let existing_whatsapp_config_id = whatsapp_configs
         .into_iter()
         .find(|cfg| cfg.active)
         .map(|cfg| cfg.config_id);
+    let existing_imessage_config_id =
+        super::integrations::has_active_imessage_pipe(&state.db).await;
+    let existing_telegram_config_id =
+        super::telegram::has_active_telegram_pipe(&state.db).await;
 
     let pipes = PIPE_TYPES
         .iter()
         .map(|(id, display_name, subtitle_key)| {
             let (href, action_key, status_key, available) = match *id {
+                "imessage" => {
+                    if let Some(ref config_id) = existing_imessage_config_id {
+                        (
+                            Some(format!("{}/pipes/imessage/{}", base_path, config_id)),
+                            "pipes.imessage.single.manage",
+                            Some("imsg.single.limit"),
+                            true,
+                        )
+                    } else {
+                        (
+                            Some(format!("{}/pipes/new/{}", base_path, id)),
+                            "pipes.setup",
+                            None,
+                            true,
+                        )
+                    }
+                }
                 "telegram" if !https_available => (
                     None,
                     "pipes.comingsoon",
                     Some("pipes.telegram.https"),
                     false,
                 ),
+                "telegram" => {
+                    if let Some(ref config_id) = existing_telegram_config_id {
+                        (
+                            Some(format!("{}/pipes/telegram/{}", base_path, config_id)),
+                            "pipes.telegram.single.manage",
+                            Some("tg.single.limit"),
+                            true,
+                        )
+                    } else {
+                        (
+                            Some(format!("{}/pipes/new/{}", base_path, id)),
+                            "pipes.setup",
+                            None,
+                            true,
+                        )
+                    }
+                }
                 "whatsapp" => {
                     if let Some(config_id) = existing_whatsapp_config_id.as_ref() {
                         (
@@ -466,9 +506,23 @@ pub async fn pipes_new_redirect(
     let target = match pipe_type.as_str() {
         "web" => Some(format!("{}/pipes/web/new", base_path)),
         "webhook" => Some(format!("{}/pipes/webhook/new", base_path)),
-        "imessage" => Some(format!("{}/pipes/imessage/setup", base_path)),
+        "imessage" => {
+            if let Some(config_id) =
+                super::integrations::has_active_imessage_pipe(&state.db).await
+            {
+                Some(format!("{}/pipes/imessage/{}", base_path, config_id))
+            } else {
+                Some(format!("{}/pipes/imessage/setup", base_path))
+            }
+        }
         "telegram" if external_origin.starts_with("https://") => {
-            Some(format!("{}/pipes/telegram/setup", base_path))
+            if let Some(config_id) =
+                super::telegram::has_active_telegram_pipe(&state.db).await
+            {
+                Some(format!("{}/pipes/telegram/{}", base_path, config_id))
+            } else {
+                Some(format!("{}/pipes/telegram/setup", base_path))
+            }
         }
         "telegram" => Some(format!(
             "{}/pipes/new?error=Telegram+requires+HTTPS.",
@@ -666,6 +720,58 @@ pub async fn pipes_web_create(
             ))
             .into_response()
         }
+    }
+}
+
+/// Ensure the given user has an active web pipe. Creates one if missing.
+/// Called from user creation (setup + admin UI) and startup backfill.
+pub async fn ensure_web_pipe(db: &sqlx::SqlitePool, user_id: &str, display_name: &str) {
+    let existing = sqlx::query!(
+        "SELECT id FROM pipes WHERE user_id = ? AND transport = 'web' AND active = 1 LIMIT 1",
+        user_id
+    )
+    .fetch_optional(db)
+    .await;
+
+    if matches!(existing, Ok(Some(_))) {
+        return;
+    }
+
+    let id = Uuid::new_v4().to_string();
+    let inbound_token = Uuid::new_v4().to_string().replace('-', "");
+    let transport = "web";
+    let outbound_url = "internal://web";
+    let pipe_name = format!("{}'s Chat", display_name);
+    let default_agent_id: Option<&str> = None;
+
+    if let Err(e) = sqlx::query!(
+        "INSERT INTO pipes (id, user_id, name, transport, inbound_token, outbound_url, default_agent_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        id,
+        user_id,
+        pipe_name,
+        transport,
+        inbound_token,
+        outbound_url,
+        default_agent_id,
+    )
+    .execute(db)
+    .await
+    {
+        error!("Failed to create web pipe for user {user_id}: {e}");
+    }
+}
+
+/// Ensure all existing users have a web pipe. Called at startup.
+pub async fn backfill_web_pipes(db: &sqlx::SqlitePool) {
+    let users = sqlx::query!("SELECT id, display_name FROM users")
+        .fetch_all(db)
+        .await
+        .unwrap_or_default();
+
+    for user in users {
+        let uid = user.id.unwrap_or_default();
+        ensure_web_pipe(db, &uid, &user.display_name).await;
     }
 }
 

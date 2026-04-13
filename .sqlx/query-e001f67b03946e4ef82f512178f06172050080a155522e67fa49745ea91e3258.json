@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, username, display_name FROM users ORDER BY username",
+  "query": "SELECT id, display_name FROM users",
   "describe": {
     "columns": [
       {
@@ -9,13 +9,8 @@
         "type_info": "Text"
       },
       {
-        "name": "username",
-        "ordinal": 1,
-        "type_info": "Text"
-      },
-      {
         "name": "display_name",
-        "ordinal": 2,
+        "ordinal": 1,
         "type_info": "Text"
       }
     ],
@@ -24,9 +19,8 @@
     },
     "nullable": [
       true,
-      false,
       false
     ]
   },
-  "hash": "8d0b92c88d1d61c2436eb00fef977e1bc7cf67b2e786019325ec961de6daafe4"
+  "hash": "e001f67b03946e4ef82f512178f06172050080a155522e67fa49745ea91e3258"
 }

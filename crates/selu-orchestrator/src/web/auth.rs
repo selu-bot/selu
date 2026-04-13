@@ -368,6 +368,9 @@ pub async fn setup_submit(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    // Auto-create the admin user's web pipe (used by chat UI and mobile app).
+    super::pipes::ensure_web_pipe(&state.db, &user_id, &display_name).await;
+
     // Seed the Bedrock LLM provider entry (region will be set by the user via the providers UI).
     // base_url is left empty so Bedrock doesn't appear as "configured" in the agents page
     // until the user explicitly sets a region.

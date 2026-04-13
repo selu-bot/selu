@@ -66,6 +66,20 @@
                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             </div>
           </div>
+          <!-- Advanced settings (collapsed by default) -->
+          <details class="group">
+            <summary class="text-xs text-txt-muted cursor-pointer hover:text-txt-heading transition-colors select-none flex items-center gap-1.5">
+              <svg class="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+              <span data-i18n="imsg.advanced">Advanced</span>
+            </summary>
+            <div class="mt-3">
+              <label for="bb-callback-url" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.callback_url">Webhook Callback URL</label>
+              <input id="bb-callback-url" name="callback_base_url" type="text" data-i18n-placeholder="imsg.callback_url.placeholder" placeholder="http://localhost:3000"
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+              <p class="text-[11px] text-txt-faint mt-1" data-i18n="imsg.callback_url.hint">The URL BlueBubbles calls to deliver messages. Leave empty to use localhost (recommended when BlueBubbles runs on the same machine).</p>
+            </div>
+          </details>
+
           <div class="flex items-center gap-3">
             <button type="button" id="btn-connect" onclick="testConnection()"
                     class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"

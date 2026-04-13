@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO bluebubbles_configs (id, name, server_url, server_password, chat_guid, pipe_id, callback_base_url)\n         VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "f508820bf7ec08c738f86b21af229be97e51a15df8fb1e0b653157772cd8ad15"
+}

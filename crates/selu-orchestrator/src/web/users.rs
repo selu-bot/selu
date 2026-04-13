@@ -270,7 +270,11 @@ pub async fn users_create(
     .await;
 
     match result {
-        Ok(_) => Redirect::to(&format!("{}/users", base_path)).into_response(),
+        Ok(_) => {
+            // Auto-create the new user's web pipe (used by chat UI and mobile app).
+            super::pipes::ensure_web_pipe(&state.db, &id, &display_name).await;
+            Redirect::to(&format!("{}/users", base_path)).into_response()
+        }
         Err(e) if e.to_string().to_lowercase().contains("unique") => {
             Redirect::to(&format!("{}/users?error=duplicate", base_path)).into_response()
         }

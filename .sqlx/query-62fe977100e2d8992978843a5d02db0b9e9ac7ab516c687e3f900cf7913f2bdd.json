@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT tc.id as \"id!: String\"\n           FROM telegram_configs tc\n           JOIN pipes p ON p.id = tc.pipe_id\n           WHERE tc.active = 1 AND p.active = 1\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "62fe977100e2d8992978843a5d02db0b9e9ac7ab516c687e3f900cf7913f2bdd"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT bc.id as \"id!: String\"\n           FROM bluebubbles_configs bc\n           JOIN pipes p ON p.id = bc.pipe_id\n           WHERE bc.active = 1 AND p.active = 1\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "be1f3fdc089cd653661d8452a3d502d659fa784cf8de42f2278bef8946aed46e"
+}

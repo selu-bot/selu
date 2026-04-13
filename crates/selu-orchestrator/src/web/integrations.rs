@@ -78,6 +78,9 @@ pub struct ImessageSetupForm {
     /// Comma-separated list of "phone:user_id" pairs
     /// e.g. "+14155551234:uuid1,+14155555678:uuid2"
     pub people: Option<String>,
+    /// Advanced: override the callback URL BlueBubbles uses to deliver messages.
+    /// Defaults to http://localhost:{port} when empty.
+    pub callback_base_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -359,6 +362,16 @@ pub async fn imessage_setup_submit(
     if !user.is_admin {
         return StatusCode::FORBIDDEN.into_response();
     }
+
+    // Only one iMessage pipe is allowed at a time.
+    if let Some(config_id) = has_active_imessage_pipe(&state.db).await {
+        return Redirect::to(&format!(
+            "{}/pipes/imessage/{}?error=iMessage+is+already+set+up.+Remove+the+existing+pipe+first.",
+            base_path, config_id
+        ))
+        .into_response();
+    }
+
     // Validate
     if form.name.trim().is_empty()
         || form.server_url.trim().is_empty()
@@ -402,11 +415,16 @@ pub async fn imessage_setup_submit(
 
     // 3. Create the BlueBubbles config
     let bb_config_id = Uuid::new_v4().to_string();
+    let callback_base_url = form
+        .callback_base_url
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
 
     if let Err(e) = sqlx::query!(
-        "INSERT INTO bluebubbles_configs (id, name, server_url, server_password, chat_guid, pipe_id)
-         VALUES (?, ?, ?, ?, ?, ?)",
-        bb_config_id, form.name, form.server_url, form.server_password, form.chat_guid, pipe_id,
+        "INSERT INTO bluebubbles_configs (id, name, server_url, server_password, chat_guid, pipe_id, callback_base_url)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        bb_config_id, form.name, form.server_url, form.server_password, form.chat_guid, pipe_id, callback_base_url,
     )
     .execute(&state.db)
     .await
@@ -629,6 +647,22 @@ pub async fn imessage_delete(
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
+
+/// Returns Some(config_id) if an active iMessage pipe exists, None otherwise.
+pub async fn has_active_imessage_pipe(db: &sqlx::SqlitePool) -> Option<String> {
+    sqlx::query!(
+        r#"SELECT bc.id as "id!: String"
+           FROM bluebubbles_configs bc
+           JOIN pipes p ON p.id = bc.pipe_id
+           WHERE bc.active = 1 AND p.active = 1
+           LIMIT 1"#
+    )
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
+    .map(|r| r.id)
+}
 
 pub async fn load_imessage_configs(db: &sqlx::SqlitePool) -> Vec<ImessageDetail> {
     sqlx::query!(

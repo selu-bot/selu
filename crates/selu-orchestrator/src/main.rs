@@ -149,6 +149,11 @@ async fn main() -> Result<()> {
     // Start fanout after state is built (needs AppState)
     fanout::start(state.clone(), fanout_rx, cfg.max_chain_depth);
 
+    // ── Web pipe backfill ───────────────────────────────────────────────────
+    // Ensure every user has a web pipe (handles existing users from before
+    // auto-creation was added).
+    web::pipes::backfill_web_pipes(&state.db).await;
+
     // ── BlueBubbles adapters ──────────────────────────────────────────────────
     // Register channel senders + auto-upgrade legacy polling configs to webhooks
     bluebubbles::adapter::init_all(state.clone()).await;
