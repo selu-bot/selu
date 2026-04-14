@@ -467,13 +467,12 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         tool_specs.push(crate::agents::image_tools::edit_tool_spec());
     }
 
-    // Delegation follows an orchestrator/worker model:
-    // only the default orchestrator on a root turn gets the delegation tool.
-    let is_root_orchestrator_turn = agent.id == "default" && current_delegation_trace.len() <= 1;
-    if is_root_orchestrator_turn
-        && chain_depth < max_delegation_hops
-        && !delegated_agents.is_empty()
-    {
+    // Delegation: expose the delegate_to_agent tool when there are agents to
+    // delegate to and the chain depth budget allows it.  Both the default
+    // orchestrator and specialist agents can delegate, enabling specialists
+    // (e.g. coding agent) to invoke other agents (e.g. web-browser) without
+    // having all their tools inlined into the specialist's context.
+    if chain_depth < max_delegation_hops && !delegated_agents.is_empty() {
         tool_specs.push(delegation::tool_spec(&agent.id, &delegated_agents));
     }
     let tool_names: Vec<String> = tool_specs.iter().map(|t| t.name.clone()).collect();
@@ -1903,7 +1902,8 @@ async fn generate_thread_title(
 ///
 /// - **Inlined**: The agent's capability manifests are merged into the current
 ///   agent's tool list. The LLM can call the tools directly — no delegation
-///   round-trip.
+///   round-trip. Only applies when the current agent is the default orchestrator;
+///   specialist agents never receive inlined tools from other agents.
 /// - **Delegated**: The agent appears in the `delegate_to_agent` registry and
 ///   gets its own LLM context when invoked.
 ///
@@ -1923,11 +1923,16 @@ fn partition_agents(
     // resolve policies against the agent that owns them, not the host.
     let mut cap_owner: HashMap<String, String> = HashMap::new();
 
+    // Only the default orchestrator gets inlined tools from other agents.
+    // Specialist agents (non-default) should only see their own capability
+    // tools to avoid polluting their context window with irrelevant tools.
+    let is_default = current_agent.id == "default";
+
     for (id, agent) in all_agents {
         if id == &current_agent.id {
             continue;
         }
-        if agent.effective_routing() == RoutingMode::Inline {
+        if is_default && agent.effective_routing() == RoutingMode::Inline {
             // Merge this agent's capability manifests into the inlined set
             for (cap_id, manifest) in &agent.capability_manifests {
                 inlined_manifests.insert(cap_id.clone(), manifest.clone());
