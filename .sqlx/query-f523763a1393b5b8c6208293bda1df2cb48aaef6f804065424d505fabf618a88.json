@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE agent_memories SET memory_text = ?, tags = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "f523763a1393b5b8c6208293bda1df2cb48aaef6f804065424d505fabf618a88"
+}

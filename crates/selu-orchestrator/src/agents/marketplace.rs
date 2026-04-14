@@ -252,9 +252,9 @@ async fn install_agent_inner(
     sqlx::query(
         "INSERT INTO agents (
             id, display_name, version, source_url, is_bundled, setup_complete,
-            autonomy_level, max_tool_loop_iterations, max_delegation_hops
+            autonomy_level, max_tool_loop_iterations, max_delegation_hops, auto_update
          ) \
-         VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?) \
+         VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, 1) \
          ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name, \
          version = excluded.version, source_url = excluded.source_url, \
          setup_complete = excluded.setup_complete",

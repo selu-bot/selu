@@ -1,9 +1,9 @@
 use axum::{
     Json,
-    extract::{DefaultBodyLimit, Path, State},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response, Sse},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use chrono::{Duration, Utc};
@@ -18,9 +18,11 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::agents::engine::{ChannelKind, InboundAttachmentInput, TurnParams, run_turn};
+use crate::agents::memory;
 use crate::agents::router as agent_router;
 use crate::agents::thread as thread_mgr;
 use crate::llm::tool_loop::LoopEvent;
+use crate::schedules;
 use crate::state::AppState;
 
 const SESSION_TTL_DAYS: i64 = 30;
@@ -41,6 +43,13 @@ pub fn router() -> Router<AppState> {
         .route("/api/mobile/pipes/{pipe_id}/stream/{stream_id}", get(stream_response))
         .route("/api/mobile/approvals/{confirmation_id}", post(resolve_approval))
         .route("/api/mobile/artifacts/{artifact_id}", get(get_artifact))
+        // Memory
+        .route("/api/mobile/memories", get(list_memories).post(create_memory))
+        .route("/api/mobile/memories/{memory_id}", put(update_memory).delete(delete_memory))
+        // Schedules
+        .route("/api/mobile/schedules", get(list_schedules))
+        .route("/api/mobile/schedules/{schedule_id}", delete(delete_schedule))
+        .route("/api/mobile/schedules/{schedule_id}/toggle", post(toggle_schedule))
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -991,4 +1000,287 @@ async fn redeem_setup_token(
         push_enabled,
     })
     .into_response()
+}
+
+// ── GET /api/mobile/memories ────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct MemoriesQuery {
+    search: Option<String>,
+}
+
+#[derive(Serialize)]
+struct MemoryResponse {
+    id: String,
+    memory: String,
+    tags: String,
+    source: String,
+    category: String,
+    updated_at: String,
+}
+
+async fn list_memories(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<MemoriesQuery>,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    if let Some(search) = &q.search {
+        if !search.trim().is_empty() {
+            match memory::search_memories(&state.db, &user.user_id, search, 50).await {
+                Ok(hits) => {
+                    let items: Vec<MemoryResponse> = hits
+                        .into_iter()
+                        .map(|h| MemoryResponse {
+                            id: h.id,
+                            memory: h.memory,
+                            tags: h.tags,
+                            source: h.source,
+                            category: String::new(),
+                            updated_at: h.updated_at,
+                        })
+                        .collect();
+                    return Json(items).into_response();
+                }
+                Err(e) => {
+                    error!("Failed to search memories: {e}");
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+            }
+        }
+    }
+
+    match memory::list_memories(&state.db, &user.user_id, 200).await {
+        Ok(entries) => {
+            let items: Vec<MemoryResponse> = entries
+                .into_iter()
+                .map(|m| MemoryResponse {
+                    id: m.id,
+                    memory: m.memory,
+                    tags: m.tags,
+                    source: m.source,
+                    category: m.category,
+                    updated_at: m.updated_at,
+                })
+                .collect();
+            Json(items).into_response()
+        }
+        Err(e) => {
+            error!("Failed to list memories: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+// ── POST /api/mobile/memories ───────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct CreateMemoryRequest {
+    memory: String,
+    tags: Option<String>,
+}
+
+async fn create_memory(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CreateMemoryRequest>,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    match memory::add_memory(
+        &state.db,
+        "manual",
+        &user.user_id,
+        req.memory.trim(),
+        req.tags.as_deref().unwrap_or(""),
+        "manual",
+        "",
+    )
+    .await
+    {
+        Ok(id) => Json(serde_json::json!({ "id": id })).into_response(),
+        Err(e) => {
+            error!("Failed to create memory: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+// ── PUT /api/mobile/memories/{memory_id} ────────────────────────────────────
+
+#[derive(Deserialize)]
+struct UpdateMemoryRequest {
+    memory: String,
+    tags: Option<String>,
+}
+
+async fn update_memory(
+    Path(memory_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<UpdateMemoryRequest>,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    let memory_text = req.memory.trim().to_string();
+    let tags = req.tags.as_deref().unwrap_or("").to_string();
+    let result = sqlx::query!(
+        "UPDATE agent_memories SET memory_text = ?, tags = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
+        memory_text,
+        tags,
+        memory_id,
+        user.user_id,
+    )
+    .execute(&state.db)
+    .await;
+
+    match result {
+        Ok(r) if r.rows_affected() > 0 => StatusCode::NO_CONTENT.into_response(),
+        Ok(_) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("Failed to update memory: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+// ── DELETE /api/mobile/memories/{memory_id} ─────────────────────────────────
+
+async fn delete_memory(
+    Path(memory_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    match memory::delete_memory(&state.db, &user.user_id, &memory_id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("Failed to delete memory: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+// ── GET /api/mobile/schedules ───────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct ScheduleResponse {
+    id: String,
+    name: String,
+    prompt: String,
+    cron_expression: String,
+    cron_description: String,
+    active: bool,
+    one_shot: bool,
+    last_run_at: Option<String>,
+    next_run_at: String,
+    created_at: String,
+    pipe_names: Vec<String>,
+}
+
+async fn list_schedules(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    match schedules::list_schedules(&state.db, &user.user_id).await {
+        Ok(rows) => {
+            let items: Vec<ScheduleResponse> = rows
+                .into_iter()
+                .map(|s| ScheduleResponse {
+                    id: s.id,
+                    name: s.name,
+                    prompt: s.prompt,
+                    cron_expression: s.cron_expression,
+                    cron_description: s.cron_description,
+                    active: s.active,
+                    one_shot: s.one_shot,
+                    last_run_at: s.last_run_at,
+                    next_run_at: s.next_run_at,
+                    created_at: s.created_at,
+                    pipe_names: s.pipe_names,
+                })
+                .collect();
+            Json(items).into_response()
+        }
+        Err(e) => {
+            error!("Failed to list schedules: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+// ── DELETE /api/mobile/schedules/{schedule_id} ──────────────────────────────
+
+async fn delete_schedule(
+    Path(schedule_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    match schedules::delete_schedule(&state.db, &schedule_id, &user.user_id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("Failed to delete schedule: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+// ── POST /api/mobile/schedules/{schedule_id}/toggle ─────────────────────────
+
+async fn toggle_schedule(
+    Path(schedule_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    match schedules::toggle_schedule(&state.db, &schedule_id, &user.user_id).await {
+        Ok(true) => {
+            let active = sqlx::query_scalar!(
+                "SELECT active FROM schedules WHERE id = ?",
+                schedule_id,
+            )
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or(0);
+
+            Json(serde_json::json!({ "active": active != 0 })).into_response()
+        }
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("Failed to toggle schedule: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }

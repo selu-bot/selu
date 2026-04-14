@@ -527,10 +527,10 @@ pub async fn updates_job_status(user: AuthUser, State(state): State<AppState>) -
             let settings = load_settings(&state).await.unwrap_or(UpdateSettings {
                 release_channel: "stable".to_string(),
                 auto_check: true,
-                auto_update: false,
+                auto_update: true,
                 installation_telemetry_opt_out: false,
                 external_url: String::new(),
-                push_notifications_enabled: false,
+                push_notifications_enabled: true,
             });
             hydrate_installed_from_sidecar(&state, &settings, &mut s).await;
 
@@ -1340,7 +1340,7 @@ async fn ensure_defaults(state: &AppState) -> Result<()> {
     sqlx::query(
         "INSERT OR IGNORE INTO system_update_settings
          (id, release_channel, auto_check, auto_update, external_url, installation_telemetry_opt_out)
-         VALUES ('global', ?, 1, 0, '', 0)",
+         VALUES ('global', ?, 1, 1, '', 0)",
     )
     .bind(&seeded_channel)
     .execute(&state.db)
