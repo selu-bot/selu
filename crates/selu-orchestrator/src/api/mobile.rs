@@ -306,6 +306,7 @@ async fn list_threads(
     let pipe_id_str = pipe_id.to_string();
     let rows = sqlx::query!(
         r#"SELECT t.id, t.pipe_id, t.title, t.status, t.created_at,
+                  (SELECT content FROM messages WHERE thread_id = t.id ORDER BY created_at ASC LIMIT 1) as first_msg,
                   (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as "last_activity_at?: String"
            FROM threads t
            WHERE t.pipe_id = ? AND t.user_id = ?
@@ -324,13 +325,23 @@ async fn list_threads(
         Ok(rows) => {
             let threads: Vec<ThreadResponse> = rows
                 .into_iter()
-                .map(|r| ThreadResponse {
-                    id: r.id.unwrap_or_default(),
-                    pipe_id: r.pipe_id.clone(),
-                    title: r.title,
-                    status: r.status,
-                    created_at: r.created_at,
-                    last_activity_at: r.last_activity_at,
+                .map(|r| {
+                    // Apply same title fallback as web: truncated first message
+                    let title = r.title.or_else(|| {
+                        if r.first_msg.is_empty() {
+                            None
+                        } else {
+                            Some(r.first_msg.chars().take(40).collect::<String>())
+                        }
+                    });
+                    ThreadResponse {
+                        id: r.id.unwrap_or_default(),
+                        pipe_id: r.pipe_id.clone(),
+                        title,
+                        status: r.status,
+                        created_at: r.created_at,
+                        last_activity_at: r.last_activity_at,
+                    }
                 })
                 .collect();
             Json(threads).into_response()
@@ -457,16 +468,37 @@ async fn list_messages(
     };
 
     let thread_id_str = thread_id.to_string();
+
+    // Parse optional cursor for pagination
+    let before_ts: Option<String> = headers
+        .get("x-before")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let page_size: i32 = if before_ts.is_some() { 50 } else { 200 };
+
+    // Fetch newest messages first (DESC), then reverse to chronological order.
+    // When `before` is set, fetch older messages before that timestamp.
     let rows = sqlx::query!(
         "SELECT id, role, content, created_at, tool_calls_json, tool_call_id
-         FROM messages WHERE thread_id = ? ORDER BY created_at LIMIT 200",
-        thread_id_str
+         FROM messages
+         WHERE thread_id = ? AND (? IS NULL OR created_at < ?)
+         ORDER BY created_at DESC LIMIT ?",
+        thread_id_str,
+        before_ts,
+        before_ts,
+        page_size,
     )
     .fetch_all(&state.db)
     .await;
 
     match rows {
-        Ok(rows) => {
+        Ok(mut rows) => {
+            // Reverse from DESC to chronological order
+            rows.reverse();
+
+            let has_more = rows.len() as i32 >= page_size;
+
             let mut messages = Vec::new();
             let mut tool_call_map: std::collections::HashMap<String, (usize, usize)> =
                 std::collections::HashMap::new();
@@ -519,7 +551,10 @@ async fn list_messages(
             }
 
             let result: Vec<MessageResponse> = messages.into_iter().flatten().collect();
-            Json(result).into_response()
+            (
+                [(axum::http::header::HeaderName::from_static("x-has-more"), if has_more { "true" } else { "false" })],
+                Json(result),
+            ).into_response()
         }
         Err(e) => {
             error!("Failed to list messages: {e}");

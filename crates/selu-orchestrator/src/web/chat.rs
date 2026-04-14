@@ -73,6 +73,8 @@ struct ChatTemplate {
     threads: Vec<ThreadView>,
     selected_thread_id: String,
     messages: Vec<MessageView>,
+    has_more_messages: bool,
+    oldest_message_ts: String,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -134,19 +136,34 @@ async fn fetch_threads(
     .collect()
 }
 
+/// Fetch messages for display. Returns (messages, has_more, oldest_raw_ts).
 async fn fetch_thread_messages(
     state: &AppState,
     thread_id: &str,
     language: &str,
     user_id: &str,
-) -> Vec<MessageView> {
-    let rows = sqlx::query!(
-        "SELECT role, content, created_at, tool_calls_json, tool_call_id FROM messages WHERE thread_id = ? ORDER BY created_at LIMIT 100",
-        thread_id
+    before: Option<&str>,
+) -> (Vec<MessageView>, bool, Option<String>) {
+    let page_size: i32 = if before.is_some() { 50 } else { 200 };
+
+    let mut rows = sqlx::query!(
+        "SELECT role, content, created_at, tool_calls_json, tool_call_id
+         FROM messages
+         WHERE thread_id = ? AND (? IS NULL OR created_at < ?)
+         ORDER BY created_at DESC LIMIT ?",
+        thread_id,
+        before,
+        before,
+        page_size,
     )
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
+
+    // Reverse from DESC to chronological order
+    rows.reverse();
+    let has_more = rows.len() as i32 >= page_size;
+    let oldest_ts = rows.first().map(|r| r.created_at.clone());
 
     // First pass: build message views and collect tool-call ID → name mappings.
     // tool_call_id_to_index maps a tool_call_id to (index in out, index in tool_calls vec).
@@ -212,12 +229,14 @@ async fn fetch_thread_messages(
             created_at: format_timestamp_for_user(&r.created_at, language),
         });
     }
-    out
+    (out, has_more, oldest_ts)
 }
 
 fn format_timestamp_for_user(raw: &str, language: &str) -> String {
     let parsed = NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S")
         .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S"))
+        .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S%.f"))
+        .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S%.f"))
         .ok();
     let Some(naive) = parsed else {
         return raw.to_string();
@@ -281,6 +300,8 @@ pub async fn chat_index(
         selected_thread_id: String::new(),
         messages: vec![],
         pipes,
+        has_more_messages: false,
+        oldest_message_ts: String::new(),
     })
 }
 
@@ -306,6 +327,8 @@ pub async fn chat_pipe(
         selected_thread_id: String::new(),
         messages: vec![],
         pipes,
+        has_more_messages: false,
+        oldest_message_ts: String::new(),
     })
 }
 
@@ -321,8 +344,8 @@ pub async fn chat_thread(
     let pipes = fetch_pipes(&state.db, &user.user_id).await;
     let threads = fetch_threads(&state.db, &pipe_id_str, &user.user_id, &user.language).await;
     let selected = pipes.iter().find(|p| p.id == pipe_id_str).cloned();
-    let messages =
-        fetch_thread_messages(&state, &thread_id_str, &user.language, &user.user_id).await;
+    let (messages, has_more_messages, oldest_message_ts) =
+        fetch_thread_messages(&state, &thread_id_str, &user.language, &user.user_id, None).await;
 
     render_template(ChatTemplate {
         active_nav: "chat",
@@ -334,6 +357,8 @@ pub async fn chat_thread(
         selected_thread_id: thread_id_str,
         messages,
         pipes,
+        has_more_messages,
+        oldest_message_ts: oldest_message_ts.unwrap_or_default(),
     })
 }
 
@@ -840,6 +865,114 @@ pub async fn chat_feedback(
         r#"<span class="text-xs text-txt-muted" data-i18n="improvement.feedback.thanks">Thanks!</span>"#,
     )
     .into_response()
+}
+
+// ── Pagination: load older messages (HTMX fragment) ─────────────────────────
+
+/// GET /chat/{pipe_id}/t/{thread_id}/older?before=<timestamp>
+/// Returns an HTML fragment of older messages + a new load-more trigger if more exist.
+pub async fn chat_older_messages(
+    user: AuthUser,
+    Path((pipe_id, thread_id)): Path<(Uuid, Uuid)>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Response {
+    let pipe_id_str = pipe_id.to_string();
+    let thread_id_str = thread_id.to_string();
+    let before = params.get("before").map(|s| s.as_str());
+
+    let Some(before_ts) = before else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+
+    let (messages, has_more, oldest_ts) =
+        fetch_thread_messages(&state, &thread_id_str, &user.language, &user.user_id, Some(before_ts)).await;
+
+    // Build HTML fragment wrapped in a new load-older-wrap so subsequent
+    // pages can target it again.  The outerHTML swap replaces the old wrapper.
+    let mut html = String::from(r#"<div id="load-older-wrap">"#);
+
+    if has_more {
+        if let Some(ref ts) = oldest_ts {
+            let encoded_ts = ts.replace('&', "&amp;").replace('"', "&quot;");
+            html.push_str(&format!(
+                r##"<div id="load-older" hx-get="{base_path}/chat/{pipe_id}/t/{thread_id}/older?before={ts}" hx-trigger="revealed" hx-target="#load-older-wrap" hx-swap="outerHTML" class="flex justify-center py-2"><button class="text-xs text-txt-muted hover:text-coral transition-colors cursor-pointer" data-i18n="chat.load_older">Load older messages</button></div>"##,
+                base_path = base_path,
+                pipe_id = pipe_id_str,
+                thread_id = thread_id_str,
+                ts = encoded_ts,
+            ));
+        }
+    }
+
+    for msg in &messages {
+        html.push_str(&render_message_html(msg));
+    }
+
+    html.push_str("</div>");
+    Html(html).into_response()
+}
+
+fn render_message_html(msg: &MessageView) -> String {
+    if msg.role == "user" {
+        let images_html = if msg.image_urls.is_empty() {
+            String::new()
+        } else {
+            let imgs: Vec<String> = msg.image_urls.iter().map(|url| {
+                format!(r#"<img src="{}" alt="image" class="w-[110px] h-[82px] object-cover rounded-lg border border-coral/30 bg-surface-input" />"#, html_escape(url))
+            }).collect();
+            format!(r#"<div class="mt-2 flex flex-wrap gap-2">{}</div>"#, imgs.join(""))
+        };
+        let content_html = if msg.content.is_empty() {
+            String::new()
+        } else {
+            format!(r#"<p class="text-sm leading-relaxed whitespace-pre-wrap break-words text-txt-heading">{}</p>"#, html_escape(&msg.content))
+        };
+        format!(
+            r#"<div class="flex justify-end"><div class="max-w-[72%] bg-gradient-to-br from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">{content}{images}<p class="text-[10px] text-txt-muted mt-1.5">{ts}</p></div></div>"#,
+            content = content_html,
+            images = images_html,
+            ts = html_escape(&msg.created_at),
+        )
+    } else if msg.role == "tool" {
+        format!(
+            r#"<div class="flex justify-start"><details class="tool-result max-w-[72%]"><summary class="tool-result-summary"><svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>Tool result</span><svg class="tool-result-chevron w-3 h-3 flex-shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></summary><div class="tool-result-body"><pre class="tool-result-pre"><code>{content}</code></pre></div></details></div>"#,
+            content = html_escape(&msg.content),
+        )
+    } else if !msg.tool_calls.is_empty() {
+        let calls_html: Vec<String> = msg.tool_calls.iter().map(|tc| {
+            let result_part = if tc.result.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    r#"<svg class="tool-result-chevron w-3 h-3 flex-shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></summary><div class="tool-result-body"><pre class="tool-result-pre"><code>{}</code></pre></div>"#,
+                    html_escape(&tc.result)
+                )
+            };
+            let chevron_or_close = if tc.result.is_empty() {
+                "</summary>".to_string()
+            } else {
+                result_part
+            };
+            format!(
+                r#"<details class="tool-call-item"><summary class="tool-call-summary"><svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg><span>{name}</span>{rest}</details>"#,
+                name = html_escape(&tc.name),
+                rest = chevron_or_close,
+            )
+        }).collect();
+        format!(
+            r#"<div class="flex justify-start"><div class="tool-calls-group">{}</div></div>"#,
+            calls_html.join("")
+        )
+    } else {
+        // Assistant message
+        format!(
+            r#"<div class="flex justify-start"><div class="max-w-[72%] bg-surface-raised border border-edge rounded-2xl rounded-bl-md px-4 py-2.5"><div class="text-sm leading-relaxed break-words markdown-body md-source">{content}</div><p class="text-[10px] text-txt-muted mt-1.5">{ts}</p></div></div>"#,
+            content = html_escape(&msg.content),
+            ts = html_escape(&msg.created_at),
+        )
+    }
 }
 
 // ── Background processing ─────────────────────────────────────────────────────

@@ -243,6 +243,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/chat/{pipe_id}/t/new", post(chat::chat_new_thread))
         .route("/chat/{pipe_id}/t/{thread_id}", get(chat::chat_thread))
         .route(
+            "/chat/{pipe_id}/t/{thread_id}/older",
+            get(chat::chat_older_messages),
+        )
+        .route(
             "/chat/{pipe_id}/t/{thread_id}/delete",
             post(chat::chat_delete_thread),
         )
