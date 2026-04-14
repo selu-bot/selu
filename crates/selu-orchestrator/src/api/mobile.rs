@@ -37,6 +37,7 @@ pub fn router() -> Router<AppState> {
             "/api/mobile/pipes/{pipe_id}/threads/{thread_id}/send",
             post(send_message).layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
         )
+        .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}/active-stream", get(active_stream))
         .route("/api/mobile/pipes/{pipe_id}/stream/{stream_id}", get(stream_response))
         .route("/api/mobile/approvals/{confirmation_id}", post(resolve_approval))
         .route("/api/mobile/artifacts/{artifact_id}", get(get_artifact))
@@ -58,6 +59,8 @@ struct LoginResponse {
     display_name: String,
     is_admin: bool,
     expires_at: String,
+    instance_id: String,
+    push_enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -217,6 +220,12 @@ async fn mobile_login(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    let instance_id = crate::persistence::db::get_instance_id(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let push_enabled = crate::web::system_updates::push_notifications_enabled(&state).await;
+
     Json(LoginResponse {
         session_id,
         user_id,
@@ -224,6 +233,8 @@ async fn mobile_login(
         display_name: user.display_name,
         is_admin: user.is_admin != 0,
         expires_at,
+        instance_id,
+        push_enabled,
     })
     .into_response()
 }
@@ -536,6 +547,11 @@ async fn send_message(
         let mut notifies = state.stream_notifies.lock().await;
         notifies.insert(stream_id.clone(), notify.clone());
     }
+    // Track thread → stream mapping so mobile clients can reconnect
+    {
+        let mut tas = state.thread_active_streams.lock().await;
+        tas.insert(thread_id_str.clone(), stream_id.clone());
+    }
 
     // Parse image attachment
     let mut inbound_attachments = Vec::new();
@@ -574,6 +590,7 @@ async fn send_message(
     // Spawn background processing
     let bg_state = state.clone();
     let bg_stream_id = stream_id.clone();
+    let bg_thread_id = thread_id_str.clone();
     let bg_user_id = user.user_id.clone();
     let text = req.text.clone();
 
@@ -606,30 +623,28 @@ async fn send_message(
         let (agent_id, effective_text) =
             agent_router::route(&text, default_agent_id.as_deref(), &user_agents);
 
-        let tx = match bg_state
-            .active_streams
-            .lock()
-            .await
-            .get(&bg_stream_id)
-            .cloned()
-        {
-            Some(t) => {
-                info!(stream_id = %bg_stream_id, "Found active stream channel");
-                t
+        // Use a stable channel for run_turn, with a forwarder task that relays
+        // events to whichever SSE bridge is currently in active_streams.
+        // This allows mobile clients to reconnect mid-stream.
+        let (engine_tx, mut engine_rx) = mpsc::channel::<LoopEvent>(64);
+        let fwd_state = bg_state.clone();
+        let fwd_stream_id = bg_stream_id.clone();
+        let forwarder = tokio::spawn(async move {
+            while let Some(event) = engine_rx.recv().await {
+                let streams = fwd_state.active_streams.lock().await;
+                if let Some(tx) = streams.get(&fwd_stream_id) {
+                    let _ = tx.send(event).await;
+                }
             }
-            None => {
-                warn!(stream_id = %bg_stream_id, "No active stream channel found, events will be lost");
-                let (t, _) = mpsc::channel::<LoopEvent>(1);
-                t
-            }
-        };
+        });
 
+        let relay_pipe_id = pipe_id_str.clone();
         let params = TurnParams {
             pipe_id: pipe_id_str,
             user_id: bg_user_id.clone(),
             agent_id: Some(agent_id),
             message: effective_text,
-            thread_id: Some(thread_id_str),
+            thread_id: Some(bg_thread_id.clone()),
             chain_depth: 0,
             channel_kind: ChannelKind::Interactive,
             skip_user_persist: false,
@@ -639,7 +654,7 @@ async fn send_message(
             location_context,
         };
 
-        match run_turn(&bg_state, params, tx.clone()).await {
+        match run_turn(&bg_state, params, engine_tx.clone()).await {
             Ok(output) => {
                 if !output.attachments.is_empty() {
                     let web_base = bg_state.config.base_path().to_string();
@@ -659,22 +674,62 @@ async fn send_message(
                                 lines.push(format!("[{}]({})", a.filename, url));
                             }
                         }
-                        let _ = tx.send(LoopEvent::Token(lines.join("\n"))).await;
+                        let _ = engine_tx.send(LoopEvent::Token(lines.join("\n"))).await;
                     }
                 }
             }
             Err(e) => {
                 error!("Mobile agent turn failed: {e}");
-                let _ = tx.send(LoopEvent::Error(e.to_string())).await;
-                let _ = tx.send(LoopEvent::Done).await;
+                let _ = engine_tx.send(LoopEvent::Error(e.to_string())).await;
+                let _ = engine_tx.send(LoopEvent::Done).await;
             }
         }
+
+        // Drop engine_tx so the forwarder finishes
+        drop(engine_tx);
+        let _ = forwarder.await;
 
         bg_state
             .active_streams
             .lock()
             .await
             .remove(&bg_stream_id);
+        bg_state
+            .thread_active_streams
+            .lock()
+            .await
+            .remove(&bg_thread_id);
+
+        // Notify mobile devices via push relay (if enabled in settings)
+        if crate::web::system_updates::push_notifications_enabled(&bg_state).await {
+            let instance_id = match crate::persistence::db::get_instance_id(&bg_state.db).await {
+                Ok(id) => id,
+                Err(e) => {
+                    warn!(error = %e, "Failed to load instance_id for push relay");
+                    return;
+                }
+            };
+            let relay_url = "https://selu.bot/api/relay/push";
+            let client = reqwest::Client::new();
+            let payload = serde_json::json!({
+                "instance_id": instance_id,
+                "pipe_id": relay_pipe_id,
+                "thread_id": bg_thread_id,
+                "event": "agent_completed",
+                "title": "selu",
+                "body": "Agent completed",
+            });
+            match client
+                .post(relay_url)
+                .header("X-Instance-Id", &instance_id)
+                .json(&payload)
+                .send()
+                .await
+            {
+                Ok(resp) => info!(status = %resp.status(), "Push relay notified"),
+                Err(e) => warn!(error = %e, "Push relay notification failed"),
+            }
+        }
     });
 
     Json(SendResponse {
@@ -682,6 +737,33 @@ async fn send_message(
         thread_id: thread_id.to_string(),
     })
     .into_response()
+}
+
+// ── GET /api/mobile/pipes/{pipe_id}/threads/{thread_id}/active-stream ────────
+
+async fn active_stream(
+    Path((_pipe_id, thread_id)): Path<(Uuid, Uuid)>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(s) = extract_mobile_user(&headers, &state.db).await {
+        return s.into_response();
+    }
+
+    let thread_id_str = thread_id.to_string();
+    let tas = state.thread_active_streams.lock().await;
+    match tas.get(&thread_id_str) {
+        Some(stream_id) => Json(serde_json::json!({
+            "stream_id": stream_id,
+            "active": true,
+        }))
+        .into_response(),
+        None => Json(serde_json::json!({
+            "stream_id": null,
+            "active": false,
+        }))
+        .into_response(),
+    }
 }
 
 // ── GET /api/mobile/pipes/{pipe_id}/stream/{stream_id} ───────────────────────
@@ -893,6 +975,11 @@ async fn redeem_setup_token(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    let instance_id = crate::persistence::db::get_instance_id(&state.db)
+        .await
+        .unwrap_or_default();
+    let push_enabled = crate::web::system_updates::push_notifications_enabled(&state).await;
+
     Json(LoginResponse {
         session_id,
         user_id,
@@ -900,6 +987,8 @@ async fn redeem_setup_token(
         display_name: user.display_name,
         is_admin: user.is_admin != 0,
         expires_at,
+        instance_id,
+        push_enabled,
     })
     .into_response()
 }

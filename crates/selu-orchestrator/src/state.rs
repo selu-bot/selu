@@ -55,6 +55,9 @@ pub struct AppState {
     pub active_streams: Arc<Mutex<HashMap<String, LoopSender>>>,
     /// Notify signals for SSE stream readiness (keyed by stream_id)
     pub stream_notifies: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
+    /// Maps thread_id → stream_id for active mobile agent runs.
+    /// Used by the mobile active-stream endpoint so clients can reconnect.
+    pub thread_active_streams: Arc<Mutex<HashMap<String, String>>>,
     /// Pending tool-call confirmations keyed by confirmation_id.
     /// The oneshot sender is resolved when the user approves or denies.
     pub pending_confirmations: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
@@ -101,6 +104,7 @@ impl AppState {
             agents: Arc::new(ArcSwap::from_pointee(arc_agents)),
             active_streams: Arc::new(Mutex::new(HashMap::new())),
             stream_notifies: Arc::new(Mutex::new(HashMap::new())),
+            thread_active_streams: Arc::new(Mutex::new(HashMap::new())),
             pending_confirmations: Arc::new(Mutex::new(HashMap::new())),
             pending_approvals: Arc::new(Mutex::new(HashMap::new())),
             agent_update_jobs: Arc::new(Mutex::new(HashMap::new())),

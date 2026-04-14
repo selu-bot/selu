@@ -549,6 +549,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             "/system-updates/installation-telemetry",
             post(system_updates::updates_toggle_installation_telemetry),
         )
+        .route(
+            "/system-updates/push-notifications",
+            post(system_updates::updates_toggle_push_notifications),
+        )
         // Schedules
         .route(
             "/schedules",

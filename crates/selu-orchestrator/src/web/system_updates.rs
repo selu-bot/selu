@@ -34,6 +34,7 @@ struct SystemUpdatesTemplate {
     auto_update: bool,
     #[allow(dead_code)]
     installation_telemetry_opt_out: bool,
+    push_notifications_enabled: bool,
     public_origin: String,
     current_origin_display: String,
     installed_display: String,
@@ -101,6 +102,11 @@ pub struct InstallationTelemetryForm {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PushNotificationsForm {
+    pub push_notifications_enabled: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct PublicOriginForm {
     pub external_url: String,
 }
@@ -138,6 +144,7 @@ struct UpdateSettings {
     auto_update: bool,
     installation_telemetry_opt_out: bool,
     external_url: String,
+    push_notifications_enabled: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -272,6 +279,7 @@ pub async fn updates_index(
         available_channels,
         auto_update: settings.auto_update,
         installation_telemetry_opt_out: settings.installation_telemetry_opt_out,
+        push_notifications_enabled: settings.push_notifications_enabled,
         public_origin: settings.external_url.clone(),
         current_origin_display,
         installed_display,
@@ -449,6 +457,41 @@ pub async fn updates_toggle_installation_telemetry(
     redirect_with_success(&base_path, "updates.flash.installation_telemetry_saved")
 }
 
+pub async fn updates_toggle_push_notifications(
+    user: AuthUser,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+    Form(form): Form<PushNotificationsForm>,
+) -> Redirect {
+    if !user.is_admin {
+        return prefixed_redirect(&base_path, "/chat");
+    }
+
+    let enabled = if form.push_notifications_enabled.as_deref() == Some("1") {
+        1
+    } else {
+        0
+    };
+
+    if let Err(e) = sqlx::query(
+        "UPDATE system_update_settings
+         SET push_notifications_enabled = ?, updated_at = datetime('now')
+         WHERE id = 'global'",
+    )
+    .bind(enabled)
+    .execute(&state.db)
+    .await
+    {
+        error!("Failed to save push notifications setting: {e}");
+        return redirect_with_error(
+            &base_path,
+            "updates.error.push_notifications_save_failed",
+        );
+    }
+
+    redirect_with_success(&base_path, "updates.flash.push_notifications_saved")
+}
+
 pub async fn updates_check_now(
     user: AuthUser,
     State(state): State<AppState>,
@@ -487,6 +530,7 @@ pub async fn updates_job_status(user: AuthUser, State(state): State<AppState>) -
                 auto_update: false,
                 installation_telemetry_opt_out: false,
                 external_url: String::new(),
+                push_notifications_enabled: false,
             });
             hydrate_installed_from_sidecar(&state, &settings, &mut s).await;
 
@@ -1333,7 +1377,8 @@ async fn load_settings(state: &AppState) -> Result<UpdateSettings> {
                 auto_check,
                 auto_update,
                 COALESCE(installation_telemetry_opt_out, 0) AS installation_telemetry_opt_out,
-                COALESCE(external_url, '') AS external_url
+                COALESCE(external_url, '') AS external_url,
+                COALESCE(push_notifications_enabled, 0) AS push_notifications_enabled
          FROM system_update_settings
          WHERE id = 'global'",
     )
@@ -1352,7 +1397,24 @@ async fn load_settings(state: &AppState) -> Result<UpdateSettings> {
             .unwrap_or(0)
             != 0,
         external_url: row.try_get::<String, _>("external_url").unwrap_or_default(),
+        push_notifications_enabled: row
+            .try_get::<i64, _>("push_notifications_enabled")
+            .unwrap_or(0)
+            != 0,
     })
+}
+
+/// Returns whether push notifications are enabled in system settings.
+pub async fn push_notifications_enabled(state: &AppState) -> bool {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(push_notifications_enabled, 0) FROM system_update_settings WHERE id = 'global'",
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(0)
+        != 0
 }
 
 pub async fn hydrate_public_origin_override(state: &AppState) {
@@ -1718,6 +1780,9 @@ fn fallback_text_for_key(key: &str) -> &'static str {
         "updates.error.installation_telemetry_save_failed" => {
             "Could not save anonymous installation statistics setting."
         }
+        "updates.error.push_notifications_save_failed" => {
+            "Could not save push notification setting."
+        }
         "updates.error.public_origin_invalid" => {
             "Enter a full web address like https://selu.example.com."
         }
@@ -1734,6 +1799,7 @@ fn fallback_text_for_key(key: &str) -> &'static str {
         "updates.flash.installation_telemetry_saved" => {
             "Anonymous installation statistics setting saved."
         }
+        "updates.flash.push_notifications_saved" => "Push notification setting saved.",
         "updates.flash.check_available" => "Update check complete. A new version is available.",
         "updates.flash.check_none" => "Update check complete. You are already up to date.",
         "updates.flash.apply_started" => "Update started.",

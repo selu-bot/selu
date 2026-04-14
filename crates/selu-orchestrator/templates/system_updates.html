@@ -132,6 +132,21 @@
           </button>
         </form>
       </div>
+
+      <div class="space-y-3">
+        <h3 class="text-sm font-semibold text-txt-heading" data-i18n="updates.push.title">Mobile push notifications</h3>
+        <p class="text-xs text-txt-muted" data-i18n="updates.push.description">Send push notifications to the selu iOS app when an agent completes a task.</p>
+        <form method="POST" action="{{ base_path }}/system-updates/push-notifications" class="flex items-center gap-3">
+          <input type="hidden" name="push_notifications_enabled" value="{% if push_notifications_enabled %}0{% else %}1{% endif %}" />
+          <button type="submit" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer {% if push_notifications_enabled %}text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:border-emerald-500/40{% else %}text-txt-muted border-edge hover:border-muted hover:text-txt{% endif %}">
+            {% if push_notifications_enabled %}
+            <span data-i18n="updates.push.enabled">Push notifications are on</span>
+            {% else %}
+            <span data-i18n="updates.push.disabled">Push notifications are off</span>
+            {% endif %}
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 </div>
