@@ -636,6 +636,7 @@ async fn send_message(
     let bg_stream_id = stream_id.clone();
     let bg_thread_id = thread_id_str.clone();
     let bg_user_id = user.user_id.clone();
+    let bg_user_language = user.language.clone();
     let text = req.text.clone();
 
     tokio::spawn(async move {
@@ -755,13 +756,18 @@ async fn send_message(
             };
             let relay_url = "https://selu.bot/api/relay/push";
             let client = reqwest::Client::new();
+            let push_body = if bg_user_language.starts_with("de") {
+                "Agent ist fertig"
+            } else {
+                "Agent completed"
+            };
             let payload = serde_json::json!({
                 "instance_id": instance_id,
                 "pipe_id": relay_pipe_id,
                 "thread_id": bg_thread_id,
                 "event": "agent_completed",
                 "title": "selu",
-                "body": "Agent completed",
+                "body": push_body,
             });
             match client
                 .post(relay_url)
