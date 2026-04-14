@@ -2226,7 +2226,9 @@ fn is_explicit_confirmation_message(text: &str) -> bool {
     }
 
     // Compound send-intent checks — these are specific enough to allow on
-    // longer messages too.
+    // longer messages too.  Before matching, check for negation: if the
+    // first ~5 words contain a negation token the user is declining, not
+    // confirming.
     let has_email = collapsed.contains("email") || collapsed.contains("e-mail");
     let has_send_verb = [
         "send",
@@ -2241,6 +2243,23 @@ fn is_explicit_confirmation_message(text: &str) -> bool {
     let has_delivery_object = ["pdf", "anhang", "attachment", "dokument", "datei", "file"]
         .iter()
         .any(|k| collapsed.contains(k));
+
+    // Negation awareness: if the message starts with a negation word the
+    // user is declining, not confirming — return false early.
+    if has_send_verb {
+        let negation_tokens: &[&str] = &[
+            "don't", "dont", "do not", "not", "no",
+            "never", "stop", "cancel", "wait",
+            "nicht", "kein", "keine", "keinen", "nein",
+            "stopp", "abbrechen", "warte",
+        ];
+        let words: Vec<&str> = collapsed.split_whitespace().collect();
+        let prefix_len = words.len().min(5);
+        let prefix_str = words[..prefix_len].join(" ");
+        if negation_tokens.iter().any(|neg| prefix_str.contains(neg)) {
+            return false;
+        }
+    }
 
     (has_send_verb && has_email) || (has_send_verb && has_delivery_object)
 }
@@ -2418,6 +2437,25 @@ mod tests {
             "Die PDF bitte per email an jan@example.com senden"
         ));
         assert!(is_explicit_confirmation_message("Please send this PDF now"));
+        // Negated send-intent should NOT match as confirmation
+        assert!(!is_explicit_confirmation_message(
+            "Don't send the email"
+        ));
+        assert!(!is_explicit_confirmation_message(
+            "Nicht die PDF senden"
+        ));
+        assert!(!is_explicit_confirmation_message(
+            "No, do not send this"
+        ));
+        assert!(!is_explicit_confirmation_message(
+            "Cancel sending the PDF"
+        ));
+        assert!(!is_explicit_confirmation_message(
+            "Stop, nicht senden"
+        ));
+        assert!(!is_explicit_confirmation_message(
+            "Wait, don't send the attachment"
+        ));
         assert!(!is_explicit_confirmation_message(
             "Kannst du eine PDF erstellen?"
         ));
