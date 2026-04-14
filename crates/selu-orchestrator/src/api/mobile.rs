@@ -31,6 +31,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/mobile/login", post(mobile_login))
         .route("/api/mobile/redeem", post(redeem_setup_token))
+        .route("/api/mobile/info", get(instance_info))
         .route("/api/mobile/pipes", get(list_pipes))
         .route("/api/mobile/pipes/{pipe_id}/threads", get(list_threads).post(create_thread))
         .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}", delete(delete_thread))
@@ -242,6 +243,34 @@ async fn mobile_login(
         display_name: user.display_name,
         is_admin: user.is_admin != 0,
         expires_at,
+        instance_id,
+        push_enabled,
+    })
+    .into_response()
+}
+
+// ── GET /api/mobile/info ─────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct InstanceInfoResponse {
+    instance_id: String,
+    push_enabled: bool,
+}
+
+async fn instance_info(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(s) = extract_mobile_user(&headers, &state.db).await {
+        return s.into_response();
+    }
+
+    let instance_id = crate::persistence::db::get_instance_id(&state.db)
+        .await
+        .unwrap_or_default();
+    let push_enabled = crate::web::system_updates::push_notifications_enabled(&state).await;
+
+    Json(InstanceInfoResponse {
         instance_id,
         push_enabled,
     })
