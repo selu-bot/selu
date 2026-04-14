@@ -32,7 +32,7 @@ use crate::llm::registry::load_provider;
 use crate::llm::tool_loop::{LoopEvent, LoopOutput, LoopSender, ToolDispatchResult, run_loop};
 use crate::permissions::approval_queue;
 use crate::permissions::tool_policy::{
-    self, BUILTIN_CAPABILITY_ID, BUILTIN_DELEGATE, BUILTIN_IMAGE_EDIT, BUILTIN_IMAGE_GENERATE,
+    self, BUILTIN_CAPABILITY_ID, BUILTIN_IMAGE_EDIT, BUILTIN_IMAGE_GENERATE,
     BUILTIN_MEMORY_FORGET, BUILTIN_MEMORY_LIST, BUILTIN_MEMORY_REMEMBER, BUILTIN_MEMORY_SEARCH,
     BUILTIN_SET_REMINDER, BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET,
     BUILTIN_STORE_LIST, BUILTIN_STORE_SET, BUILTIN_SUBMIT_FEEDBACK, ToolPolicy,
@@ -865,75 +865,72 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                 }
 
                 if name == delegation::TOOL_NAME {
-                    // Check policy for built-in delegate_to_agent
-                    let result = check_policy_and_dispatch(
-                        &state,
-                        &user,
-                        &current_agent,
-                        &preferred_language,
-                        BUILTIN_CAPABILITY_ID,
-                        BUILTIN_DELEGATE,
-                        &name,
-                        &args,
-                        &channel,
-                        &session,
-                        &pipe,
-                        &agent_id_copy,
-                        approved,
-                        user_confirmed_this_turn,
-                        false,
-                        || {
-                            let del_state = del_state.clone();
-                            let del_pipe = del_pipe.clone();
-                            let source_agent_id = agent_id_copy.clone();
-                            let user = user.clone();
-                            let args = invoke_args.clone();
-                            let session = session.clone();
-                            let chain_depth = chain_depth;
-                            let del_channel = channel.clone();
-                            let del_tx = del_tx.clone();
-                            let parent_thread_id = parent_thread_id.clone();
-                            let delegated_attachments = delegated_attachments.clone();
-                            let delegation_trace = delegation_trace_for_call.clone();
-                            Box::pin(async move {
-                                let output = dispatch_delegation(
-                                    del_state,
-                                    source_agent_id,
-                                    del_pipe,
-                                    user,
-                                    args,
-                                    session,
-                                    chain_depth,
-                                    del_channel,
-                                    del_tx,
-                                    parent_thread_id,
-                                    delegation_trace,
-                                )
-                                .await?;
-                                if !output.attachments.is_empty() {
-                                    let mut captured = delegated_attachments.lock().await;
-                                    captured.extend(output.attachments.clone());
+                    // Delegation is an internal orchestration mechanism and is
+                    // always allowed — no policy check required.  The chain
+                    // depth budget already limits unbounded delegation.
+                    let invoke_start = Instant::now();
+                    let result = {
+                        let del_state = del_state.clone();
+                        let del_pipe = del_pipe.clone();
+                        let source_agent_id = agent_id_copy.clone();
+                        let user = user.clone();
+                        let args = invoke_args.clone();
+                        let session = session.clone();
+                        let chain_depth = chain_depth;
+                        let del_channel = channel.clone();
+                        let del_tx = del_tx.clone();
+                        let parent_thread_id = parent_thread_id.clone();
+                        let delegated_attachments = delegated_attachments.clone();
+                        let delegation_trace = delegation_trace_for_call.clone();
+                        async move {
+                            let output = dispatch_delegation(
+                                del_state,
+                                source_agent_id,
+                                del_pipe,
+                                user,
+                                args,
+                                session,
+                                chain_depth,
+                                del_channel,
+                                del_tx,
+                                parent_thread_id,
+                                delegation_trace,
+                            )
+                            .await?;
+                            if !output.attachments.is_empty() {
+                                let mut captured = delegated_attachments.lock().await;
+                                captured.extend(output.attachments.clone());
+                            }
+                            let mut result_text = output.reply_text;
+                            if !output.attachments.is_empty() {
+                                result_text.push_str("\n\n[Artifacts returned by this agent:");
+                                for att in &output.attachments {
+                                    result_text.push_str(&format!(
+                                        "\n- artifact_id: {} | filename: {} | mime_type: {} | size: {} bytes",
+                                        att.artifact_id, att.filename, att.mime_type, att.size_bytes
+                                    ));
                                 }
-                                // Append artifact references to the tool result so
-                                // the orchestrator LLM can pass them to the next
-                                // delegation step (e.g. email delivery).
-                                let mut result_text = output.reply_text;
-                                if !output.attachments.is_empty() {
-                                    result_text.push_str("\n\n[Artifacts returned by this agent:");
-                                    for att in &output.attachments {
-                                        result_text.push_str(&format!(
-                                            "\n- artifact_id: {} | filename: {} | mime_type: {} | size: {} bytes",
-                                            att.artifact_id, att.filename, att.mime_type, att.size_bytes
-                                        ));
-                                    }
-                                    result_text.push(']');
-                                }
-                                Ok(result_text)
-                            })
-                        },
-                    )
-                    .await;
-                    return result;
+                                result_text.push(']');
+                            }
+                            Ok(result_text)
+                        }
+                    }
+                    .await
+                    .unwrap_or_else(|e: anyhow::Error| {
+                        warn!(tool = %name, "Delegation invocation failed: {e}");
+                        format!("Tool error: {}", e)
+                    });
+                    let invoke_ms = invoke_start.elapsed().as_millis();
+                    if invoke_ms > 10_000 {
+                        warn!(tool = %name, invoke_ms, "Slow tool invocation");
+                    }
+                    info!(
+                        tool = %name,
+                        policy = "allow",
+                        invoke_ms,
+                        "Tool dispatch timing"
+                    );
+                    return Ok(ToolDispatchResult::Done(result));
                 }
 
                 // ── Capability tools ──────────────────────────────────────
