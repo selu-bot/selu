@@ -51,12 +51,21 @@ pub struct ToolCallView {
 }
 
 #[derive(Debug, Clone)]
+pub struct AttachmentView {
+    pub filename: String,
+    pub download_url: String,
+    pub mime_type: String,
+    pub size_bytes: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct MessageView {
     pub role: String,
     pub content: String,
     pub image_urls: Vec<String>,
     pub created_at: String,
     pub tool_calls: Vec<ToolCallView>,
+    pub attachments: Vec<AttachmentView>,
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
@@ -121,6 +130,7 @@ async fn fetch_thread_messages(
     before: Option<&str>,
 ) -> (Vec<MessageView>, bool, Option<String>) {
     let page_size: i32 = if before.is_some() { 50 } else { 200 };
+    let web_base = state.config.base_path().to_string();
 
     let (rows, has_more) = crate::services::chat::list_thread_messages(
         &state.db,
@@ -155,15 +165,52 @@ async fn fetch_thread_messages(
             })
             .collect();
 
+        let attachments = parse_attachments_for_view(
+            r.attachments_json.as_deref(),
+            &web_base,
+            &state.config.encryption_key,
+            user_id,
+        );
+
         out.push(MessageView {
             role: r.role,
             content,
             image_urls,
             tool_calls,
+            attachments,
             created_at: format_timestamp_for_user(&r.created_at, language),
         });
     }
     (out, has_more, oldest_ts)
+}
+
+fn parse_attachments_for_view(
+    json: Option<&str>,
+    base_url: &str,
+    signing_secret: &str,
+    user_id: &str,
+) -> Vec<AttachmentView> {
+    let Some(json) = json else { return Vec::new() };
+    let Ok(refs) = serde_json::from_str::<Vec<crate::agents::artifacts::ArtifactRef>>(json) else {
+        return Vec::new();
+    };
+    refs.into_iter()
+        .map(|r| {
+            let download_url = crate::agents::artifacts::generate_download_url(
+                base_url,
+                signing_secret,
+                &r.artifact_id,
+                user_id,
+            )
+            .unwrap_or_default();
+            AttachmentView {
+                filename: r.filename,
+                download_url,
+                mime_type: r.mime_type,
+                size_bytes: r.size_bytes,
+            }
+        })
+        .collect()
 }
 
 fn format_timestamp_for_user(raw: &str, language: &str) -> String {
@@ -586,6 +633,7 @@ pub async fn chat_send(
 
 /// GET /chat/{pipe_id}/stream/{stream_id} — SSE: stream LLM tokens to browser
 pub async fn chat_stream(
+    user: AuthUser,
     Path((_pipe_id, stream_id)): Path<(Uuid, String)>,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
@@ -606,6 +654,8 @@ pub async fn chat_stream(
 
     let bp = base_path;
     let sid = stream_id.clone();
+    let signing_secret = state.config.encryption_key.clone();
+    let sse_user_id = user.user_id.clone();
     let confirmations = state.pending_confirmations.clone();
     let sse_stream = ReceiverStream::new(bridge_rx).map(move |event| {
         let data = match event {
@@ -663,6 +713,50 @@ pub async fn chat_stream(
                     &args_pretty,
                     &bp,
                 )
+            }
+            LoopEvent::Artifacts(refs) => {
+                let mut cards = String::new();
+                for r in &refs {
+                    let url = crate::agents::artifacts::generate_download_url(
+                        &bp,
+                        &signing_secret,
+                        &r.artifact_id,
+                        &sse_user_id,
+                    )
+                    .unwrap_or_default();
+                    let escaped_name = html_escape(&r.filename)
+                        .replace('\'', "\\'");
+                    let escaped_url = html_escape(&url)
+                        .replace('\'', "\\'");
+                    cards.push_str(&format!(
+                        "html += '<a href=\"{url}\" target=\"_blank\" download class=\"flex items-center gap-2 px-3 py-2 bg-surface-input border border-edge rounded-lg hover:border-coral/40 transition-colors text-sm no-underline\"><svg class=\"w-4 h-4 flex-shrink-0 text-coral\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"12\" y1=\"18\" x2=\"12\" y2=\"12\"/><polyline points=\"9 15 12 18 15 15\"/></svg><span class=\"truncate text-txt-heading\">{name}</span></a>';\n",
+                        url = escaped_url,
+                        name = escaped_name,
+                    ));
+                }
+                if cards.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        r#"<script>
+(function(){{
+  var el = document.getElementById('stream-{sid}') || document.querySelector('[id^="cont-"].streaming');
+  if(el) {{
+    var div = document.createElement('div');
+    div.className = 'mt-2 space-y-1.5';
+    var html = '';
+    {cards}
+    div.innerHTML = html;
+    el.parentElement.appendChild(div);
+  }}
+  var msgs = document.getElementById('messages');
+  if(msgs) msgs.scrollTop = msgs.scrollHeight;
+}})();
+</script>"#,
+                        sid = sid,
+                        cards = cards,
+                    )
+                }
             }
             LoopEvent::Done => {
                 format!(r#"<script>finalizeStream('{sid}');</script>"#, sid = sid)
@@ -982,36 +1076,9 @@ async fn process_message(
     );
 
     match run_turn(&state, params, tx.clone()).await {
-        Ok(output) => {
-            if !output.attachments.is_empty() {
-                // Web chat uses a relative URL (just the base path) so the
-                // browser resolves it against its own origin — avoids
-                // internal Docker hostnames leaking into download links.
-                let web_base = state.config.base_path().to_string();
-                let attachments = crate::agents::artifacts::to_outbound_attachments(
-                    &state.artifacts,
-                    &output.attachments,
-                    &user_id,
-                    &web_base,
-                    &state.config.encryption_key,
-                    false,
-                )
-                .await;
-                if !attachments.is_empty() {
-                    let lang = crate::i18n::user_language(&state.db, &user_id).await;
-                    let mut lines = Vec::new();
-                    lines.push(String::new());
-                    lines.push(crate::i18n::t(&lang, "artifact.generated_files").to_string());
-                    for a in attachments {
-                        if let Some(url) = a.download_url {
-                            lines.push(format!("- [{}]({})", a.filename, url));
-                        } else {
-                            lines.push(format!("- {}", a.filename));
-                        }
-                    }
-                    let _ = tx.send(LoopEvent::Token(lines.join("\n"))).await;
-                }
-            }
+        Ok(_output) => {
+            // Artifacts are now emitted as LoopEvent::Artifacts by the engine
+            // before Done, so no post-turn handling needed here.
         }
         Err(e) => {
             error!("Agent turn failed: {e}");

@@ -82,6 +82,8 @@ pub enum LoopEvent {
         approval_message: Option<String>,
         approval_id: String,
     },
+    /// Artifacts produced during this turn (delivered before Done).
+    Artifacts(Vec<crate::agents::artifacts::ArtifactRef>),
     /// Final complete text response
     Done,
     /// An error occurred
@@ -359,7 +361,7 @@ pub async fn run_loop(
                     text_len = streamed_text.len(),
                     "Tool loop complete — returning streamed text"
                 );
-                let _ = tx.send(LoopEvent::Done).await;
+                // Done is sent by the engine after artifact computation.
                 return Ok(LoopOutput {
                     reply: streamed_text,
                     tool_messages: messages[initial_message_count..].to_vec(),
@@ -460,7 +462,6 @@ pub async fn run_loop(
                     LlmResponse::Text(text) => {
                         info!(iteration, fallback_ms, "LLM returned text via fallback");
                         let _ = tx.send(LoopEvent::Token(text.clone())).await;
-                        let _ = tx.send(LoopEvent::Done).await;
                         return Ok(LoopOutput {
                             reply: text,
                             tool_messages: messages[initial_message_count..].to_vec(),
@@ -505,7 +506,6 @@ pub async fn run_loop(
                 LlmResponse::Text(text) => {
                     info!(iteration, fallback_ms, "LLM returned text (non-streaming)");
                     let _ = tx.send(LoopEvent::Token(text.clone())).await;
-                    let _ = tx.send(LoopEvent::Done).await;
                     return Ok(LoopOutput {
                         reply: text,
                         tool_messages: messages[initial_message_count..].to_vec(),
@@ -891,7 +891,6 @@ pub async fn run_loop(
 
         if let Some(reply) = terminal_reply {
             let _ = tx.send(LoopEvent::Token(reply.clone())).await;
-            let _ = tx.send(LoopEvent::Done).await;
             info!(
                 iteration,
                 iteration_ms = iteration_start.elapsed().as_millis(),

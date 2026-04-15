@@ -29,6 +29,7 @@ pub struct MessageRow {
     pub content: String,
     pub created_at: String,
     pub tool_calls: Vec<ToolCallRow>,
+    pub attachments_json: Option<String>,
 }
 
 pub struct ToolCallRow {
@@ -134,7 +135,7 @@ pub async fn list_thread_messages(
     page_size: i32,
 ) -> (Vec<MessageRow>, bool) {
     let mut rows = sqlx::query!(
-        "SELECT id, role, content, created_at, tool_calls_json, tool_call_id
+        "SELECT id, role, content, created_at, tool_calls_json, tool_call_id, attachments_json
          FROM messages
          WHERE thread_id = ? AND (? IS NULL OR created_at < ?)
          ORDER BY created_at DESC LIMIT ?",
@@ -193,6 +194,7 @@ pub async fn list_thread_messages(
             content: r.content.clone(),
             created_at: r.created_at.clone(),
             tool_calls,
+            attachments_json: r.attachments_json.clone(),
         }));
     }
 

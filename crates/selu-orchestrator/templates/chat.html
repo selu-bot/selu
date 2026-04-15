@@ -198,6 +198,16 @@
       <div class="flex justify-start">
         <div class="max-w-[72%] bg-surface-raised border border-edge rounded-2xl rounded-bl-md px-4 py-2.5">
           <div class="text-sm leading-relaxed break-words markdown-body md-source">{{ msg.content }}</div>
+          {% if !msg.attachments.is_empty() %}
+          <div class="mt-2 space-y-1.5">
+            {% for att in msg.attachments %}
+            <a href="{{ att.download_url }}" target="_blank" download class="flex items-center gap-2 px-3 py-2 bg-surface-input border border-edge rounded-lg hover:border-coral/40 transition-colors text-sm no-underline">
+              <svg class="w-4 h-4 flex-shrink-0 text-coral" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
+              <span class="truncate text-txt-heading">{{ att.filename }}</span>
+            </a>
+            {% endfor %}
+          </div>
+          {% endif %}
           <p class="text-[10px] text-txt-muted mt-1.5">{{ msg.created_at }}</p>
         </div>
       </div>

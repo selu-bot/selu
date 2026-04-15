@@ -1203,7 +1203,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     }
 
     // ── Persist assistant reply ───────────────────────────────────────────────
-    if !reply.is_empty() {
+    let reply_msg_id = if !reply.is_empty() {
         let reply_id = Uuid::new_v4().to_string();
         let asst_role = Role::Assistant.to_string();
         let now_ms = chrono::Utc::now()
@@ -1218,6 +1218,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         {
             error!("Failed to persist assistant reply: {e}");
         }
+        Some(reply_id)
+    } else {
+        None
+    };
+    if !reply.is_empty() {
 
         // ── Personality extraction (best-effort, non-blocking) ────────────────
         {
@@ -1368,6 +1373,32 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             .await;
         }
     }
+
+    // Persist attachment metadata on the reply message so it survives reload.
+    if !merged_attachments.is_empty() {
+        if let Some(ref mid) = reply_msg_id {
+            let att_json = serde_json::to_string(&merged_attachments).unwrap_or_default();
+            if let Err(e) = sqlx::query!(
+                "UPDATE messages SET attachments_json = ? WHERE id = ?",
+                att_json,
+                mid
+            )
+            .execute(&state.db)
+            .await
+            {
+                error!("Failed to persist attachments_json: {e}");
+            }
+        }
+    }
+
+    // Emit structured artifact event before Done so all transports receive it
+    // in the correct order (artifacts first, then done).
+    if !merged_attachments.is_empty() {
+        let _ = tx
+            .send(LoopEvent::Artifacts(merged_attachments.clone()))
+            .await;
+    }
+    let _ = tx.send(LoopEvent::Done).await;
 
     Ok(TurnOutput {
         reply_text: reply,
@@ -2173,8 +2204,8 @@ fn confirmation_only_sender(parent_tx: LoopSender) -> LoopSender {
                 LoopEvent::CapabilityStatus(_) => {
                     let _ = parent_tx.send(event).await;
                 }
-                // Discard tokens and Done to prevent duplicate streaming.
-                LoopEvent::Token(_) | LoopEvent::Done => {}
+                // Discard tokens, artifacts, and Done to prevent duplicate streaming.
+                LoopEvent::Token(_) | LoopEvent::Artifacts(_) | LoopEvent::Done => {}
                 // Forward errors so the parent stream can surface delegation
                 // failures instead of silently swallowing them.
                 LoopEvent::Error(_) => {

@@ -106,12 +106,22 @@ struct MessageResponse {
     content: String,
     created_at: String,
     tool_calls: Option<Vec<ToolCallResponse>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attachments: Option<Vec<AttachmentResponse>>,
 }
 
 #[derive(Serialize)]
 struct ToolCallResponse {
     name: String,
     result: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AttachmentResponse {
+    artifact_id: String,
+    filename: String,
+    mime_type: String,
+    size_bytes: usize,
 }
 
 #[derive(Deserialize)]
@@ -463,24 +473,42 @@ async fn list_messages(
 
     let result: Vec<MessageResponse> = rows
         .into_iter()
-        .map(|r| MessageResponse {
-            id: r.id,
-            role: r.role,
-            content: r.content,
-            created_at: r.created_at,
-            tool_calls: if r.tool_calls.is_empty() {
-                None
-            } else {
-                Some(
-                    r.tool_calls
-                        .into_iter()
-                        .map(|tc| ToolCallResponse {
-                            name: tc.name,
-                            result: tc.result,
-                        })
-                        .collect(),
-                )
-            },
+        .map(|r| {
+            let attachments = r.attachments_json.as_deref().and_then(|json| {
+                serde_json::from_str::<Vec<crate::agents::artifacts::ArtifactRef>>(json)
+                    .ok()
+                    .filter(|v| !v.is_empty())
+                    .map(|refs| {
+                        refs.into_iter()
+                            .map(|a| AttachmentResponse {
+                                artifact_id: a.artifact_id,
+                                filename: a.filename,
+                                mime_type: a.mime_type,
+                                size_bytes: a.size_bytes,
+                            })
+                            .collect()
+                    })
+            });
+            MessageResponse {
+                id: r.id,
+                role: r.role,
+                content: r.content,
+                created_at: r.created_at,
+                tool_calls: if r.tool_calls.is_empty() {
+                    None
+                } else {
+                    Some(
+                        r.tool_calls
+                            .into_iter()
+                            .map(|tc| ToolCallResponse {
+                                name: tc.name,
+                                result: tc.result,
+                            })
+                            .collect(),
+                    )
+                },
+                attachments,
+            }
         })
         .collect();
 
@@ -627,28 +655,9 @@ async fn send_message(
         };
 
         match run_turn(&bg_state, params, engine_tx.clone()).await {
-            Ok(output) => {
-                if !output.attachments.is_empty() {
-                    let web_base = bg_state.config.base_path().to_string();
-                    let attachments = crate::agents::artifacts::to_outbound_attachments(
-                        &bg_state.artifacts,
-                        &output.attachments,
-                        &bg_user_id,
-                        &web_base,
-                        &bg_state.config.encryption_key,
-                        false,
-                    )
-                    .await;
-                    if !attachments.is_empty() {
-                        let mut lines = vec![String::new()];
-                        for a in attachments {
-                            if let Some(url) = a.download_url {
-                                lines.push(format!("[{}]({})", a.filename, url));
-                            }
-                        }
-                        let _ = engine_tx.send(LoopEvent::Token(lines.join("\n"))).await;
-                    }
-                }
+            Ok(_output) => {
+                // Artifacts are now emitted as LoopEvent::Artifacts by the engine
+                // before Done, so no post-turn handling needed here.
             }
             Err(e) => {
                 error!("Mobile agent turn failed: {e}");
@@ -773,6 +782,10 @@ async fn stream_response(
         let (event_type, data) = match event {
             LoopEvent::Token(t) => ("token", t),
             LoopEvent::CapabilityStatus(s) => ("tool_status", s),
+            LoopEvent::Artifacts(refs) => {
+                let payload = serde_json::to_string(&refs).unwrap_or_default();
+                ("artifacts", payload)
+            }
             LoopEvent::Done => ("done", String::new()),
             LoopEvent::Error(e) => ("error", e),
             LoopEvent::ConfirmationRequired(req) => {

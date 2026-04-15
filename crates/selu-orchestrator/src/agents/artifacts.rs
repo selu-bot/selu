@@ -28,7 +28,7 @@ pub struct StoredArtifact {
 
 pub type ArtifactStore = Arc<RwLock<HashMap<String, StoredArtifact>>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ArtifactRef {
     pub artifact_id: String,
     pub filename: String,
