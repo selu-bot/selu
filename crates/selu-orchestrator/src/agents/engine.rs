@@ -247,8 +247,10 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         .iter()
         .map(|r| r.artifact_id.clone())
         .collect();
+    // Persist inbound attachments to disk for all pipes so they survive
+    // beyond the in-memory TTL and remain available until the thread is deleted.
     let persist_thread_artifacts = if let Some(tid) = thread_id.as_deref() {
-        if is_web_pipe_transport(&state.db, &pipe_id, &user_id).await {
+        if !inbound_attachment_refs.is_empty() {
             crate::agents::artifacts::persist_refs_for_thread(
                 &state.db,
                 &state.artifacts,
@@ -258,10 +260,8 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                 &inbound_attachment_refs,
             )
             .await;
-            true
-        } else {
-            false
         }
+        true
     } else {
         false
     };
@@ -1425,21 +1425,6 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         );
         output
     })
-}
-
-async fn is_web_pipe_transport(db: &sqlx::SqlitePool, pipe_id: &str, user_id: &str) -> bool {
-    let Ok(row) = sqlx::query!(
-        "SELECT transport FROM pipes WHERE id = ? AND user_id = ? LIMIT 1",
-        pipe_id,
-        user_id
-    )
-    .fetch_optional(db)
-    .await
-    else {
-        return false;
-    };
-
-    row.map(|r| r.transport == "web").unwrap_or(false)
 }
 
 // ── Policy check + dispatch helper ────────────────────────────────────────────

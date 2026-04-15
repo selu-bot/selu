@@ -426,17 +426,46 @@ async fn delete_thread(
         return StatusCode::NOT_FOUND.into_response();
     }
 
-    // Delete messages then thread
+    // Clean up persisted artifact files, DB rows, and messages in a transaction.
+    let mut tx = match state.db.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            error!("Failed to start transaction for thread delete: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let persisted_artifacts =
+        crate::agents::artifacts::list_thread_artifact_files(&mut tx, &thread_id_str)
+            .await
+            .unwrap_or_default();
+
+    let _ =
+        crate::agents::artifacts::delete_thread_artifacts_rows(&mut tx, &thread_id_str).await;
+
     let _ = sqlx::query!("DELETE FROM messages WHERE thread_id = ?", thread_id_str)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await;
     let _ = sqlx::query!(
         "DELETE FROM threads WHERE id = ? AND user_id = ?",
         thread_id_str,
         user.user_id,
     )
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await;
+
+    if let Err(e) = tx.commit().await {
+        error!("Failed to commit thread delete for {thread_id_str}: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    // Remove from in-memory store and delete files on disk
+    let artifact_ids = persisted_artifacts
+        .iter()
+        .map(|a| a.artifact_id.clone())
+        .collect::<Vec<_>>();
+    crate::agents::artifacts::remove_ids(&state.artifacts, &artifact_ids).await;
+    crate::agents::artifacts::delete_artifact_files(&persisted_artifacts).await;
 
     StatusCode::NO_CONTENT.into_response()
 }
