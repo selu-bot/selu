@@ -212,10 +212,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
 
     let session = session_fut.await?;
     let session_id = session.id.to_string();
-    let before_artifacts = crate::agents::artifacts::list_session_artifacts(
+    let before_artifacts = crate::agents::artifacts::list_session_artifacts_scoped(
         &state.artifacts,
         &user_id,
         &session_id,
+        thread_id.as_deref(),
         256,
     )
     .await;
@@ -230,10 +231,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     // then persist the user message with stable artifact references.
     let mut inbound_attachment_refs = Vec::new();
     for attachment in inbound_attachments {
-        match crate::agents::artifacts::store_inbound_attachment(
+        match crate::agents::artifacts::store_inbound_attachment_scoped(
             &state.artifacts,
             &user_id,
             &session_id,
+            thread_id.as_deref(),
             &attachment.filename,
             &attachment.mime_type,
             attachment.data,
@@ -1354,10 +1356,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     );
 
     let artifacts_scan_start = Instant::now();
-    let after_artifacts = crate::agents::artifacts::list_session_artifacts(
+    let after_artifacts = crate::agents::artifacts::list_session_artifacts_scoped(
         &state.artifacts,
         &user_id,
         &session_id,
+        thread_id.as_deref(),
         256,
     )
     .await;
@@ -2048,10 +2051,11 @@ fn dispatch_delegation(
         let contains_artifact_ref =
             message.contains("artifact_id") || message.contains("attachments");
         if !contains_artifact_ref {
-            let refs = crate::agents::artifacts::list_session_artifacts(
+            let refs = crate::agents::artifacts::list_session_artifacts_scoped(
                 &state.artifacts,
                 &user_id,
                 &session_id,
+                parent_thread_id.as_deref(),
                 3,
             )
             .await;
