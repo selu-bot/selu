@@ -1227,6 +1227,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             let agent_id = agent.id.clone();
             let conv_msg = effective_text.clone();
             let conv_reply = reply.clone();
+            let lang = user_language.clone();
             tokio::spawn(async move {
                 if let Err(e) = crate::agents::personality::extract_from_conversation(
                     &db,
@@ -1235,6 +1236,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     &agent_id,
                     &conv_msg,
                     &conv_reply,
+                    &lang,
                 )
                 .await
                 {

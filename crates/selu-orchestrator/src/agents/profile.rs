@@ -206,6 +206,13 @@ async fn optimize_facts(
         .collect::<Vec<_>>()
         .join("\n");
 
+    let user_lang = crate::i18n::user_language(db, user_id).await;
+    let lang_name = match user_lang.as_str() {
+        "de" => "German",
+        "en" => "English",
+        _ => "German",
+    };
+
     let system_prompt = format!(
         r#"You are a profile-fact optimizer. You will receive a numbered list of facts about a user.
 
@@ -214,17 +221,18 @@ Your job:
 2. **Correct categories**: assign each fact to exactly one of: personal, preferences, location, work, other.
 3. **Consolidate**: if multiple facts can be combined into one clearer statement, do so.  Keep atomic facts atomic — only merge when they genuinely overlap.
 4. **Preserve meaning**: never invent information. If two facts conflict, keep the one that sounds more recent or specific.
-5. **Language**: keep each fact in its original language. Do not translate.
+5. **Language**: write ALL facts in {lang}. This is the user's preferred language. Translate any facts that are in a different language.
 
 Current facts:
 {facts}
 
 Respond with a JSON array. Each element must have:
 - "category": one of "personal", "preferences", "location", "work", "other"
-- "fact": a short, clear statement
+- "fact": a short, clear statement in {lang}
 
 Respond ONLY with the JSON array, nothing else."#,
-        facts = facts_text
+        facts = facts_text,
+        lang = lang_name
     );
 
     // Use the default agent's model for background tasks.

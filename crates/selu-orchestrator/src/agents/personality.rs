@@ -28,6 +28,7 @@ pub async fn extract_from_conversation(
     agent_id: &str,
     user_message: &str,
     assistant_reply: &str,
+    user_language: &str,
 ) -> Result<()> {
     // Skip very short exchanges (unlikely to contain personality info)
     if user_message.len() < 10 {
@@ -48,6 +49,12 @@ pub async fn extract_from_conversation(
     let resolved = crate::agents::model::resolve_model(db, agent_id).await?;
     let provider = load_provider(db, &resolved.provider_id, &resolved.model_id, creds).await?;
 
+    let lang_name = match user_language {
+        "de" => "German",
+        "en" => "English",
+        _ => "German",
+    };
+
     let system_prompt = format!(
         r#"You extract facts about a user from conversations. Facts are persistent things about the user such as their name, where they live, what they like, their job, hobbies, family, preferences, etc.
 
@@ -61,7 +68,9 @@ Existing facts:
 
 Respond with a JSON array. Each element must have:
 - "category": one of "personal", "preferences", "location", "work", "other"
-- "fact": a short, clear statement (e.g. "Name is Jan", "Lives in Berlin", "Prefers dark mode")
+- "fact": a short, clear statement in {lang} (e.g. "Name is Jan", "Lives in Berlin", "Prefers dark mode")
+
+IMPORTANT: Always write the facts in {lang}. This is the user's preferred language.
 
 If there are NO new facts to extract, respond with an empty array: []
 
@@ -70,7 +79,8 @@ Respond ONLY with the JSON array, nothing else."#,
             "(none yet)".to_string()
         } else {
             existing_summary
-        }
+        },
+        lang = lang_name
     );
 
     let messages = vec![
