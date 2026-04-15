@@ -567,7 +567,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             "/schedules",
             get(schedules::schedules_index).post(schedules::schedules_create),
         )
-        .route("/schedules/{id}", delete(schedules::schedules_delete))
+        .route(
+            "/schedules/{id}",
+            delete(schedules::schedules_delete).post(schedules::schedules_update),
+        )
         .route("/schedules/{id}/toggle", post(schedules::schedules_toggle))
         .route(
             "/schedules/{id}/pipes",

@@ -232,6 +232,73 @@ pub async fn list_schedules(db: &SqlitePool, user_id: &str) -> Result<Vec<Schedu
     Ok(schedules)
 }
 
+/// Update a schedule's name, prompt, timing, and pipe associations.
+pub async fn update_schedule(
+    db: &SqlitePool,
+    schedule_id: &str,
+    user_id: &str,
+    name: &str,
+    prompt: &str,
+    cron_expression: &str,
+    cron_description: &str,
+    timezone: &str,
+    pipe_ids: &[String],
+) -> Result<bool> {
+    // Verify ownership
+    let exists = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM schedules WHERE id = ? AND user_id = ?",
+        schedule_id,
+        user_id,
+    )
+    .fetch_one(db)
+    .await?;
+
+    if exists == 0 {
+        return Ok(false);
+    }
+
+    validate_cron(cron_expression)?;
+
+    let next_run = compute_next_run(cron_expression, timezone, Utc::now())?;
+    let next_run_str = next_run.format("%Y-%m-%d %H:%M:%S").to_string();
+
+    sqlx::query!(
+        r#"UPDATE schedules
+           SET name = ?, prompt = ?, cron_expression = ?, cron_description = ?, next_run_at = ?
+           WHERE id = ? AND user_id = ?"#,
+        name,
+        prompt,
+        cron_expression,
+        cron_description,
+        next_run_str,
+        schedule_id,
+        user_id,
+    )
+    .execute(db)
+    .await
+    .context("Failed to update schedule")?;
+
+    // Replace pipe associations
+    sqlx::query!(
+        "DELETE FROM schedule_pipes WHERE schedule_id = ?",
+        schedule_id
+    )
+    .execute(db)
+    .await?;
+
+    for pipe_id in pipe_ids {
+        sqlx::query!(
+            "INSERT INTO schedule_pipes (schedule_id, pipe_id) VALUES (?, ?)",
+            schedule_id,
+            pipe_id,
+        )
+        .execute(db)
+        .await?;
+    }
+
+    Ok(true)
+}
+
 /// Delete a schedule (only if owned by the user).
 pub async fn delete_schedule(db: &SqlitePool, schedule_id: &str, user_id: &str) -> Result<bool> {
     // schedule_pipes rows are cascade-deleted

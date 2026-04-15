@@ -321,17 +321,17 @@
     <section class="space-y-4">
       <div>
         <h2 class="text-base font-bold text-txt-heading" data-i18n="agents.detail.section.memory">Memory</h2>
-        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.section.memory_desc">Long-term notes the agent saved with memory_remember and retrieves via BM25.</p>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.section.memory_desc">Things this agent remembers across conversations.</p>
       </div>
 
       <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
         <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
           <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.section.memory">Memory</span>
-          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.detail.memory.last500">Last 500 entries</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.detail.memory.last500">Recent entries</span>
         </div>
         {% if memory_entries.is_empty() %}
         <div class="p-5">
-          <p class="text-sm text-txt-muted text-center py-6" data-i18n="agents.detail.memory.empty">No memory entries yet.</p>
+          <p class="text-sm text-txt-muted text-center py-6" data-i18n="agents.detail.memory.empty">This agent hasn't saved any notes yet.</p>
         </div>
         {% else %}
         <div class="overflow-x-auto">

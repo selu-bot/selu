@@ -31,6 +31,16 @@ pub struct ScheduleView {
     pub next_run_at: String,
     pub pipe_names: Vec<String>,
     pub pipe_ids: Vec<String>,
+    pub pipe_ids_csv: String,
+    pub pipe_checks: Vec<PipeOptionChecked>,
+}
+
+/// A pipe option with a pre-computed "checked" flag for a specific schedule.
+#[derive(Debug, Clone)]
+pub struct PipeOptionChecked {
+    pub id: String,
+    pub name: String,
+    pub checked: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +113,14 @@ pub struct CreateScheduleForm {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UpdateScheduleForm {
+    pub name: String,
+    pub prompt: String,
+    pub when_text: String,
+    pub pipe_ids: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct UpdatePipesForm {
     pub pipe_ids: Option<String>,
 }
@@ -130,32 +148,8 @@ pub async fn schedules_index(
             .flatten()
             .unwrap_or_else(|| "UTC".to_string());
 
-    let schedule_rows = schedules::list_schedules(&state.db, &user.user_id)
-        .await
-        .unwrap_or_default();
-
-    let schedules: Vec<ScheduleView> = schedule_rows
-        .into_iter()
-        .map(|s| ScheduleView {
-            id: s.id,
-            name: s.name,
-            prompt: s.prompt,
-            cron_description: s.cron_description,
-            cron_expression: s.cron_expression,
-            active: s.active,
-            one_shot: s.one_shot,
-            last_run_at: s
-                .last_run_at
-                .map(|v| format_utc_for_timezone(&v, &user_timezone))
-                .unwrap_or_else(|| "Never".to_string()),
-            next_run_at: format_utc_for_timezone(&s.next_run_at, &user_timezone),
-            pipe_names: s.pipe_names,
-            pipe_ids: s.pipe_ids,
-        })
-        .collect();
-
-    // Fetch user's pipes (web pipes for this user)
-    let pipes = sqlx::query!(
+    // Fetch user's pipes first (needed for schedule card pipe checkboxes)
+    let pipes: Vec<PipeOption> = sqlx::query!(
         "SELECT id, name FROM pipes WHERE user_id = ? AND active = 1 ORDER BY name",
         user.user_id,
     )
@@ -168,6 +162,43 @@ pub async fn schedules_index(
         name: r.name,
     })
     .collect();
+
+    let schedule_rows = schedules::list_schedules(&state.db, &user.user_id)
+        .await
+        .unwrap_or_default();
+
+    let schedules: Vec<ScheduleView> = schedule_rows
+        .into_iter()
+        .map(|s| {
+            let pipe_checks: Vec<PipeOptionChecked> = pipes
+                .iter()
+                .map(|p| PipeOptionChecked {
+                    id: p.id.clone(),
+                    name: p.name.clone(),
+                    checked: s.pipe_ids.contains(&p.id),
+                })
+                .collect();
+            let pipe_ids_csv = s.pipe_ids.join(",");
+            ScheduleView {
+                id: s.id,
+                name: s.name,
+                prompt: s.prompt,
+                cron_description: s.cron_description,
+                cron_expression: s.cron_expression,
+                active: s.active,
+                one_shot: s.one_shot,
+                last_run_at: s
+                    .last_run_at
+                    .map(|v| format_utc_for_timezone(&v, &user_timezone))
+                    .unwrap_or_else(|| "Never".to_string()),
+                next_run_at: format_utc_for_timezone(&s.next_run_at, &user_timezone),
+                pipe_names: s.pipe_names,
+                pipe_ids: s.pipe_ids,
+                pipe_ids_csv,
+                pipe_checks,
+            }
+        })
+        .collect();
 
     match (SchedulesTemplate {
         active_nav: "schedules",
@@ -388,6 +419,137 @@ pub async fn schedules_delete(
         Err(e) => {
             error!("Failed to delete schedule {schedule_id}: {e}");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// POST /schedules/{id} — update a schedule (form submit, full page redirect)
+pub async fn schedules_update(
+    user: AuthUser,
+    Path(schedule_id): Path<String>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+    Form(form): Form<UpdateScheduleForm>,
+) -> Response {
+    if form.name.trim().is_empty()
+        || form.prompt.trim().is_empty()
+        || form.when_text.trim().is_empty()
+    {
+        return Redirect::to(&format!(
+            "{}/schedules?error=Name%2C+prompt%2C+and+timing+are+required.",
+            base_path
+        ))
+        .into_response();
+    }
+
+    let pipe_ids: Vec<String> = form
+        .pipe_ids
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if pipe_ids.is_empty() {
+        return Redirect::to(&format!(
+            "{}/schedules?error=Please+select+at+least+one+pipe.",
+            base_path
+        ))
+        .into_response();
+    }
+
+    // Use LLM to parse the timing
+    let provider = match resolve_provider(&state).await {
+        Ok(p) => p,
+        Err(msg) => {
+            return Redirect::to(&format!(
+                "{}/schedules?error={}",
+                base_path,
+                urlencoding::encode(&msg)
+            ))
+            .into_response();
+        }
+    };
+
+    let timezone = sqlx::query_scalar!("SELECT timezone FROM users WHERE id = ?", user.user_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "UTC".to_string());
+
+    let now_utc = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+    let timing_result = match nl_to_cron::parse_timing(
+        &form.when_text,
+        &provider,
+        &now_utc,
+        &timezone,
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(e) => {
+            error!("Failed to parse timing '{}': {e}", form.when_text);
+            return Redirect::to(&format!(
+                "{}/schedules?error={}",
+                base_path,
+                urlencoding::encode(&format!(
+                    "Couldn't understand the timing. Try something like \"every day at 8am\" or \"next Sunday at 10am\".\n{}",
+                    e
+                ))
+            ))
+            .into_response();
+        }
+    };
+
+    match timing_result {
+        nl_to_cron::TimingResult::Recurring {
+            cron_expression,
+            description,
+        } => {
+            match schedules::update_schedule(
+                &state.db,
+                &schedule_id,
+                &user.user_id,
+                form.name.trim(),
+                form.prompt.trim(),
+                &cron_expression,
+                &description,
+                &timezone,
+                &pipe_ids,
+            )
+            .await
+            {
+                Ok(true) => Redirect::to(&format!(
+                    "{}/schedules?success=Schedule+updated.",
+                    base_path
+                ))
+                .into_response(),
+                Ok(false) => Redirect::to(&format!(
+                    "{}/schedules?error=Schedule+not+found.",
+                    base_path
+                ))
+                .into_response(),
+                Err(e) => {
+                    error!("Failed to update schedule {schedule_id}: {e}");
+                    Redirect::to(&format!(
+                        "{}/schedules?error=Failed+to+update+schedule.+Please+try+again.",
+                        base_path
+                    ))
+                    .into_response()
+                }
+            }
+        }
+        nl_to_cron::TimingResult::OneShot { .. } => {
+            // Can't change a recurring schedule to one-shot via edit
+            Redirect::to(&format!(
+                "{}/schedules?error={}",
+                base_path,
+                urlencoding::encode("Editing only supports recurring schedules. Delete and re-create for one-time reminders.")
+            ))
+            .into_response()
         }
     }
 }
