@@ -20,6 +20,9 @@ const DOWNLOAD_URL_TTL: Duration = Duration::from_secs(60 * 60);
 pub struct StoredArtifact {
     pub user_id: String,
     pub session_id: String,
+    /// Thread that owns this artifact. When set, the artifact is only visible
+    /// to turns running in the same thread — preventing cross-thread leaks.
+    pub thread_id: Option<String>,
     pub filename: String,
     pub mime_type: String,
     pub data: Vec<u8>,
@@ -60,11 +63,42 @@ pub async fn list_session_artifacts(
     session_id: &str,
     limit: usize,
 ) -> Vec<ArtifactRef> {
+    list_session_artifacts_scoped(store, user_id, session_id, None, limit).await
+}
+
+/// List artifacts scoped to a specific thread.
+///
+/// When `thread_id` is `Some`, only artifacts that belong to that thread (or
+/// have no thread affinity — e.g. delegation-produced artifacts) are returned.
+/// This prevents artifacts uploaded in Thread A from leaking into Thread B's
+/// context.
+pub async fn list_session_artifacts_scoped(
+    store: &ArtifactStore,
+    user_id: &str,
+    session_id: &str,
+    thread_id: Option<&str>,
+    limit: usize,
+) -> Vec<ArtifactRef> {
     cleanup_expired(store).await;
     let lock = store.read().await;
     let mut out: Vec<(String, StoredArtifact)> = lock
         .iter()
-        .filter(|(_, a)| a.user_id == user_id && a.session_id == session_id)
+        .filter(|(_, a)| {
+            if a.user_id != user_id || a.session_id != session_id {
+                return false;
+            }
+            // Thread isolation: when a thread_id filter is provided, only
+            // include artifacts that either belong to that thread or have no
+            // thread affinity (thread_id == None, e.g. delegation results).
+            if let Some(tid) = thread_id {
+                match &a.thread_id {
+                    Some(artifact_tid) => artifact_tid == tid,
+                    None => true, // thread-agnostic artifact (e.g. from delegation)
+                }
+            } else {
+                true
+            }
+        })
         .map(|(id, a)| (id.clone(), a.clone()))
         .collect();
     out.sort_by_key(|(_, a)| std::cmp::Reverse(a.created_at));
@@ -173,7 +207,7 @@ pub async fn persist_refs_for_thread(
     db: &sqlx::SqlitePool,
     store: &ArtifactStore,
     database_url: &str,
-    thread_id: &str,
+    thread_id: Option<&str>,
     user_id: &str,
     refs: &[ArtifactRef],
 ) {
@@ -185,9 +219,9 @@ pub async fn persist_refs_for_thread(
             persist_one_for_thread(db, database_url, thread_id, &r.artifact_id, &artifact).await
         {
             warn!(
-                thread_id = %thread_id,
+                thread_id = ?thread_id,
                 artifact_id = %r.artifact_id,
-                "Failed to persist artifact to thread storage: {e}"
+                "Failed to persist artifact to storage: {e}"
             );
         }
     }
@@ -196,7 +230,7 @@ pub async fn persist_refs_for_thread(
 async fn persist_one_for_thread(
     db: &sqlx::SqlitePool,
     database_url: &str,
-    thread_id: &str,
+    thread_id: Option<&str>,
     artifact_id: &str,
     artifact: &StoredArtifact,
 ) -> Result<()> {
@@ -562,6 +596,24 @@ pub async fn store_inbound_attachment(
     mime_type: &str,
     data: Vec<u8>,
 ) -> Result<ArtifactRef> {
+    store_inbound_attachment_scoped(store, user_id, session_id, None, filename, mime_type, data)
+        .await
+}
+
+/// Store an inbound attachment with thread affinity.
+///
+/// When `thread_id` is `Some`, the artifact is tagged with that thread so it
+/// will only be visible in that thread's context — preventing cross-thread
+/// leaks.
+pub async fn store_inbound_attachment_scoped(
+    store: &ArtifactStore,
+    user_id: &str,
+    session_id: &str,
+    thread_id: Option<&str>,
+    filename: &str,
+    mime_type: &str,
+    data: Vec<u8>,
+) -> Result<ArtifactRef> {
     if data.is_empty() {
         return Err(anyhow!("Attachment payload is empty"));
     }
@@ -574,6 +626,7 @@ pub async fn store_inbound_attachment(
         StoredArtifact {
             user_id: user_id.to_string(),
             session_id: session_id.to_string(),
+            thread_id: thread_id.map(|s| s.to_string()),
             filename: filename.to_string(),
             mime_type: mime_type.to_string(),
             data,
@@ -649,6 +702,7 @@ where
         StoredArtifact {
             user_id: user_id.to_string(),
             session_id: session_id.to_string(),
+            thread_id: None, // capability-produced artifacts are thread-agnostic
             filename: filename.to_string(),
             mime_type: mime_type.to_string(),
             data: data.clone(),
