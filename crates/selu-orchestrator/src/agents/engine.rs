@@ -2259,17 +2259,22 @@ fn is_explicit_confirmation_message(text: &str) -> bool {
 
     // Negation awareness: if the message starts with a negation word the
     // user is declining, not confirming — return false early.
+    // Uses word-boundary matching to avoid false positives like "now" matching "no".
     if has_send_verb {
-        let negation_tokens: &[&str] = &[
-            "don't", "dont", "do not", "not", "no",
+        let single_word_negations: &[&str] = &[
+            "don't", "dont", "not", "no",
             "never", "stop", "cancel", "wait",
             "nicht", "kein", "keine", "keinen", "nein",
             "stopp", "abbrechen", "warte",
         ];
+        let multi_word_negations: &[&str] = &["do not"];
         let words: Vec<&str> = collapsed.split_whitespace().collect();
         let prefix_len = words.len().min(5);
-        let prefix_str = words[..prefix_len].join(" ");
-        if negation_tokens.iter().any(|neg| prefix_str.contains(neg)) {
+        let prefix_words = &words[..prefix_len];
+        let prefix_str = prefix_words.join(" ");
+        if single_word_negations.iter().any(|neg| prefix_words.contains(neg))
+            || multi_word_negations.iter().any(|neg| prefix_str.contains(neg))
+        {
             return false;
         }
     }
