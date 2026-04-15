@@ -207,7 +207,7 @@ pub async fn persist_refs_for_thread(
     db: &sqlx::SqlitePool,
     store: &ArtifactStore,
     database_url: &str,
-    thread_id: &str,
+    thread_id: Option<&str>,
     user_id: &str,
     refs: &[ArtifactRef],
 ) {
@@ -219,9 +219,9 @@ pub async fn persist_refs_for_thread(
             persist_one_for_thread(db, database_url, thread_id, &r.artifact_id, &artifact).await
         {
             warn!(
-                thread_id = %thread_id,
+                thread_id = ?thread_id,
                 artifact_id = %r.artifact_id,
-                "Failed to persist artifact to thread storage: {e}"
+                "Failed to persist artifact to storage: {e}"
             );
         }
     }
@@ -230,7 +230,7 @@ pub async fn persist_refs_for_thread(
 async fn persist_one_for_thread(
     db: &sqlx::SqlitePool,
     database_url: &str,
-    thread_id: &str,
+    thread_id: Option<&str>,
     artifact_id: &str,
     artifact: &StoredArtifact,
 ) -> Result<()> {

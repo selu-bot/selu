@@ -250,24 +250,20 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         .iter()
         .map(|r| r.artifact_id.clone())
         .collect();
-    // Persist inbound attachments to disk for all pipes so they survive
-    // beyond the in-memory TTL and remain available until the thread is deleted.
-    let persist_thread_artifacts = if let Some(tid) = thread_id.as_deref() {
-        if !inbound_attachment_refs.is_empty() {
-            crate::agents::artifacts::persist_refs_for_thread(
-                &state.db,
-                &state.artifacts,
-                &state.config.database.url,
-                tid,
-                &user_id,
-                &inbound_attachment_refs,
-            )
-            .await;
-        }
-        true
-    } else {
-        false
-    };
+    // Persist inbound attachments to disk so they survive beyond the in-memory
+    // TTL.  This applies regardless of whether a thread_id is present — event
+    // fanout and other non-threaded turns must not lose attachments on restart.
+    if !inbound_attachment_refs.is_empty() {
+        crate::agents::artifacts::persist_refs_for_thread(
+            &state.db,
+            &state.artifacts,
+            &state.config.database.url,
+            thread_id.as_deref(),
+            &user_id,
+            &inbound_attachment_refs,
+        )
+        .await;
+    }
     let effective_user_text =
         normalize_user_text_for_inbound_attachments(&effective_text, &inbound_attachment_refs);
     // Build multimodal parts AFTER normalizing the text so the artifact_id
@@ -1381,18 +1377,16 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             merged_attachments.push(attachment);
         }
     }
-    if persist_thread_artifacts {
-        if let Some(tid) = thread_id.as_deref() {
-            crate::agents::artifacts::persist_refs_for_thread(
-                &state.db,
-                &state.artifacts,
-                &state.config.database.url,
-                tid,
-                &user_id,
-                &merged_attachments,
-            )
-            .await;
-        }
+    if !merged_attachments.is_empty() {
+        crate::agents::artifacts::persist_refs_for_thread(
+            &state.db,
+            &state.artifacts,
+            &state.config.database.url,
+            thread_id.as_deref(),
+            &user_id,
+            &merged_attachments,
+        )
+        .await;
     }
 
     // Persist attachment metadata on the reply message so it survives reload.
