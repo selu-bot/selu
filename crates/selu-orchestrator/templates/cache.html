@@ -28,6 +28,7 @@
               <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Capability</th>
               <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Created</th>
               <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Last Used</th>
+              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Size</th>
               <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted"></th>
             </tr>
           </thead>
@@ -40,6 +41,7 @@
               <td class="px-5 py-3.5 font-mono text-xs text-txt">{{ vol.capability_id }}</td>
               <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ vol.created_at }}</td>
               <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ vol.last_active_at }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-txt-muted text-right">{{ vol.size }}</td>
               <td class="px-5 py-3.5 text-right">
                 <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                         hx-delete="{{ base_path }}/cache/{{ vol.id }}"
@@ -51,7 +53,7 @@
             {% endfor %}
             {% if volumes.is_empty() %}
             <tr>
-              <td colspan="{% if is_admin %}5{% else %}4{% endif %}" class="px-5 py-6 text-center text-txt-muted text-sm">No cache volumes found. Caches are created automatically when a capability with caching enabled is used.</td>
+              <td colspan="{% if is_admin %}6{% else %}5{% endif %}" class="px-5 py-6 text-center text-txt-muted text-sm">No cache volumes found. Caches are created automatically when a capability with caching enabled is used.</td>
             </tr>
             {% endif %}
           </tbody>
