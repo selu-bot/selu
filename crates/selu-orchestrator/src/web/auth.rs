@@ -75,28 +75,14 @@ impl FromRequestParts<AppState> for AuthUser {
             None => return Err(Redirect::to(&prefixed(base_path, "/login")).into_response()),
         };
 
-        // Look up session + user
-        let row = sqlx::query!(
-            r#"SELECT ws.user_id, u.username, u.display_name, u.is_admin, u.language
-               FROM web_sessions ws
-               JOIN users u ON u.id = ws.user_id
-               WHERE ws.id = ? AND ws.expires_at > datetime('now')"#,
-            session_id
-        )
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| {
-            error!("Session lookup DB error: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        })?;
-
-        match row {
-            Some(r) => Ok(AuthUser {
-                user_id: r.user_id,
-                username: r.username,
-                display_name: r.display_name,
-                is_admin: r.is_admin != 0,
-                language: r.language,
+        // Look up session + user via shared service
+        match crate::services::auth::validate_session(&state.db, &session_id).await {
+            Some(s) => Ok(AuthUser {
+                user_id: s.user_id,
+                username: s.username,
+                display_name: s.display_name,
+                is_admin: s.is_admin,
+                language: s.language,
             }),
             None => Err(Redirect::to(&prefixed(base_path, "/login")).into_response()),
         }

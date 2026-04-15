@@ -162,23 +162,15 @@ async fn extract_mobile_user(headers: &HeaderMap, db: &sqlx::SqlitePool) -> Resu
         })
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let row = sqlx::query!(
-        r#"SELECT ws.user_id, u.username, u.is_admin, u.language
-           FROM web_sessions ws
-           JOIN users u ON u.id = ws.user_id
-           WHERE ws.id = ? AND ws.expires_at > datetime('now')"#,
-        session_id
-    )
-    .fetch_optional(db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(StatusCode::UNAUTHORIZED)?;
+    let s = crate::services::auth::validate_session(db, &session_id)
+        .await
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
     Ok(MobileUser {
-        user_id: row.user_id,
-        username: row.username,
-        is_admin: row.is_admin != 0,
-        language: row.language,
+        user_id: s.user_id,
+        username: s.username,
+        is_admin: s.is_admin,
+        language: s.language,
     })
 }
 
@@ -292,36 +284,21 @@ async fn list_pipes(
         Err(s) => return s.into_response(),
     };
 
-    let rows = sqlx::query!(
-        "SELECT id, user_id, name, transport, outbound_url, default_agent_id, active, created_at
-         FROM pipes WHERE user_id = ? AND active = 1 ORDER BY created_at",
-        user.user_id
-    )
-    .fetch_all(&state.db)
-    .await;
-
-    match rows {
-        Ok(rows) => {
-            let pipes: Vec<PipeResponse> = rows
-                .into_iter()
-                .map(|r| PipeResponse {
-                    id: r.id.unwrap_or_default(),
-                    user_id: r.user_id,
-                    name: r.name,
-                    transport: r.transport,
-                    outbound_url: r.outbound_url,
-                    default_agent_id: r.default_agent_id,
-                    active: r.active != 0,
-                    created_at: r.created_at,
-                })
-                .collect();
-            Json(pipes).into_response()
-        }
-        Err(e) => {
-            error!("Failed to list pipes: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let pipes: Vec<PipeResponse> = crate::services::chat::list_user_pipes(&state.db, &user.user_id, None)
+        .await
+        .into_iter()
+        .map(|r| PipeResponse {
+            id: r.id,
+            user_id: r.user_id,
+            name: r.name,
+            transport: r.transport,
+            outbound_url: r.outbound_url,
+            default_agent_id: r.default_agent_id,
+            active: r.active,
+            created_at: r.created_at,
+        })
+        .collect();
+    Json(pipes).into_response()
 }
 
 // ── GET /api/mobile/pipes/{pipe_id}/threads ──────────────────────────────────
@@ -337,53 +314,19 @@ async fn list_threads(
     };
 
     let pipe_id_str = pipe_id.to_string();
-    let rows = sqlx::query!(
-        r#"SELECT t.id, t.pipe_id, t.title, t.status, t.created_at,
-                  (SELECT content FROM messages WHERE thread_id = t.id ORDER BY created_at ASC LIMIT 1) as first_msg,
-                  (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as "last_activity_at?: String"
-           FROM threads t
-           WHERE t.pipe_id = ? AND t.user_id = ?
-           ORDER BY COALESCE(
-               (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id),
-               t.created_at
-           ) DESC
-           LIMIT 50"#,
-        pipe_id_str,
-        user.user_id,
-    )
-    .fetch_all(&state.db)
-    .await;
-
-    match rows {
-        Ok(rows) => {
-            let threads: Vec<ThreadResponse> = rows
-                .into_iter()
-                .map(|r| {
-                    // Apply same title fallback as web: truncated first message
-                    let title = r.title.or_else(|| {
-                        if r.first_msg.is_empty() {
-                            None
-                        } else {
-                            Some(r.first_msg.chars().take(40).collect::<String>())
-                        }
-                    });
-                    ThreadResponse {
-                        id: r.id.unwrap_or_default(),
-                        pipe_id: r.pipe_id.clone(),
-                        title,
-                        status: r.status,
-                        created_at: r.created_at,
-                        last_activity_at: r.last_activity_at,
-                    }
-                })
-                .collect();
-            Json(threads).into_response()
-        }
-        Err(e) => {
-            error!("Failed to list threads: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    let threads: Vec<ThreadResponse> = crate::services::chat::list_pipe_threads(&state.db, &pipe_id_str, &user.user_id, 50)
+        .await
+        .into_iter()
+        .map(|r| ThreadResponse {
+            id: r.id,
+            pipe_id: r.pipe_id,
+            title: r.title,
+            status: r.status,
+            created_at: r.created_at,
+            last_activity_at: r.last_activity_at,
+        })
+        .collect();
+    Json(threads).into_response()
 }
 
 // ── POST /api/mobile/pipes/{pipe_id}/threads ─────────────────────────────────
@@ -510,90 +453,41 @@ async fn list_messages(
 
     let page_size: i32 = if before_ts.is_some() { 50 } else { 200 };
 
-    // Fetch newest messages first (DESC), then reverse to chronological order.
-    // When `before` is set, fetch older messages before that timestamp.
-    let rows = sqlx::query!(
-        "SELECT id, role, content, created_at, tool_calls_json, tool_call_id
-         FROM messages
-         WHERE thread_id = ? AND (? IS NULL OR created_at < ?)
-         ORDER BY created_at DESC LIMIT ?",
-        thread_id_str,
-        before_ts,
-        before_ts,
+    let (rows, has_more) = crate::services::chat::list_thread_messages(
+        &state.db,
+        &thread_id_str,
+        before_ts.as_deref(),
         page_size,
     )
-    .fetch_all(&state.db)
     .await;
 
-    match rows {
-        Ok(mut rows) => {
-            // Reverse from DESC to chronological order
-            rows.reverse();
+    let result: Vec<MessageResponse> = rows
+        .into_iter()
+        .map(|r| MessageResponse {
+            id: r.id,
+            role: r.role,
+            content: r.content,
+            created_at: r.created_at,
+            tool_calls: if r.tool_calls.is_empty() {
+                None
+            } else {
+                Some(
+                    r.tool_calls
+                        .into_iter()
+                        .map(|tc| ToolCallResponse {
+                            name: tc.name,
+                            result: tc.result,
+                        })
+                        .collect(),
+                )
+            },
+        })
+        .collect();
 
-            let has_more = rows.len() as i32 >= page_size;
-
-            let mut messages = Vec::new();
-            let mut tool_call_map: std::collections::HashMap<String, (usize, usize)> =
-                std::collections::HashMap::new();
-
-            for r in &rows {
-                if r.role == "tool" {
-                    if let Some(tc_id) = &r.tool_call_id {
-                        if let Some(&(msg_idx, tc_idx)) = tool_call_map.get(tc_id) {
-                            if let Some(tcs) = &mut messages[msg_idx] {
-                                if let MessageResponse { tool_calls: Some(calls), .. } = tcs {
-                                    if tc_idx < calls.len() {
-                                        calls[tc_idx].result = Some(r.content.clone());
-                                    }
-                                }
-                            }
-                            continue;
-                        }
-                    }
-                }
-
-                let mut tool_calls = Vec::new();
-                if let Some(json_str) = &r.tool_calls_json {
-                    if let Ok(calls) = serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
-                        let msg_idx = messages.len();
-                        for (tc_idx, call) in calls.iter().enumerate() {
-                            let name = call["name"].as_str().unwrap_or("tool").to_string();
-                            let id = call["id"].as_str().unwrap_or_default().to_string();
-                            tool_calls.push(ToolCallResponse {
-                                name,
-                                result: None,
-                            });
-                            if !id.is_empty() {
-                                tool_call_map.insert(id, (msg_idx, tc_idx));
-                            }
-                        }
-                    }
-                }
-
-                messages.push(Some(MessageResponse {
-                    id: r.id.clone().unwrap_or_default(),
-                    role: r.role.clone(),
-                    content: r.content.clone(),
-                    created_at: r.created_at.clone(),
-                    tool_calls: if tool_calls.is_empty() {
-                        None
-                    } else {
-                        Some(tool_calls)
-                    },
-                }));
-            }
-
-            let result: Vec<MessageResponse> = messages.into_iter().flatten().collect();
-            (
-                [(axum::http::header::HeaderName::from_static("x-has-more"), if has_more { "true" } else { "false" })],
-                Json(result),
-            ).into_response()
-        }
-        Err(e) => {
-            error!("Failed to list messages: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    (
+        [(axum::http::header::HeaderName::from_static("x-has-more"), if has_more { "true" } else { "false" })],
+        Json(result),
+    ).into_response()
 }
 
 // ── POST /api/mobile/pipes/{pipe_id}/threads/{thread_id}/send ────────────────

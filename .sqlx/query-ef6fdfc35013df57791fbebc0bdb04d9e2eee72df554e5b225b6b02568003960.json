@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT t.id, t.pipe_id, t.title, t.status, t.created_at,\n                  (SELECT content FROM messages WHERE thread_id = t.id ORDER BY created_at ASC LIMIT 1) as first_msg,\n                  (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as \"last_activity_at?: String\"\n           FROM threads t\n           WHERE t.pipe_id = ? AND t.user_id = ?\n           ORDER BY COALESCE(\n               (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id),\n               t.created_at\n           ) DESC\n           LIMIT 50",
+  "query": "SELECT t.id, t.pipe_id, t.title, t.status, t.created_at,\n                  (SELECT content FROM messages WHERE thread_id = t.id ORDER BY created_at ASC LIMIT 1) as first_msg,\n                  (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as \"last_activity_at?: String\"\n           FROM threads t\n           WHERE t.pipe_id = ? AND t.user_id = ?\n           ORDER BY COALESCE(\n               (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id),\n               t.created_at\n           ) DESC\n           LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -40,7 +40,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 3
     },
     "nullable": [
       true,
@@ -52,5 +52,5 @@
       null
     ]
   },
-  "hash": "06600bd971424501ac58ed756ed0b08e4db301fc950330c2c0bc5cbee65c4bc0"
+  "hash": "ef6fdfc35013df57791fbebc0bdb04d9e2eee72df554e5b225b6b02568003960"
 }

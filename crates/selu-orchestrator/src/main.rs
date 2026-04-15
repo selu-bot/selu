@@ -17,6 +17,7 @@ mod permissions;
 mod persistence;
 mod pipes;
 mod schedules;
+mod services;
 mod state;
 mod telegram;
 mod telemetry;

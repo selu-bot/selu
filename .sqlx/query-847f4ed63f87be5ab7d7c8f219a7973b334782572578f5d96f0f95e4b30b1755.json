@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, user_id, name, transport, outbound_url, default_agent_id, active, created_at\n         FROM pipes WHERE user_id = ? AND active = 1 ORDER BY created_at",
+  "query": "SELECT id, user_id, name, transport, outbound_url, default_agent_id, active, created_at\n         FROM pipes WHERE user_id = ? AND active = 1 AND (? IS NULL OR transport = ?) ORDER BY created_at",
   "describe": {
     "columns": [
       {
@@ -45,7 +45,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 3
     },
     "nullable": [
       true,
@@ -58,5 +58,5 @@
       false
     ]
   },
-  "hash": "f63b5e1a05e3444de57c54b20a488ed5cbeb2f2c49350d11f0c6f2505245cfd3"
+  "hash": "847f4ed63f87be5ab7d7c8f219a7973b334782572578f5d96f0f95e4b30b1755"
 }

@@ -80,19 +80,14 @@ struct ChatTemplate {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async fn fetch_pipes(db: &sqlx::SqlitePool, user_id: &str) -> Vec<PipeView> {
-    sqlx::query!(
-        "SELECT id, name, transport FROM pipes WHERE active = 1 AND transport = 'web' AND user_id = ? ORDER BY created_at",
-        user_id
-    )
-    .fetch_all(db)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .map(|r| PipeView {
-        id: r.id.unwrap_or_default(),
-        name: r.name,
-    })
-    .collect()
+    crate::services::chat::list_user_pipes(db, user_id, Some("web"))
+        .await
+        .into_iter()
+        .map(|r| PipeView {
+            id: r.id,
+            name: r.name,
+        })
+        .collect()
 }
 
 async fn fetch_threads(
@@ -101,39 +96,20 @@ async fn fetch_threads(
     user_id: &str,
     language: &str,
 ) -> Vec<ThreadView> {
-    sqlx::query!(
-        r#"SELECT t.id, t.pipe_id, t.title, t.status, t.created_at,
-                  (SELECT content FROM messages WHERE thread_id = t.id ORDER BY created_at ASC LIMIT 1) as first_msg,
-                  (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as "last_message_at?: String"
-           FROM threads t
-           WHERE t.pipe_id = ? AND t.user_id = ?
-           ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE thread_id = t.id), t.created_at) DESC, t.created_at DESC"#,
-        pipe_id,
-        user_id,
-    )
-    .fetch_all(db)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .map(|r| {
-        let title = r.title.unwrap_or_else(|| {
-            // Fall back to truncated first message
-            let msg = &r.first_msg;
-            if msg.is_empty() {
-                "New conversation".to_string()
-            } else {
-                msg.chars().take(40).collect::<String>()
+    crate::services::chat::list_pipe_threads(db, pipe_id, user_id, 500)
+        .await
+        .into_iter()
+        .map(|r| {
+            let title = r.title.unwrap_or_else(|| "New conversation".to_string());
+            let last_activity_raw = r.last_activity_at.unwrap_or_else(|| r.created_at.clone());
+            ThreadView {
+                id: r.id,
+                title,
+                status: r.status,
+                last_activity_at: format_timestamp_for_user(&last_activity_raw, language),
             }
-        });
-        let last_activity_raw = r.last_message_at.unwrap_or_else(|| r.created_at.clone());
-        ThreadView {
-            id: r.id.unwrap_or_default(),
-            title,
-            status: r.status,
-            last_activity_at: format_timestamp_for_user(&last_activity_raw, language),
-        }
-    })
-    .collect()
+        })
+        .collect()
 }
 
 /// Fetch messages for display. Returns (messages, has_more, oldest_raw_ts).
@@ -146,50 +122,18 @@ async fn fetch_thread_messages(
 ) -> (Vec<MessageView>, bool, Option<String>) {
     let page_size: i32 = if before.is_some() { 50 } else { 200 };
 
-    let mut rows = sqlx::query!(
-        "SELECT role, content, created_at, tool_calls_json, tool_call_id
-         FROM messages
-         WHERE thread_id = ? AND (? IS NULL OR created_at < ?)
-         ORDER BY created_at DESC LIMIT ?",
+    let (rows, has_more) = crate::services::chat::list_thread_messages(
+        &state.db,
         thread_id,
-        before,
         before,
         page_size,
     )
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    .await;
 
-    // Reverse from DESC to chronological order
-    rows.reverse();
-    let has_more = rows.len() as i32 >= page_size;
     let oldest_ts = rows.first().map(|r| r.created_at.clone());
 
-    // First pass: build message views and collect tool-call ID → name mappings.
-    // tool_call_id_to_index maps a tool_call_id to (index in out, index in tool_calls vec).
     let mut out: Vec<MessageView> = Vec::with_capacity(rows.len());
-    let mut tool_call_id_to_index: HashMap<String, (usize, usize)> = HashMap::new();
-
-    for r in &rows {
-        if r.role == "tool" {
-            // Tool result — try to merge into the parent tool-call message.
-            if let Some(tc_id) = &r.tool_call_id {
-                if let Some(&(msg_idx, tc_idx)) = tool_call_id_to_index.get(tc_id) {
-                    out[msg_idx].tool_calls[tc_idx].result = r.content.clone();
-                    continue; // Don't emit as a separate message
-                }
-            }
-            // Orphaned tool result (no matching parent) — show as standalone
-            out.push(MessageView {
-                role: r.role.clone(),
-                content: r.content.clone(),
-                image_urls: Vec::new(),
-                tool_calls: Vec::new(),
-                created_at: format_timestamp_for_user(&r.created_at, language),
-            });
-            continue;
-        }
-
+    for r in rows {
         let (content, image_urls) = if r.role == "user" {
             user_message_for_display(
                 state,
@@ -199,30 +143,20 @@ async fn fetch_thread_messages(
             )
             .await
         } else {
-            (r.content.clone(), Vec::new())
+            (r.content, Vec::new())
         };
 
-        // Parse tool_calls_json to extract individual call names and IDs.
-        let mut tool_calls = Vec::new();
-        if let Some(json_str) = &r.tool_calls_json {
-            if let Ok(calls) = serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
-                let msg_idx = out.len();
-                for (tc_idx, call) in calls.iter().enumerate() {
-                    let name = call["name"].as_str().unwrap_or("tool").to_string();
-                    let id = call["id"].as_str().unwrap_or_default().to_string();
-                    tool_calls.push(ToolCallView {
-                        name,
-                        result: String::new(),
-                    });
-                    if !id.is_empty() {
-                        tool_call_id_to_index.insert(id, (msg_idx, tc_idx));
-                    }
-                }
-            }
-        }
+        let tool_calls: Vec<ToolCallView> = r
+            .tool_calls
+            .into_iter()
+            .map(|tc| ToolCallView {
+                name: tc.name,
+                result: tc.result.unwrap_or_default(),
+            })
+            .collect();
 
         out.push(MessageView {
-            role: r.role.clone(),
+            role: r.role,
             content,
             image_urls,
             tool_calls,
