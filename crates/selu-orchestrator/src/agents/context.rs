@@ -189,6 +189,43 @@ pub async fn build(
          Keep it under 140 characters.",
     );
 
+    // ── Current conversation channel ─────────────────────────────────────────
+    // Tell the agent which pipe/channel this conversation is happening on so
+    // it can distinguish "send it here" (= reply in chat) from "send via email".
+    let pipe_meta = sqlx::query!(
+        "SELECT name, transport FROM pipes WHERE id = ? LIMIT 1",
+        pipe_id
+    )
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+
+    if let Some(ref meta) = pipe_meta {
+        let transport_label = match meta.transport.as_str() {
+            "imessage" => "iMessage",
+            "telegram" => "Telegram",
+            "whatsapp" => "WhatsApp",
+            "web" => "Web-Chat",
+            "mobile" => "Mobile-App",
+            _ => &meta.transport,
+        };
+        system.push_str(&format!(
+            "\n\n## Current conversation channel\n\
+             You are talking to the user via: **{name}** ({transport}).\n\
+             Your reply — including any artifacts or attachments — will be delivered \
+             directly to this channel automatically.\n\
+             - When the user says \"send it here\", \"schick es mir\", \"schick es hier hin\", \
+             or similar **without naming a specific delivery method**, they mean this channel. \
+             Simply include the artifact in your reply — do NOT delegate to email or another agent.\n\
+             - When the user **explicitly** requests a specific delivery method — e.g. \
+             \"per E-Mail\", \"send by email\", \"save to disk\", \"speicher es\" — delegate \
+             to the appropriate agent (pim-icloud for email, file system agent, etc.) as usual.",
+            name = meta.name,
+            transport = transport_label,
+        ));
+    }
+
     // ── Multi-step completion rules ─────────────────────────────────────────
     // The instruction varies depending on whether this agent is the
     // orchestrator (has delegate_to_agent) or a specialist sub-agent.

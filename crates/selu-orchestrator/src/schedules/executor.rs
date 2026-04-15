@@ -172,7 +172,18 @@ async fn execute_on_pipe(
         "en" => "",
         _ => "Antworte auf Deutsch. ",
     };
-    let full_prompt = format!("{}{}", lang_instruction, prompt);
+    // Tell the agent that the output will be delivered to the pipe automatically.
+    // Without this, words like "schicke" in schedule prompts cause the agent to
+    // delegate to email instead of simply replying.
+    let delivery_hint = match user_lang.as_str() {
+        "de" => "Deine Antwort wird automatisch in diesem Kanal zugestellt. \
+                 Antworte direkt mit dem Text — sende KEINE E-Mail, \
+                 es sei denn, der Prompt verlangt es ausdrücklich. ",
+        _ => "Your reply will be delivered to this channel automatically. \
+              Reply with the text directly — do NOT send email \
+              unless the prompt explicitly asks for it. ",
+    };
+    let full_prompt = format!("{}{}{}", lang_instruction, delivery_hint, prompt);
 
     let params = TurnParams {
         pipe_id: pipe_id.to_string(),
