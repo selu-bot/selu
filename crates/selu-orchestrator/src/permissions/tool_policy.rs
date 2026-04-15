@@ -120,6 +120,8 @@ pub async fn get_effective_policy(
             }
             // Feedback: default to Ask — user must confirm before public posting.
             BUILTIN_SUBMIT_FEEDBACK => return Ok(Some(ToolPolicy::Ask)),
+            // Suppress reply: always allow — it only suppresses the outbound message.
+            BUILTIN_SUPPRESS_REPLY => return Ok(Some(ToolPolicy::Allow)),
             _ => {}
         }
     }
@@ -473,6 +475,10 @@ pub async fn has_all_policies(
         BUILTIN_CAPABILITY_ID.to_string(),
         BUILTIN_SUBMIT_FEEDBACK.to_string(),
     ));
+    required.push((
+        BUILTIN_CAPABILITY_ID.to_string(),
+        BUILTIN_SUPPRESS_REPLY.to_string(),
+    ));
 
     if required.is_empty() {
         return Ok(true);
@@ -536,3 +542,5 @@ pub const BUILTIN_IMAGE_EDIT: &str = "image_edit";
 
 /// Tool name for the submit_feedback built-in (public GitHub issue creation).
 pub const BUILTIN_SUBMIT_FEEDBACK: &str = "submit_feedback";
+
+pub const BUILTIN_SUPPRESS_REPLY: &str = "suppress_reply";
