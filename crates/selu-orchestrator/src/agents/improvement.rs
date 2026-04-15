@@ -8,8 +8,10 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use sqlx::SqlitePool;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+use crate::permissions::store::CredentialStore;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -757,6 +759,282 @@ pub async fn run_periodic_aggregation(db: &SqlitePool) -> Result<()> {
     .await?;
 
     debug!("Periodic improvement aggregation complete");
+    Ok(())
+}
+
+// ── Periodic insight optimization ────────────────────────────────────────────
+
+/// Minimum number of candidate insights before optimization kicks in.
+/// Below this there is nothing meaningful to consolidate.
+const OPTIMIZE_MIN_INSIGHTS: usize = 3;
+
+/// Run insight optimization for every (agent_id, user_id) pair that has
+/// candidate or active insights.  Modeled after `profile::run_optimization`.
+pub async fn run_optimization(db: &SqlitePool, creds: &CredentialStore) -> Result<()> {
+    let pairs: Vec<(String, String)> = sqlx::query_as(
+        "SELECT DISTINCT agent_id, user_id FROM agent_insights \
+         WHERE status IN ('candidate', 'active')",
+    )
+    .fetch_all(db)
+    .await
+    .context("Failed to list agent/user pairs with insights")?;
+
+    for (agent_id, user_id) in &pairs {
+        if let Err(e) = optimize_insights(db, creds, agent_id, user_id).await {
+            warn!(
+                agent_id = %agent_id,
+                user_id = %user_id,
+                "Insight optimization failed (non-fatal): {e}"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Use an LLM to deduplicate, merge, and consolidate behavioral insights for
+/// a single (agent, user) pair.  Semantically similar candidates are merged,
+/// their `supporting_signals` are summed, and the consolidated list replaces
+/// the old one atomically.
+///
+/// This is the missing link that allows `supporting_signals` to actually grow
+/// past the promotion threshold (default 3), enabling `run_periodic_aggregation`
+/// to promote candidates to active.
+async fn optimize_insights(
+    db: &SqlitePool,
+    creds: &CredentialStore,
+    agent_id: &str,
+    user_id: &str,
+) -> Result<()> {
+    // Load all candidate + active insights for this pair.
+    let insights = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            f64,
+            i64,
+            i64,
+            bool,
+            String,
+            Option<String>,
+            String,
+        ),
+    >(
+        "SELECT id, agent_id, user_id, lesson_text, insight_type, status, \
+                confidence, supporting_signals, promotion_threshold, auto_paused, \
+                created_at, activated_at, updated_at \
+         FROM agent_insights \
+         WHERE agent_id = ? AND user_id = ? AND status IN ('candidate', 'active') \
+         ORDER BY status, confidence DESC",
+    )
+    .bind(agent_id)
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .context("Failed to load insights for optimization")?;
+
+    let insights: Vec<Insight> = insights.into_iter().map(row_to_insight).collect();
+
+    if insights.len() < OPTIMIZE_MIN_INSIGHTS {
+        return Ok(());
+    }
+
+    // Build a numbered list so the LLM sees everything.
+    let insights_text: String = insights
+        .iter()
+        .enumerate()
+        .map(|(i, ins)| {
+            format!(
+                "{}. [{}] [{}] {} (confidence: {:.2}, supporting_signals: {}, status: {})",
+                i + 1,
+                ins.insight_type,
+                ins.status,
+                ins.lesson_text,
+                ins.confidence,
+                ins.supporting_signals,
+                ins.status,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let system_prompt = format!(
+        r#"You are a behavioral-insight optimizer for an AI agent. You will receive a numbered list of behavioral lessons (insights) about how the agent should behave with a specific user.
+
+Your job:
+1. **Deduplicate**: merge insights that teach the same lesson (even if worded differently).
+2. **Sum signals**: when merging, set `supporting_signals` to the SUM of all merged insights' signals.
+3. **Max confidence**: when merging, set `confidence` to the MAX of all merged insights' confidence values.
+4. **Preserve status**: if ANY merged insight was "active", the result should be "active". Otherwise "candidate".
+5. **Preserve type**: keep the most specific `type` from the merged group.
+6. **Consolidate**: combine overlapping lessons into one clearer statement. Keep atomic lessons atomic.
+7. **Preserve meaning**: never invent new lessons. Only merge what genuinely overlaps.
+
+Current insights:
+{insights}
+
+Respond with a JSON array. Each element must have:
+- "lesson": a clear, specific behavioral instruction
+- "type": one of "tool_usage", "communication_style", "workflow_pattern", "error_prevention"
+- "confidence": 0.0 to 1.0 (max of merged)
+- "supporting_signals": integer (sum of merged)
+- "status": "candidate" or "active"
+
+Respond ONLY with the JSON array, nothing else."#,
+        insights = insights_text,
+    );
+
+    // Use the default agent's model for background tasks.
+    let resolved = crate::agents::model::resolve_model(db, "default").await?;
+    let provider =
+        crate::llm::registry::load_provider(db, &resolved.provider_id, &resolved.model_id, creds)
+            .await?;
+
+    use crate::llm::provider::{ChatMessage, LlmResponse};
+
+    let messages = vec![
+        ChatMessage::system(system_prompt),
+        ChatMessage::user("Optimize the insights above.".to_string()),
+    ];
+
+    let response = provider.chat(&messages, &[], 0.1).await?;
+
+    let text = match response {
+        LlmResponse::Text(t) => t,
+        _ => return Ok(()),
+    };
+
+    // Parse response (handle optional code fences).
+    let text = text.trim();
+    let json_str = if text.starts_with("```") {
+        text.lines()
+            .skip(1)
+            .take_while(|l| !l.starts_with("```"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        text.to_string()
+    };
+
+    #[derive(Deserialize)]
+    struct OptimizedInsight {
+        lesson: String,
+        #[serde(rename = "type")]
+        insight_type: String,
+        confidence: f64,
+        supporting_signals: i64,
+        status: String,
+    }
+
+    let optimized: Vec<OptimizedInsight> = match serde_json::from_str(&json_str) {
+        Ok(o) => o,
+        Err(e) => {
+            warn!("Failed to parse insight optimization response: {e}");
+            return Ok(());
+        }
+    };
+
+    if optimized.is_empty() {
+        return Ok(());
+    }
+
+    // Safety guard: never let the LLM inflate the insight count.
+    if optimized.len() > insights.len() {
+        warn!(
+            agent_id = %agent_id,
+            user_id = %user_id,
+            before = insights.len(),
+            after = optimized.len(),
+            "LLM returned more insights than input — skipping optimization"
+        );
+        return Ok(());
+    }
+
+    let valid_types = [
+        "tool_usage",
+        "communication_style",
+        "workflow_pattern",
+        "error_prevention",
+    ];
+    let valid_statuses = ["candidate", "active"];
+
+    // Replace: delete old candidate+active insights and insert optimized ones.
+    let mut tx = db.begin().await.context("Failed to begin transaction")?;
+
+    sqlx::query(
+        "DELETE FROM agent_insights \
+         WHERE agent_id = ? AND user_id = ? AND status IN ('candidate', 'active')",
+    )
+    .bind(agent_id)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await
+    .context("Failed to clear old insights")?;
+
+    for ins in &optimized {
+        if ins.lesson.trim().is_empty() {
+            continue;
+        }
+
+        let itype = if valid_types.contains(&ins.insight_type.as_str()) {
+            &ins.insight_type
+        } else {
+            "workflow_pattern"
+        };
+
+        let status = if valid_statuses.contains(&ins.status.as_str()) {
+            &ins.status
+        } else {
+            "candidate"
+        };
+
+        let confidence = ins.confidence.clamp(0.0, 1.0);
+        let signals = ins.supporting_signals.max(1);
+
+        let id = Uuid::new_v4().to_string();
+        let activated_at = if status == "active" {
+            Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3f").to_string())
+        } else {
+            None
+        };
+
+        sqlx::query(
+            "INSERT INTO agent_insights \
+             (id, agent_id, user_id, lesson_text, insight_type, status, \
+              confidence, supporting_signals, activated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(agent_id)
+        .bind(user_id)
+        .bind(ins.lesson.trim())
+        .bind(itype)
+        .bind(status)
+        .bind(confidence)
+        .bind(signals)
+        .bind(&activated_at)
+        .execute(&mut *tx)
+        .await
+        .context("Failed to insert optimized insight")?;
+    }
+
+    tx.commit()
+        .await
+        .context("Failed to commit optimized insights")?;
+
+    info!(
+        agent_id = %agent_id,
+        user_id = %user_id,
+        before = insights.len(),
+        after = optimized.len(),
+        "Behavioral insights optimized"
+    );
+
     Ok(())
 }
 

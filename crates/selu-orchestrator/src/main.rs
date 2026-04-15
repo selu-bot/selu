@@ -336,6 +336,27 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Insight optimization: runs at startup and then every 24 hours.
+    // Deduplicates and merges semantically similar candidate insights via LLM,
+    // summing their supporting_signals so the promotion threshold can be reached.
+    let insight_opt_state = state.clone();
+    tokio::spawn(async move {
+        // Wait 3 minutes after startup before first run.
+        tokio::time::sleep(std::time::Duration::from_secs(180)).await;
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60 * 24));
+        loop {
+            if let Err(e) = crate::agents::improvement::run_optimization(
+                &insight_opt_state.db,
+                &insight_opt_state.credentials,
+            )
+            .await
+            {
+                tracing::debug!("Insight optimization failed (non-fatal): {e}");
+            }
+            interval.tick().await;
+        }
+    });
+
     // Profile fact optimization: runs at startup and then every 24 hours.
     // Deduplicates, recategorizes, and consolidates user profile facts via LLM.
     let profile_state = state.clone();
