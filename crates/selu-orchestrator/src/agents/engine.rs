@@ -27,7 +27,7 @@ use crate::capabilities::build_tool_specs;
 use crate::capabilities::discovery::{hydrate_dynamic_tools_for_agent, load_discovered_tools};
 use crate::capabilities::manifest::CapabilityManifest;
 use crate::llm::image_normalizer::normalize_messages_for_provider;
-use crate::llm::provider::{ChatMessage, ContentPart, LlmResponse, MessageContent};
+use crate::llm::provider::{ChatMessage, ContentPart, LlmResponse, MessageContent, ToolSpec};
 use crate::llm::registry::load_provider;
 use crate::llm::tool_loop::{LoopEvent, LoopOutput, LoopSender, ToolDispatchResult, run_loop};
 use crate::permissions::approval_queue;
@@ -35,7 +35,8 @@ use crate::permissions::tool_policy::{
     self, BUILTIN_CAPABILITY_ID, BUILTIN_IMAGE_EDIT, BUILTIN_IMAGE_GENERATE,
     BUILTIN_MEMORY_FORGET, BUILTIN_MEMORY_LIST, BUILTIN_MEMORY_REMEMBER, BUILTIN_MEMORY_SEARCH,
     BUILTIN_SET_REMINDER, BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET,
-    BUILTIN_STORE_LIST, BUILTIN_STORE_SET, BUILTIN_SUBMIT_FEEDBACK, ToolPolicy,
+    BUILTIN_STORE_LIST, BUILTIN_STORE_SET, BUILTIN_SUBMIT_FEEDBACK, BUILTIN_SUPPRESS_REPLY,
+    ToolPolicy,
 };
 use crate::state::AppState;
 
@@ -458,6 +459,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     tool_specs.push(crate::schedules::set_schedule_tool_spec());
     tool_specs.push(crate::schedules::set_reminder_tool_spec());
     tool_specs.push(crate::web::feedback::submit_feedback_tool_spec());
+    tool_specs.push(suppress_reply_tool_spec());
 
     // Image tools: only exposed when the agent has an image model configured.
     let image_model_for_tools =
@@ -931,6 +933,22 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         "Tool dispatch timing"
                     );
                     return Ok(ToolDispatchResult::Done(result));
+                }
+
+                // ── suppress_reply ────────────────────────────────────────
+                if name == "suppress_reply" {
+                    let reason = args
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("(no reason given)");
+                    info!(
+                        reason = %reason,
+                        "suppress_reply called — turn will complete with empty reply"
+                    );
+                    // DoneAndReturn with an empty string exits the tool loop
+                    // immediately. The engine will see an empty reply and the
+                    // schedule executor's existing guard skips delivery.
+                    return Ok(ToolDispatchResult::DoneAndReturn(String::new()));
                 }
 
                 // ── Capability tools ──────────────────────────────────────
@@ -2220,6 +2238,29 @@ fn truncate_for_log(text: &str, max_chars: usize) -> String {
         out.push_str("...");
     }
     out
+}
+
+/// Build the `suppress_reply` tool spec so the LLM can call it.
+fn suppress_reply_tool_spec() -> ToolSpec {
+    ToolSpec {
+        name: "suppress_reply".to_string(),
+        description: "Call this tool to end the turn silently with no message delivered to the \
+            user. Use it when you have completed your task but determined there is nothing to \
+            report (e.g. no new items found during a scheduled check). The turn will finish \
+            successfully but no reply will be sent. Do NOT call this tool in interactive \
+            conversations where the user is waiting for an answer."
+            .to_string(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "Optional internal reason for suppression (logged, never shown to user)."
+                }
+            },
+            "required": []
+        }),
+    }
 }
 
 fn is_explicit_confirmation_message(text: &str) -> bool {
