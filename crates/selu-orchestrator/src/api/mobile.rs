@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::agents::engine::{ChannelKind, InboundAttachmentInput, TurnParams, run_turn};
 use crate::agents::memory;
+use crate::agents::profile;
 use crate::agents::router as agent_router;
 use crate::agents::thread as thread_mgr;
 use crate::llm::tool_loop::LoopEvent;
@@ -44,7 +45,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/mobile/pipes/{pipe_id}/stream/{stream_id}", get(stream_response))
         .route("/api/mobile/approvals/{confirmation_id}", post(resolve_approval))
         .route("/api/mobile/artifacts/{artifact_id}", get(get_artifact))
-        // Memory
+        // Profile (About You)
+        .route("/api/mobile/profile", get(list_profile_facts).post(create_profile_fact))
+        .route("/api/mobile/profile/{fact_id}", put(update_profile_fact).delete(delete_profile_fact))
+        // Agent Memories
         .route("/api/mobile/memories", get(list_memories).post(create_memory))
         .route("/api/mobile/memories/{memory_id}", put(update_memory).delete(delete_memory))
         // Schedules
@@ -1072,6 +1076,152 @@ async fn redeem_setup_token(
     .into_response()
 }
 
+// ── GET /api/mobile/profile ─────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct ProfileFactResponse {
+    id: String,
+    fact: String,
+    category: String,
+    source: String,
+    updated_at: String,
+}
+
+async fn list_profile_facts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    match profile::list_facts(&state.db, &user.user_id, 200).await {
+        Ok(facts) => {
+            let items: Vec<ProfileFactResponse> = facts
+                .into_iter()
+                .map(|f| ProfileFactResponse {
+                    id: f.id,
+                    fact: f.fact,
+                    category: f.category,
+                    source: f.source,
+                    updated_at: f.updated_at,
+                })
+                .collect();
+            Json(items).into_response()
+        }
+        Err(e) => {
+            error!("Failed to list profile facts: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+// ── POST /api/mobile/profile ────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct CreateProfileFactRequest {
+    fact: String,
+    category: Option<String>,
+}
+
+async fn create_profile_fact(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CreateProfileFactRequest>,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    let category = req.category.as_deref().unwrap_or("other");
+
+    match profile::add_fact(
+        &state.db,
+        &user.user_id,
+        req.fact.trim(),
+        category,
+        "manual",
+        "system",
+    )
+    .await
+    {
+        Ok(id) => Json(serde_json::json!({ "id": id })).into_response(),
+        Err(e) => {
+            error!("Failed to create profile fact: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+// ── PUT /api/mobile/profile/{fact_id} ───────────────────────────────────────
+
+#[derive(Deserialize)]
+struct UpdateProfileFactRequest {
+    fact: String,
+    category: Option<String>,
+}
+
+async fn update_profile_fact(
+    Path(fact_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<UpdateProfileFactRequest>,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    // Verify ownership before updating.
+    let owner: Option<String> = sqlx::query_scalar(
+        "SELECT user_id FROM user_profile WHERE id = ?",
+    )
+    .bind(&fact_id)
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
+
+    match owner {
+        Some(uid) if uid == user.user_id => {}
+        Some(_) => return StatusCode::FORBIDDEN.into_response(),
+        None => return StatusCode::NOT_FOUND.into_response(),
+    }
+
+    let category = req.category.as_deref().unwrap_or("other");
+
+    match profile::update_fact(&state.db, &fact_id, req.fact.trim(), category).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            error!("Failed to update profile fact: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+// ── DELETE /api/mobile/profile/{fact_id} ────────────────────────────────────
+
+async fn delete_profile_fact(
+    Path(fact_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    match profile::delete_fact(&state.db, &user.user_id, &fact_id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("Failed to delete profile fact: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 // ── GET /api/mobile/memories ────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -1086,7 +1236,35 @@ struct MemoryResponse {
     tags: String,
     source: String,
     category: String,
+    agent_id: String,
+    agent_name: String,
     updated_at: String,
+}
+
+/// Resolve agent display names for a set of agent IDs.
+async fn resolve_agent_names(
+    db: &sqlx::SqlitePool,
+    agent_ids: &[String],
+) -> std::collections::HashMap<String, String> {
+    let mut names = std::collections::HashMap::new();
+    for aid in agent_ids {
+        if names.contains_key(aid) {
+            continue;
+        }
+        if aid == "manual" {
+            names.insert(aid.clone(), "Manual".to_string());
+            continue;
+        }
+        let display_name: Option<String> = sqlx::query_scalar(
+            "SELECT display_name FROM agents WHERE id = ?",
+        )
+        .bind(aid)
+        .fetch_optional(db)
+        .await
+        .unwrap_or(None);
+        names.insert(aid.clone(), display_name.unwrap_or_else(|| aid.clone()));
+    }
+    names
 }
 
 async fn list_memories(
@@ -1103,15 +1281,22 @@ async fn list_memories(
         if !search.trim().is_empty() {
             match memory::search_memories(&state.db, &user.user_id, search, 50).await {
                 Ok(hits) => {
+                    let agent_ids: Vec<String> = hits.iter().map(|h| h.agent_id.clone()).collect();
+                    let names = resolve_agent_names(&state.db, &agent_ids).await;
                     let items: Vec<MemoryResponse> = hits
                         .into_iter()
-                        .map(|h| MemoryResponse {
-                            id: h.id,
-                            memory: h.memory,
-                            tags: h.tags,
-                            source: h.source,
-                            category: String::new(),
-                            updated_at: h.updated_at,
+                        .map(|h| {
+                            let agent_name = names.get(&h.agent_id).cloned().unwrap_or_default();
+                            MemoryResponse {
+                                id: h.id,
+                                memory: h.memory,
+                                tags: h.tags,
+                                source: h.source,
+                                category: String::new(),
+                                agent_id: h.agent_id,
+                                agent_name,
+                                updated_at: h.updated_at,
+                            }
                         })
                         .collect();
                     return Json(items).into_response();
@@ -1126,15 +1311,22 @@ async fn list_memories(
 
     match memory::list_memories(&state.db, &user.user_id, 200).await {
         Ok(entries) => {
+            let agent_ids: Vec<String> = entries.iter().map(|m| m.agent_id.clone()).collect();
+            let names = resolve_agent_names(&state.db, &agent_ids).await;
             let items: Vec<MemoryResponse> = entries
                 .into_iter()
-                .map(|m| MemoryResponse {
-                    id: m.id,
-                    memory: m.memory,
-                    tags: m.tags,
-                    source: m.source,
-                    category: m.category,
-                    updated_at: m.updated_at,
+                .map(|m| {
+                    let agent_name = names.get(&m.agent_id).cloned().unwrap_or_default();
+                    MemoryResponse {
+                        id: m.id,
+                        memory: m.memory,
+                        tags: m.tags,
+                        source: m.source,
+                        category: m.category,
+                        agent_id: m.agent_id,
+                        agent_name,
+                        updated_at: m.updated_at,
+                    }
                 })
                 .collect();
             Json(items).into_response()

@@ -26,6 +26,7 @@ pub struct AgentMemory {
 #[derive(Debug, Clone)]
 pub struct AgentMemoryHit {
     pub id: String,
+    pub agent_id: String,
     pub memory: String,
     pub tags: String,
     pub source: String,
@@ -154,8 +155,8 @@ pub async fn search_memories(
         return Ok(Vec::new());
     };
 
-    let rows = sqlx::query_as::<_, (String, String, String, String, Option<f64>, String)>(
-        r#"SELECT m.id, m.memory_text, m.tags, m.source,
+    let rows = sqlx::query_as::<_, (String, String, String, String, String, Option<f64>, String)>(
+        r#"SELECT m.id, m.agent_id, m.memory_text, m.tags, m.source,
                   bm25(agent_memories_fts, 1.0, 0.35) AS score, m.updated_at
            FROM agent_memories_fts
            JOIN agent_memories m ON m.rowid = agent_memories_fts.rowid
@@ -174,8 +175,9 @@ pub async fn search_memories(
     Ok(rows
         .into_iter()
         .map(
-            |(id, memory, tags, source, score, updated_at)| AgentMemoryHit {
+            |(id, agent_id, memory, tags, source, score, updated_at)| AgentMemoryHit {
                 id,
+                agent_id,
                 memory,
                 tags,
                 source,
