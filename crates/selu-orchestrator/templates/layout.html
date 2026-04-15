@@ -429,6 +429,11 @@
         <span data-i18n="nav.credentials">Credentials</span>
       </a>
 
+      <a href="{{ base_path }}/cache" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "cache" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        <span data-i18n="nav.cache">Caches</span>
+      </a>
+
       {% endif %}
     </nav>
 
@@ -517,6 +522,7 @@
         'nav.users': 'Users',
         'nav.advanced': 'Advanced',
         'nav.credentials': 'Credentials',
+        'nav.cache': 'Caches',
         'nav.events': 'Events',
         'nav.signout': 'Sign out',
         'nav.schedules': 'Schedules',
@@ -1429,6 +1435,7 @@
         'nav.users': 'Benutzer',
         'nav.advanced': 'Erweitert',
         'nav.credentials': 'Zugangsdaten',
+        'nav.cache': 'Caches',
         'nav.events': 'Ereignisse',
         'nav.signout': 'Abmelden',
         'nav.schedules': 'Zeitpl\u00e4ne',

@@ -995,6 +995,17 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                                         "Failed to touch workspace activity: {e}"
                                     );
                                 }
+                                if let Err(e) = crate::capabilities::touch_cache_volume_activity(
+                                    &db, manifest, &user,
+                                )
+                                .await
+                                {
+                                    warn!(
+                                        capability_id = %cap_id_for_touch,
+                                        user_id = %user,
+                                        "Failed to touch cache volume activity: {e}"
+                                    );
+                                }
                             }
 
                             let prepared_args =

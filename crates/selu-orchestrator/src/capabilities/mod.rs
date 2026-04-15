@@ -150,6 +150,7 @@ impl CapabilityEngine {
         };
 
         let session_for_start = if shared { None } else { Some(session_id) };
+        let user_for_start = if shared { None } else { Some(user_id) };
 
         // Clone args + credentials for potential retry on shared container crash.
         let (args_retry, creds_retry) = if shared {
@@ -159,7 +160,7 @@ impl CapabilityEngine {
         };
 
         let client = self
-            .get_or_start(manifests, &cap_id, &key, session_for_start, &egress_policy)
+            .get_or_start(manifests, &cap_id, &key, session_for_start, user_for_start, &egress_policy)
             .await?;
 
         let result = client
@@ -175,7 +176,7 @@ impl CapabilityEngine {
                     warn!(capability = %cap_id, "Shared container may have crashed, retrying with fresh container");
                     self.remove_active(&key).await;
                     let client = self
-                        .get_or_start(manifests, &cap_id, &key, None, &egress_policy)
+                        .get_or_start(manifests, &cap_id, &key, None, None, &egress_policy)
                         .await?;
                     return client
                         .invoke(
@@ -227,6 +228,7 @@ impl CapabilityEngine {
                 capability_id,
                 &key,
                 Some(session_id),
+                None, // no user_id for internal flows
                 &egress_policy,
             )
             .await?;
@@ -264,12 +266,14 @@ impl CapabilityEngine {
                 .await?
         };
         let session_for_start = if shared { None } else { Some(session_id) };
+        let user_for_start = if shared { None } else { Some(user_id) };
         let client = self
             .get_or_start(
                 manifests,
                 capability_id,
                 &key,
                 session_for_start,
+                user_for_start,
                 &egress_policy,
             )
             .await?;
@@ -305,12 +309,14 @@ impl CapabilityEngine {
                 .await?
         };
         let session_for_start = if shared { None } else { Some(session_id) };
+        let user_for_start = if shared { None } else { Some(user_id) };
         let client = self
             .get_or_start(
                 manifests,
                 capability_id,
                 &key,
                 session_for_start,
+                user_for_start,
                 &egress_policy,
             )
             .await?;
@@ -463,6 +469,7 @@ impl CapabilityEngine {
         cap_id: &str,
         key: &str,
         session_for_start: Option<&str>,
+        user_id: Option<&str>,
         egress_policy: &crate::capabilities::egress_proxy::ContainerEgressPolicy,
     ) -> Result<CapabilityGrpcClient> {
         {
@@ -485,7 +492,7 @@ impl CapabilityEngine {
         debug!(capability = %cap_id, key = %key, "Starting capability container");
         let running = self
             .runner
-            .start(manifest, session_for_start, egress_policy)
+            .start(manifest, session_for_start, user_id, egress_policy)
             .await?;
         let client = CapabilityGrpcClient::connect(&running.grpc_addr, cap_id).await?;
 
@@ -714,6 +721,118 @@ pub async fn touch_workspace_activity(
     Ok(())
 }
 
+/// Mark cache volume activity for a capability invocation.
+///
+/// Only capabilities with `cache.enabled: true` are tracked.
+/// Creates a row in `cache_volumes` on first use (per user + capability)
+/// and touches `last_active_at` on every subsequent invocation.
+pub async fn touch_cache_volume_activity(
+    db: &sqlx::SqlitePool,
+    manifest: &CapabilityManifest,
+    user_id: &str,
+) -> Result<()> {
+    if !manifest.cache.enabled {
+        return Ok(());
+    }
+
+    let existing = sqlx::query(
+        "SELECT id
+         FROM cache_volumes
+         WHERE user_id = ? AND capability_id = ? AND status = 'active'
+         LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(&manifest.id)
+    .fetch_optional(db)
+    .await?;
+
+    if let Some(row) = existing {
+        let cv_id: String = row.get("id");
+        sqlx::query(
+            "UPDATE cache_volumes
+             SET last_active_at = datetime('now')
+             WHERE id = ?",
+        )
+        .bind(cv_id)
+        .execute(db)
+        .await?;
+        return Ok(());
+    }
+
+    let cv_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO cache_volumes (id, user_id, capability_id, last_active_at)
+         VALUES (?, ?, ?, datetime('now'))",
+    )
+    .bind(cv_id)
+    .bind(user_id)
+    .bind(&manifest.id)
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+/// Purge a single cache volume by its database ID.
+///
+/// Removes the Docker volume and marks the row as `destroyed`.
+/// Returns `true` if the volume was found and purged.
+pub async fn purge_cache_volume(
+    db: &sqlx::SqlitePool,
+    cache_id: &str,
+    restrict_user_id: Option<&str>,
+) -> Result<bool> {
+    // Look up the cache volume, optionally restricting to a specific user.
+    let row = if let Some(uid) = restrict_user_id {
+        sqlx::query(
+            "SELECT id, user_id, capability_id
+             FROM cache_volumes
+             WHERE id = ? AND user_id = ? AND status = 'active'",
+        )
+        .bind(cache_id)
+        .bind(uid)
+        .fetch_optional(db)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT id, user_id, capability_id
+             FROM cache_volumes
+             WHERE id = ? AND status = 'active'",
+        )
+        .bind(cache_id)
+        .fetch_optional(db)
+        .await?
+    };
+
+    let row = match row {
+        Some(r) => r,
+        None => return Ok(false),
+    };
+
+    let cv_id: String = row.get("id");
+    let user_id: String = row.get("user_id");
+    let cap_id: String = row.get("capability_id");
+    let volume_name = format!("selu-cache-{}-{}", user_id, cap_id);
+
+    match bollard::Docker::connect_with_local_defaults() {
+        Ok(docker) => {
+            if let Err(e) = docker.remove_volume(&volume_name, None).await {
+                warn!(volume = %volume_name, "Failed to remove cache volume: {e}");
+            } else {
+                info!(volume = %volume_name, "Purged cache volume");
+            }
+        }
+        Err(e) => warn!("Cannot connect to Docker for cache purge: {e}"),
+    }
+
+    sqlx::query("UPDATE cache_volumes SET status = 'destroyed' WHERE id = ?")
+        .bind(&cv_id)
+        .execute(db)
+        .await?;
+
+    Ok(true)
+}
+
 /// Clean up expired workspace volumes.
 /// Checks the `workspaces` table for entries whose TTL has expired and
 /// removes the corresponding Docker volumes.
@@ -777,8 +896,8 @@ pub async fn cleanup_expired_workspaces(state: &AppState) -> Result<()> {
 mod tests {
     use super::*;
     use crate::capabilities::manifest::{
-        CapabilityClass, CredentialDeclaration, FilesystemPolicy, NetworkPolicy, ResourceLimits,
-        ToolSource,
+        CachePolicy, CapabilityClass, CredentialDeclaration, FilesystemPolicy, NetworkPolicy,
+        ResourceLimits, ToolSource,
     };
     use sqlx::SqlitePool;
 
@@ -794,6 +913,7 @@ mod tests {
             filesystem,
             credentials: Vec::<CredentialDeclaration>::new(),
             resources: ResourceLimits::default(),
+            cache: CachePolicy::default(),
             sharing: None,
             prompt: String::new(),
             localized_prompts: HashMap::new(),

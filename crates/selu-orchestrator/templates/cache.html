@@ -1,0 +1,64 @@
+{% extends "layout.html" %}
+
+{% block title %}Caches{% endblock %}
+
+{% block body %}
+<div class="flex-1 overflow-y-auto">
+  <div class="max-w-4xl mx-auto px-6 py-8 space-y-6 animate-fadein">
+
+    <!-- Header -->
+    <div>
+      <h1 class="text-2xl font-black text-txt-heading font-heading">Caches</h1>
+      <p class="text-sm text-txt-muted mt-1">Persistent package-manager caches for capability containers. Caches survive across sessions so dependencies don't need to be re-downloaded.</p>
+    </div>
+
+    <!-- Cache Volumes -->
+    <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
+        <span class="text-sm font-semibold text-txt-heading">Cache Volumes</span>
+        <span class="text-xs text-txt-muted">{{ volumes.len() }} active</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-edge">
+              {% if is_admin %}
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">User</th>
+              {% endif %}
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Capability</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Created</th>
+              <th class="px-5 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted">Last Used</th>
+              <th class="px-5 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.15em] text-txt-muted"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-edge">
+            {% for vol in volumes %}
+            <tr class="hover:bg-sidebar-hover transition-colors">
+              {% if is_admin %}
+              <td class="px-5 py-3.5 text-xs text-txt">{{ vol.username }}</td>
+              {% endif %}
+              <td class="px-5 py-3.5 font-mono text-xs text-txt">{{ vol.capability_id }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ vol.created_at }}</td>
+              <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ vol.last_active_at }}</td>
+              <td class="px-5 py-3.5 text-right">
+                <button class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        hx-delete="{{ base_path }}/cache/{{ vol.id }}"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML"
+                        hx-confirm="Purge cache for {{ vol.capability_id }}? Dependencies will be re-downloaded on next use.">Purge</button>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if volumes.is_empty() %}
+            <tr>
+              <td colspan="{% if is_admin %}5{% else %}4{% endif %}" class="px-5 py-6 text-center text-txt-muted text-sm">No cache volumes found. Caches are created automatically when a capability with caching enabled is used.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

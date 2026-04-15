@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod auth;
+pub mod cache;
 pub mod chat;
 pub mod credentials;
 pub mod feedback;
@@ -481,6 +482,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             "/agents/models/{provider_id}",
             get(agents::models_for_provider),
         )
+        // Credentials
+        // Cache management
+        .route("/cache", get(cache::cache_index))
+        .route("/cache/{id}", delete(cache::cache_delete))
         // Credentials
         .route("/credentials", get(credentials::credentials_index))
         .route(

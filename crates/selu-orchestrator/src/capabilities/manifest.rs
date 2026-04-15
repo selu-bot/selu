@@ -24,6 +24,11 @@ pub struct CapabilityManifest {
     pub credentials: Vec<CredentialDeclaration>,
     #[serde(default)]
     pub resources: ResourceLimits,
+    /// User-scoped persistent cache volume (opt-in).
+    /// When enabled, a Docker volume is mounted at `/cache` that persists
+    /// across sessions for the same user + capability pair.
+    #[serde(default)]
+    pub cache: CachePolicy,
     /// Cross-session container sharing policy (opt-in).
     /// When `mode: shared`, a single container is reused across all sessions.
     #[serde(default)]
@@ -117,6 +122,23 @@ pub enum FilesystemPolicy {
     None, // read-only root, no persistent storage
     Temp,      // tmpfs /tmp only
     Workspace, // named Docker volume mounted at /workspace (Environment class only)
+}
+
+/// User-scoped persistent cache volume policy.
+///
+/// When `enabled`, the orchestrator mounts a named Docker volume at `/cache`
+/// inside the container. The volume is keyed by `(user_id, capability_id)` and
+/// persists across sessions so that package-manager caches stay warm.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CachePolicy {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl Default for CachePolicy {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
 }
 
 /// Controls whether a capability container can be shared across sessions.
@@ -242,6 +264,13 @@ pub async fn load_from_dir(dir: &Path) -> Result<CapabilityManifest> {
     {
         anyhow::bail!(
             "Invalid manifest.yaml in {}: `filesystem: workspace` is only allowed for `class: environment`",
+            dir.display()
+        );
+    }
+
+    if manifest.cache.enabled && manifest.class != CapabilityClass::Environment {
+        anyhow::bail!(
+            "Invalid manifest.yaml in {}: `cache.enabled: true` is only allowed for `class: environment`",
             dir.display()
         );
     }

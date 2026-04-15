@@ -288,6 +288,7 @@ impl CapabilityRunner {
         &self,
         manifest: &CapabilityManifest,
         session_id: Option<&str>,
+        user_id: Option<&str>,
         egress_policy: &ContainerEgressPolicy,
     ) -> Result<RunningCapability> {
         let is_shared = session_id.is_none();
@@ -384,6 +385,14 @@ impl CapabilityRunner {
                 // Named Docker volume for the workspace (requires a session)
                 let volume_name = format!("selu-workspace-{}", sid);
                 binds.push(format!("{}:/workspace:rw", volume_name));
+            }
+        }
+
+        // User-scoped persistent cache volume (survives across sessions)
+        if manifest.cache.enabled {
+            if let Some(uid) = user_id {
+                let cache_volume = format!("selu-cache-{}-{}", uid, manifest.id);
+                binds.push(format!("{}:/cache:rw", cache_volume));
             }
         }
 
