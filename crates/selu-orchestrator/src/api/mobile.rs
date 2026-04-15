@@ -905,6 +905,7 @@ async fn get_artifact(
             Ok(Some(p)) => crate::agents::artifacts::StoredArtifact {
                 user_id: p.user_id,
                 session_id: String::new(),
+                thread_id: None,
                 filename: p.filename,
                 mime_type: p.mime_type,
                 data: p.data,

@@ -212,10 +212,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
 
     let session = session_fut.await?;
     let session_id = session.id.to_string();
-    let before_artifacts = crate::agents::artifacts::list_session_artifacts(
+    let before_artifacts = crate::agents::artifacts::list_session_artifacts_scoped(
         &state.artifacts,
         &user_id,
         &session_id,
+        thread_id.as_deref(),
         256,
     )
     .await;
@@ -230,10 +231,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     // then persist the user message with stable artifact references.
     let mut inbound_attachment_refs = Vec::new();
     for attachment in inbound_attachments {
-        match crate::agents::artifacts::store_inbound_attachment(
+        match crate::agents::artifacts::store_inbound_attachment_scoped(
             &state.artifacts,
             &user_id,
             &session_id,
+            thread_id.as_deref(),
             &attachment.filename,
             &attachment.mime_type,
             attachment.data,
@@ -248,24 +250,20 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         .iter()
         .map(|r| r.artifact_id.clone())
         .collect();
-    // Persist inbound attachments to disk for all pipes so they survive
-    // beyond the in-memory TTL and remain available until the thread is deleted.
-    let persist_thread_artifacts = if let Some(tid) = thread_id.as_deref() {
-        if !inbound_attachment_refs.is_empty() {
-            crate::agents::artifacts::persist_refs_for_thread(
-                &state.db,
-                &state.artifacts,
-                &state.config.database.url,
-                tid,
-                &user_id,
-                &inbound_attachment_refs,
-            )
-            .await;
-        }
-        true
-    } else {
-        false
-    };
+    // Persist inbound attachments to disk so they survive beyond the in-memory
+    // TTL.  This applies regardless of whether a thread_id is present — event
+    // fanout and other non-threaded turns must not lose attachments on restart.
+    if !inbound_attachment_refs.is_empty() {
+        crate::agents::artifacts::persist_refs_for_thread(
+            &state.db,
+            &state.artifacts,
+            &state.config.database.url,
+            thread_id.as_deref(),
+            &user_id,
+            &inbound_attachment_refs,
+        )
+        .await;
+    }
     let effective_user_text =
         normalize_user_text_for_inbound_attachments(&effective_text, &inbound_attachment_refs);
     // Build multimodal parts AFTER normalizing the text so the artifact_id
@@ -1354,10 +1352,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     );
 
     let artifacts_scan_start = Instant::now();
-    let after_artifacts = crate::agents::artifacts::list_session_artifacts(
+    let after_artifacts = crate::agents::artifacts::list_session_artifacts_scoped(
         &state.artifacts,
         &user_id,
         &session_id,
+        thread_id.as_deref(),
         256,
     )
     .await;
@@ -1378,18 +1377,16 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             merged_attachments.push(attachment);
         }
     }
-    if persist_thread_artifacts {
-        if let Some(tid) = thread_id.as_deref() {
-            crate::agents::artifacts::persist_refs_for_thread(
-                &state.db,
-                &state.artifacts,
-                &state.config.database.url,
-                tid,
-                &user_id,
-                &merged_attachments,
-            )
-            .await;
-        }
+    if !merged_attachments.is_empty() {
+        crate::agents::artifacts::persist_refs_for_thread(
+            &state.db,
+            &state.artifacts,
+            &state.config.database.url,
+            thread_id.as_deref(),
+            &user_id,
+            &merged_attachments,
+        )
+        .await;
     }
 
     // Persist attachment metadata on the reply message so it survives reload.
@@ -2048,10 +2045,11 @@ fn dispatch_delegation(
         let contains_artifact_ref =
             message.contains("artifact_id") || message.contains("attachments");
         if !contains_artifact_ref {
-            let refs = crate::agents::artifacts::list_session_artifacts(
+            let refs = crate::agents::artifacts::list_session_artifacts_scoped(
                 &state.artifacts,
                 &user_id,
                 &session_id,
+                parent_thread_id.as_deref(),
                 3,
             )
             .await;

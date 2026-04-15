@@ -29,6 +29,7 @@ pub async fn download_artifact(
             Ok(Some(persisted)) => crate::agents::artifacts::StoredArtifact {
                 user_id: persisted.user_id,
                 session_id: String::new(),
+                thread_id: None,
                 filename: persisted.filename,
                 mime_type: persisted.mime_type,
                 data: persisted.data,
