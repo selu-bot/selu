@@ -514,6 +514,8 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         Vec::<crate::agents::artifacts::ArtifactRef>::new(),
     ));
     let delegated_attachments_for_dispatch = delegated_attachments.clone();
+    let loop_approval_ids = Arc::new(Mutex::new(Vec::<String>::new()));
+    let loop_approval_ids_for_dispatch = loop_approval_ids.clone();
 
     debug!(
         setup_ms = turn_start.elapsed().as_millis(),
@@ -572,6 +574,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             let parent_thread_id = parent_thread_id.clone();
             let preferred_language = user_language_pref.clone();
             let delegated_attachments = delegated_attachments_for_dispatch.clone();
+            let loop_approval_tracker = Some(loop_approval_ids_for_dispatch.clone());
             let user_confirmed_this_turn = explicit_turn_confirmation;
             let delegation_trace_for_call = delegation_trace_for_dispatch.clone();
 
@@ -602,6 +605,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         approved,
                         user_confirmed_this_turn,
                         false,
+                        loop_approval_tracker.clone(),
                         || {
                             let db = state.db.clone();
                             let agent_id = agent_id_copy.clone();
@@ -659,6 +663,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         approved,
                         user_confirmed_this_turn,
                         false,
+                        loop_approval_tracker.clone(),
                         || {
                             let db = state.db.clone();
                             let agent_id = agent_id_copy.clone();
@@ -707,6 +712,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         approved,
                         user_confirmed_this_turn,
                         false,
+                        loop_approval_tracker.clone(),
                         || {
                             let db = state.db.clone();
                             let user = user.clone();
@@ -743,6 +749,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         approved,
                         user_confirmed_this_turn,
                         false,
+                        loop_approval_tracker.clone(),
                         || {
                             let db = state.db.clone();
                             let user = user.clone();
@@ -779,6 +786,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         approved,
                         user_confirmed_this_turn,
                         false,
+                        loop_approval_tracker.clone(),
                         || {
                             let marketplace_url = state.config.marketplace_url.clone();
                             let db = state.db.clone();
@@ -820,6 +828,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         approved,
                         user_confirmed_this_turn,
                         false,
+                        loop_approval_tracker.clone(),
                         || {
                             let db = state.db.clone();
                             let credentials = state.credentials.clone();
@@ -985,6 +994,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     approved,
                     user_confirmed_this_turn,
                     false,
+                    loop_approval_tracker.clone(),
                     || {
                         let engine = engine.clone();
                         let manifests = manifests.clone();
@@ -1113,7 +1123,21 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             })
         },
     )
-    .await?;
+    .await;
+
+    // Clean up any pending approvals created during this tool loop run,
+    // regardless of whether the loop succeeded or failed (fixes #5).
+    {
+        let ids = loop_approval_ids.lock().await;
+        if !ids.is_empty() {
+            let mut pending = state.pending_approvals.lock().await;
+            for id in ids.iter() {
+                pending.remove(id);
+            }
+        }
+    }
+
+    let loop_output = loop_output?;
     let LoopOutput {
         reply,
         tool_messages,
@@ -1469,6 +1493,7 @@ async fn check_policy_and_dispatch<F, Fut>(
     approved: bool,
     user_confirmed_this_turn: bool,
     terminal_on_success: bool,
+    loop_approval_tracker: Option<Arc<Mutex<Vec<String>>>>,
     invoke_fn: F,
 ) -> Result<ToolDispatchResult>
 where
@@ -1709,6 +1734,9 @@ where
                     {
                         let mut pending = state.pending_approvals.lock().await;
                         pending.insert(approval_id.clone(), otx);
+                    }
+                    if let Some(ref tracker) = loop_approval_tracker {
+                        tracker.lock().await.push(approval_id.clone());
                     }
                     info!(
                         tool = %namespaced_name,
