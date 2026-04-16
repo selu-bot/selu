@@ -37,6 +37,14 @@ pub struct ToolCallRow {
     pub result: Option<String>,
 }
 
+pub struct SearchResultRow {
+    pub thread_id: String,
+    pub pipe_id: String,
+    pub title: Option<String>,
+    pub snippet: String,
+    pub last_activity_at: Option<String>,
+}
+
 // ── Queries ─────────────────────────────────────────────────────────────────
 
 /// List active pipes for a user. Optionally filter by transport type
@@ -200,4 +208,58 @@ pub async fn list_thread_messages(
 
     let result = messages.into_iter().flatten().collect();
     (result, has_more)
+}
+
+/// Search threads by title or message content using LIKE matching.
+/// Returns threads whose title or any message content matches the query,
+/// along with a snippet of the matching (or most recent) message.
+pub async fn search_threads(
+    db: &SqlitePool,
+    pipe_id: &str,
+    user_id: &str,
+    query: &str,
+    limit: i32,
+) -> Vec<SearchResultRow> {
+    let like_pattern = format!("%{query}%");
+
+    let rows = sqlx::query!(
+        r#"SELECT t.id as "id!", t.pipe_id, t.title,
+                  COALESCE(
+                      (SELECT SUBSTR(content, 1, 200) FROM messages
+                       WHERE thread_id = t.id AND role IN ('user', 'assistant') AND content LIKE ?1
+                       ORDER BY created_at DESC LIMIT 1),
+                      (SELECT SUBSTR(content, 1, 200) FROM messages
+                       WHERE thread_id = t.id AND role IN ('user', 'assistant')
+                       ORDER BY created_at ASC LIMIT 1)
+                  ) as "snippet!: String",
+                  (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as "last_activity_at?: String"
+           FROM threads t
+           WHERE t.pipe_id = ?2 AND t.user_id = ?3
+             AND (
+               t.title LIKE ?1
+               OR EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = t.id AND m.content LIKE ?1)
+             )
+           ORDER BY COALESCE(
+               (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id),
+               t.created_at
+           ) DESC
+           LIMIT ?4"#,
+        like_pattern,
+        pipe_id,
+        user_id,
+        limit,
+    )
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+
+    rows.into_iter()
+        .map(|r| SearchResultRow {
+            thread_id: r.id,
+            pipe_id: r.pipe_id,
+            title: r.title,
+            snippet: r.snippet,
+            last_activity_at: r.last_activity_at,
+        })
+        .collect()
 }

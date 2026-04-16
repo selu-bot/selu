@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id as \"id!\", t.pipe_id, t.title,\n                  COALESCE(\n                      (SELECT SUBSTR(content, 1, 200) FROM messages\n                       WHERE thread_id = t.id AND role IN ('user', 'assistant') AND content LIKE ?1\n                       ORDER BY created_at DESC LIMIT 1),\n                      (SELECT SUBSTR(content, 1, 200) FROM messages\n                       WHERE thread_id = t.id AND role IN ('user', 'assistant')\n                       ORDER BY created_at ASC LIMIT 1)\n                  ) as \"snippet!: String\",\n                  (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as \"last_activity_at?: String\"\n           FROM threads t\n           WHERE t.pipe_id = ?2 AND t.user_id = ?3\n             AND (\n               t.title LIKE ?1\n               OR EXISTS (SELECT 1 FROM messages m WHERE m.thread_id = t.id AND m.content LIKE ?1)\n             )\n           ORDER BY COALESCE(\n               (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id),\n               t.created_at\n           ) DESC\n           LIMIT ?4",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "snippet!: String",
+        "ordinal": 3,
+        "type_info": "Null"
+      },
+      {
+        "name": "last_activity_at?: String",
+        "ordinal": 4,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "87f006f50b01d1f5c85ec7be1c96bcefa750d54171439e4ea82b09894324213b"
+}

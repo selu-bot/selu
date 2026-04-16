@@ -35,6 +35,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/mobile/info", get(instance_info))
         .route("/api/mobile/pipes", get(list_pipes))
         .route("/api/mobile/pipes/{pipe_id}/threads", get(list_threads).post(create_thread))
+        .route("/api/mobile/pipes/{pipe_id}/search", get(search_threads))
         .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}", delete(delete_thread))
         .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}/messages", get(list_messages))
         .route(
@@ -122,6 +123,20 @@ struct AttachmentResponse {
     filename: String,
     mime_type: String,
     size_bytes: usize,
+}
+
+#[derive(Serialize)]
+struct SearchResultResponse {
+    thread_id: String,
+    pipe_id: String,
+    title: Option<String>,
+    snippet: String,
+    last_activity_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: String,
 }
 
 #[derive(Deserialize)]
@@ -337,6 +352,35 @@ async fn list_threads(
         })
         .collect();
     Json(threads).into_response()
+}
+
+// ── GET /api/mobile/pipes/{pipe_id}/search ──────────────────────────────────
+
+async fn search_threads(
+    Path(pipe_id): Path<Uuid>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<SearchQuery>,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    let pipe_id_str = pipe_id.to_string();
+    let results: Vec<SearchResultResponse> =
+        crate::services::chat::search_threads(&state.db, &pipe_id_str, &user.user_id, &q.q, 30)
+            .await
+            .into_iter()
+            .map(|r| SearchResultResponse {
+                thread_id: r.thread_id,
+                pipe_id: r.pipe_id,
+                title: r.title,
+                snippet: r.snippet,
+                last_activity_at: r.last_activity_at,
+            })
+            .collect();
+    Json(results).into_response()
 }
 
 // ── POST /api/mobile/pipes/{pipe_id}/threads ─────────────────────────────────
