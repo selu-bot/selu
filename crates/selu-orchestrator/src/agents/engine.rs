@@ -26,7 +26,6 @@ use crate::agents::{
 use crate::capabilities::build_tool_specs;
 use crate::capabilities::discovery::{hydrate_dynamic_tools_for_agent, load_discovered_tools};
 use crate::capabilities::manifest::CapabilityManifest;
-use crate::llm::image_normalizer::normalize_messages_for_provider;
 use crate::llm::provider::{ChatMessage, ContentPart, LlmResponse, MessageContent, ToolSpec};
 use crate::llm::registry::load_provider;
 use crate::llm::tool_loop::{LoopEvent, LoopOutput, LoopSender, ToolDispatchResult, run_loop};
@@ -395,7 +394,6 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     if skip_user_persist && !effective_user_text.is_empty() {
         messages.push(ChatMessage::user(&effective_user_text));
     }
-    normalize_messages_for_provider(&mut messages, provider.as_ref());
     crate::llm::context_budget::trim_to_budget(&mut messages, provider.as_ref());
     let prep_ms = prep_start.elapsed().as_millis();
 
