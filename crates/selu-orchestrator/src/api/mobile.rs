@@ -815,7 +815,7 @@ async fn send_message(
                 "instance_id": instance_id,
                 "pipe_id": relay_pipe_id,
                 "thread_id": bg_thread_id,
-                "event": "agent_completed",
+                "event": "end",
                 "title": "selu",
                 "body": push_body,
             });
