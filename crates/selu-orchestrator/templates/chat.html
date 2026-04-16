@@ -41,7 +41,9 @@
                class="flex-1 min-w-0 block pl-4 py-2 text-xs transition-all {% if selected_thread_id == thread.id %}text-txt-heading{% else %}text-txt-muted hover:text-txt{% endif %}">
               <div class="flex items-center justify-between gap-2">
                 <span class="truncate">
-                  {% if thread.status == "completed" %}
+                  {% if thread.agent_active %}
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-coral animate-pulse mr-1"></span>
+                  {% else if thread.status == "completed" %}
                   <span class="text-emerald-400 mr-1">&#x2713;</span>
                   {% endif %}
                   {{ thread.title }}

@@ -98,6 +98,7 @@ struct ThreadResponse {
     status: String,
     created_at: String,
     last_activity_at: Option<String>,
+    agent_active: bool,
 }
 
 #[derive(Serialize)]
@@ -340,18 +341,24 @@ async fn list_threads(
     };
 
     let pipe_id_str = pipe_id.to_string();
-    let threads: Vec<ThreadResponse> = crate::services::chat::list_pipe_threads(&state.db, &pipe_id_str, &user.user_id, 50)
-        .await
+    let rows = crate::services::chat::list_pipe_threads(&state.db, &pipe_id_str, &user.user_id, 50).await;
+    let active_streams = state.thread_active_streams.lock().await;
+    let threads: Vec<ThreadResponse> = rows
         .into_iter()
-        .map(|r| ThreadResponse {
-            id: r.id,
-            pipe_id: r.pipe_id,
-            title: r.title,
-            status: r.status,
-            created_at: r.created_at,
-            last_activity_at: r.last_activity_at,
+        .map(|r| {
+            let agent_active = active_streams.contains_key(&r.id);
+            ThreadResponse {
+                id: r.id,
+                pipe_id: r.pipe_id,
+                title: r.title,
+                status: r.status,
+                created_at: r.created_at,
+                last_activity_at: r.last_activity_at,
+                agent_active,
+            }
         })
         .collect();
+    drop(active_streams);
     Json(threads).into_response()
 }
 
@@ -433,6 +440,7 @@ async fn create_thread(
             status: thread.status.to_string(),
             created_at: thread.created_at.to_string(),
             last_activity_at: None,
+            agent_active: false,
         })
         .into_response(),
         Err(e) => {

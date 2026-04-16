@@ -42,6 +42,7 @@ pub struct ThreadView {
     pub title: String,
     pub status: String,
     pub last_activity_at: String,
+    pub agent_active: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -100,15 +101,16 @@ async fn fetch_pipes(db: &sqlx::SqlitePool, user_id: &str) -> Vec<PipeView> {
 }
 
 async fn fetch_threads(
-    db: &sqlx::SqlitePool,
+    state: &AppState,
     pipe_id: &str,
     user_id: &str,
     language: &str,
 ) -> Vec<ThreadView> {
-    crate::services::chat::list_pipe_threads(db, pipe_id, user_id, 500)
-        .await
-        .into_iter()
+    let rows = crate::services::chat::list_pipe_threads(&state.db, pipe_id, user_id, 500).await;
+    let active_streams = state.thread_active_streams.lock().await;
+    rows.into_iter()
         .map(|r| {
+            let agent_active = active_streams.contains_key(&r.id);
             let title = r.title.unwrap_or_else(|| "New conversation".to_string());
             let last_activity_raw = r.last_activity_at.unwrap_or_else(|| r.created_at.clone());
             ThreadView {
@@ -116,6 +118,7 @@ async fn fetch_threads(
                 title,
                 status: r.status,
                 last_activity_at: format_timestamp_for_user(&last_activity_raw, language),
+                agent_active,
             }
         })
         .collect()
@@ -295,7 +298,7 @@ pub async fn chat_pipe(
 ) -> Response {
     let pipe_id_str = pipe_id.to_string();
     let pipes = fetch_pipes(&state.db, &user.user_id).await;
-    let threads = fetch_threads(&state.db, &pipe_id_str, &user.user_id, &user.language).await;
+    let threads = fetch_threads(&state, &pipe_id_str, &user.user_id, &user.language).await;
     let selected = pipes.iter().find(|p| p.id == pipe_id_str).cloned();
 
     render_template(ChatTemplate {
@@ -323,7 +326,7 @@ pub async fn chat_thread(
     let pipe_id_str = pipe_id.to_string();
     let thread_id_str = thread_id.to_string();
     let pipes = fetch_pipes(&state.db, &user.user_id).await;
-    let threads = fetch_threads(&state.db, &pipe_id_str, &user.user_id, &user.language).await;
+    let threads = fetch_threads(&state, &pipe_id_str, &user.user_id, &user.language).await;
     let selected = pipes.iter().find(|p| p.id == pipe_id_str).cloned();
     let (messages, has_more_messages, oldest_message_ts) =
         fetch_thread_messages(&state, &thread_id_str, &user.language, &user.user_id, None).await;
@@ -581,6 +584,12 @@ pub async fn chat_send(
     {
         let mut notifies = state.stream_notifies.lock().await;
         notifies.insert(stream_id.clone(), notify.clone());
+    }
+
+    // Track thread → stream so both web and mobile can see agent is active
+    {
+        let mut tas = state.thread_active_streams.lock().await;
+        tas.insert(thread_id_str.clone(), stream_id.clone());
     }
 
     let has_inbound_attachments = !inbound_attachments.is_empty();
@@ -1060,7 +1069,7 @@ async fn process_message(
         user_id: user_id.clone(),
         agent_id: Some(agent_id),
         message: effective_text,
-        thread_id: Some(thread_id),
+        thread_id: Some(thread_id.clone()),
         chain_depth: 0,
         channel_kind: ChannelKind::Interactive,
         skip_user_persist: false,
@@ -1095,6 +1104,7 @@ async fn process_message(
     );
 
     state.active_streams.lock().await.remove(&stream_id);
+    state.thread_active_streams.lock().await.remove(&thread_id);
 }
 
 async fn parse_chat_send_payload_multipart(
