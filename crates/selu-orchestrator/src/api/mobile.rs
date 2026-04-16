@@ -144,6 +144,7 @@ struct SendRequest {
     text: String,
     image: Option<ImagePayload>,
     metadata: Option<serde_json::Value>,
+    device_token: String,
 }
 
 #[derive(Deserialize)]
@@ -666,6 +667,7 @@ async fn send_message(
     let bg_user_id = user.user_id.clone();
     let bg_user_language = user.language.clone();
     let text = req.text.clone();
+    let bg_device_token = req.device_token.clone();
 
     tokio::spawn(async move {
         // Wait for SSE client
@@ -695,6 +697,7 @@ async fn send_message(
                     "pipe_id": pipe_id_str,
                     "thread_id": bg_thread_id,
                     "thread_title": title,
+                    "device_token": bg_device_token,
                 });
                 match client
                     .post("https://selu.bot/api/relay/start-activity")
