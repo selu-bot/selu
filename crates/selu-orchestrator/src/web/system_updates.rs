@@ -868,6 +868,7 @@ async fn check_for_updates_via_sidecar(
         .await;
 
     let mut update_state = load_state(state).await?;
+    hydrate_installed_from_sidecar(state, settings, &mut update_state).await;
     update_state.available_version = metadata.tag.clone();
     update_state.available_digest = metadata.digest.clone();
     update_state.available_release_version =
