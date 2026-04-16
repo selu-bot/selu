@@ -3136,6 +3136,48 @@ pub async fn toggle_auto_update(
     .into_response()
 }
 
+/// Manually trigger an agent update check against the marketplace.
+pub async fn check_agent_updates(
+    user: AuthUser,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    match marketplace::auto_update_agents(
+        &state.config.marketplace_url,
+        &state.config.installed_agents_dir,
+        &state.db,
+        &state.agents,
+        &state.capabilities,
+        &state.credentials,
+    )
+    .await
+    {
+        Ok(0) => Redirect::to(&format!(
+            "{}/agents?success=All+agents+are+up+to+date.",
+            base_path
+        ))
+        .into_response(),
+        Ok(n) => Redirect::to(&format!(
+            "{}/agents?success=Updated+{n}+agent(s)+successfully.",
+            base_path
+        ))
+        .into_response(),
+        Err(e) => {
+            error!("Manual agent update check failed: {e}");
+            Redirect::to(&format!(
+                "{}/agents?error=Update+check+failed:+{}",
+                base_path,
+                urlencoding::encode(&e.to_string())
+            ))
+            .into_response()
+        }
+    }
+}
+
 /// Submit a 1-5 star rating for an installed agent.
 pub async fn rate_agent(
     _user: AuthUser,

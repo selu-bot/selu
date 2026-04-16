@@ -130,6 +130,16 @@
       <button id="tab-marketplace" onclick="showTab('marketplace')"
               class="px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-txt-muted hover:text-txt transition-colors cursor-pointer"
               data-i18n="agents.marketplace">Marketplace</button>
+      <div class="ml-auto pr-2">
+        <form method="POST" action="{{ base_path }}/agents/check-updates">
+          <button type="submit"
+                  class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-txt-muted border border-edge rounded-lg hover:border-muted hover:text-txt transition-colors cursor-pointer"
+                  data-i18n="agents.checkUpdates">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Check for Updates
+          </button>
+        </form>
+      </div>
     </div>
 
     <!-- Installed Agents Tab -->

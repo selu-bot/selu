@@ -351,6 +351,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         )
         // Agents (marketplace, install, setup, model assignment)
         .route("/agents", get(agents::agents_index))
+        .route("/agents/check-updates", post(agents::check_agent_updates))
         .route("/agents/install", post(agents::install_agent))
         .route("/agents/update/wizard", post(agents::update_wizard))
         .route("/agents/update", post(agents::update_agent))

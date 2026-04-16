@@ -261,12 +261,20 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Agent auto-update: checks the marketplace every 30 minutes
+    // Agent auto-update: checks the marketplace twice per day (every 12 hours)
+    // with a per-instance jitter of up to 1 hour to avoid all instances hitting
+    // the backend at the same time.
     let autoupdate_state = state.clone();
     tokio::spawn(async move {
-        // Wait 2 minutes after startup before first check
-        tokio::time::sleep(std::time::Duration::from_secs(120)).await;
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1800));
+        let jitter_secs = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos() as u64)
+            % 3600;
+        // Initial delay: 2 minutes + instance jitter
+        tokio::time::sleep(std::time::Duration::from_secs(120 + jitter_secs)).await;
+        let mut interval =
+            tokio::time::interval(std::time::Duration::from_secs(12 * 60 * 60));
         loop {
             interval.tick().await;
             match agents::marketplace::auto_update_agents(
@@ -286,11 +294,18 @@ async fn main() -> Result<()> {
         }
     });
 
-    // System update metadata checks: runs daily (if enabled in settings)
+    // System update metadata checks: runs twice per day (every 12 hours)
+    // with a per-instance jitter of up to 1 hour to stagger backend load.
     let system_update_state = state.clone();
     tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(90)).await;
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60 * 24));
+        let jitter_secs = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos() as u64)
+            % 3600;
+        tokio::time::sleep(std::time::Duration::from_secs(90 + jitter_secs)).await;
+        let mut interval =
+            tokio::time::interval(std::time::Duration::from_secs(12 * 60 * 60));
         loop {
             if let Err(e) =
                 web::system_updates::run_auto_check_if_enabled(&system_update_state).await
