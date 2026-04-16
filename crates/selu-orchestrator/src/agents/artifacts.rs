@@ -731,6 +731,12 @@ where
     })))
 }
 
+/// Retrieve an artifact after verifying it belongs to `user_id`.
+///
+/// `session_id` is intentionally **not** checked: delegation chains may span
+/// multiple sessions (the orchestrator and a specialist agent each have their
+/// own session), so artifacts must be accessible across sessions for the same
+/// user.
 async fn get_authorized(
     store: &ArtifactStore,
     artifact_id: &str,
