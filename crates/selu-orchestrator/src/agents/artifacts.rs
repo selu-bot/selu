@@ -79,7 +79,6 @@ pub async fn list_session_artifacts_scoped(
     thread_id: Option<&str>,
     limit: usize,
 ) -> Vec<ArtifactRef> {
-    cleanup_expired(store).await;
     let lock = store.read().await;
     let mut out: Vec<(String, StoredArtifact)> = lock
         .iter()
@@ -118,7 +117,6 @@ pub async fn get_for_user(
     artifact_id: &str,
     user_id: &str,
 ) -> Option<StoredArtifact> {
-    cleanup_expired(store).await;
     let lock = store.read().await;
     let artifact = lock.get(artifact_id)?;
     if artifact.user_id != user_id {
@@ -128,7 +126,6 @@ pub async fn get_for_user(
 }
 
 pub async fn get_by_id(store: &ArtifactStore, artifact_id: &str) -> Option<StoredArtifact> {
-    cleanup_expired(store).await;
     let lock = store.read().await;
     lock.get(artifact_id).cloned()
 }
@@ -751,18 +748,6 @@ async fn get_authorized(
         ));
     }
     Ok(artifact.clone())
-}
-
-/// Probabilistic cleanup — only acquires a write lock ~1 in 20 calls to reduce
-/// contention on the hot read path.  Callers that mutate (insert/delete) should
-/// call `cleanup_expired_force` instead.
-async fn cleanup_expired(store: &ArtifactStore) {
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static COUNTER: AtomicU32 = AtomicU32::new(0);
-    if COUNTER.fetch_add(1, Ordering::Relaxed) % 20 != 0 {
-        return;
-    }
-    cleanup_expired_force(store).await;
 }
 
 async fn cleanup_expired_force(store: &ArtifactStore) {
