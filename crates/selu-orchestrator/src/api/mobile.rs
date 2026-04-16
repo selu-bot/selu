@@ -635,6 +635,36 @@ async fn send_message(
             }
         }
 
+        // Start a LiveActivity via push-to-start so it appears on Lock Screen / Dynamic Island
+        if crate::web::system_updates::push_notifications_enabled(&bg_state).await {
+            if let Ok(instance_id) =
+                crate::persistence::db::get_instance_id(&bg_state.db).await
+            {
+                let title = if text.is_empty() || text == "[Shared photos]" {
+                    "[Shared photos]".to_string()
+                } else {
+                    text.chars().take(40).collect()
+                };
+                let client = reqwest::Client::new();
+                let payload = serde_json::json!({
+                    "instance_id": instance_id,
+                    "pipe_id": pipe_id_str,
+                    "thread_id": bg_thread_id,
+                    "thread_title": title,
+                });
+                match client
+                    .post("https://selu.bot/api/relay/start-activity")
+                    .header("X-Instance-Id", &instance_id)
+                    .json(&payload)
+                    .send()
+                    .await
+                {
+                    Ok(resp) => info!(status = %resp.status(), "LiveActivity start push sent"),
+                    Err(e) => warn!(error = %e, "LiveActivity start push failed"),
+                }
+            }
+        }
+
         let default_agent_id = sqlx::query!(
             "SELECT default_agent_id FROM pipes WHERE id = ?",
             pipe_id_str
