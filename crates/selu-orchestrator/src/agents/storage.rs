@@ -97,20 +97,25 @@ pub async fn list(
     db: &SqlitePool,
     agent_id: &str,
     user_id: &str,
-) -> Result<serde_json::Map<String, serde_json::Value>> {
+) -> Result<(serde_json::Map<String, serde_json::Value>, bool)> {
+    const LIMIT: usize = 100;
+
     let rows = sqlx::query!(
-        "SELECT key, value FROM agent_storage WHERE agent_id = ? AND user_id = ? ORDER BY key",
+        "SELECT key, value FROM agent_storage WHERE agent_id = ? AND user_id = ? ORDER BY key LIMIT ?",
         agent_id,
         user_id,
+        // Fetch one extra row to detect whether more entries exist.
+        (LIMIT + 1) as i64,
     )
     .fetch_all(db)
     .await?;
 
+    let truncated = rows.len() > LIMIT;
     let mut map = serde_json::Map::new();
-    for row in rows {
+    for row in rows.into_iter().take(LIMIT) {
         map.insert(row.key, serde_json::Value::String(row.value));
     }
-    Ok(map)
+    Ok((map, truncated))
 }
 
 /// Delete all storage for a given agent (called on agent uninstall).
@@ -195,8 +200,9 @@ pub fn store_delete_tool_spec() -> ToolSpec {
 pub fn store_list_tool_spec() -> ToolSpec {
     ToolSpec {
         name: "store_list".to_string(),
-        description: "List all persistently stored key-value pairs. \
-             Returns a JSON object with all keys and their values. \
+        description: "List persistently stored key-value pairs (max 100). \
+             Returns a JSON object with an \"entries\" map and a \"truncated\" flag. \
+             If truncated is true, use store_get to fetch specific keys. \
              Returns an empty object if nothing has been stored yet."
             .to_string(),
         parameters: serde_json::json!({
@@ -275,8 +281,8 @@ pub async fn dispatch_store_list(
     user_id: &str,
     _args: &serde_json::Value,
 ) -> Result<String> {
-    let entries = list(db, agent_id, user_id).await?;
-    Ok(serde_json::json!({"entries": entries}).to_string())
+    let (entries, truncated) = list(db, agent_id, user_id).await?;
+    Ok(serde_json::json!({"entries": entries, "truncated": truncated}).to_string())
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -393,8 +399,9 @@ mod tests {
         set(&db, "agent1", "user1", "beta", "2").await.unwrap();
         set(&db, "agent1", "user1", "gamma", "3").await.unwrap();
 
-        let entries = list(&db, "agent1", "user1").await.unwrap();
+        let (entries, truncated) = list(&db, "agent1", "user1").await.unwrap();
         assert_eq!(entries.len(), 3);
+        assert!(!truncated);
         assert_eq!(entries["alpha"], "1");
         assert_eq!(entries["beta"], "2");
         assert_eq!(entries["gamma"], "3");
@@ -403,8 +410,22 @@ mod tests {
     #[tokio::test]
     async fn test_list_empty() {
         let db = test_db().await;
-        let entries = list(&db, "agent1", "user1").await.unwrap();
+        let (entries, truncated) = list(&db, "agent1", "user1").await.unwrap();
         assert!(entries.is_empty());
+        assert!(!truncated);
+    }
+
+    #[tokio::test]
+    async fn test_list_truncation() {
+        let db = test_db().await;
+        for i in 0..105 {
+            set(&db, "agent1", "user1", &format!("key_{i:03}"), &format!("val_{i}"))
+                .await
+                .unwrap();
+        }
+        let (entries, truncated) = list(&db, "agent1", "user1").await.unwrap();
+        assert_eq!(entries.len(), 100);
+        assert!(truncated);
     }
 
     #[tokio::test]

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT key, value FROM agent_storage WHERE agent_id = ? AND user_id = ? ORDER BY key",
+  "query": "SELECT key, value FROM agent_storage WHERE agent_id = ? AND user_id = ? ORDER BY key LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -15,12 +15,12 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 3
     },
     "nullable": [
       false,
       false
     ]
   },
-  "hash": "85f35eef87e153998888fbd3b9c4a45bcf8adb77bf73610204274b98791ef173"
+  "hash": "dde9e34b9b611468e074dfd11dc832901566ff1a0491e1a2936ad662e2b271f6"
 }
