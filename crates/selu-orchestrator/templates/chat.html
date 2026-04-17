@@ -215,6 +215,34 @@
       </div>
       {% endif %}
       {% endfor %}
+      {% if let Some(stream_id) = active_stream_id %}
+      <!-- Agent is actively working — auto-connect SSE to resume streaming -->
+      <div class="flex justify-start" id="stream-wrap-{{ stream_id }}" style="display:none">
+        <div class="max-w-[72%] bg-surface-raised border border-edge rounded-2xl rounded-bl-md px-4 py-2.5">
+          <div class="text-sm leading-relaxed break-words markdown-body streaming" id="stream-{{ stream_id }}"
+               hx-ext="sse"
+               sse-connect="{{ base_path }}/chat/{{ selected_pipe_id }}/stream/{{ stream_id }}"
+               sse-swap="token"
+               hx-swap="beforeend">
+          </div>
+        </div>
+      </div>
+      {% if let Some(status) = active_stream_last_status %}
+      <div class="flex justify-start" id="active-agent-status">
+        <div class="tool-status active">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
+          <span>{{ status }}</span>
+        </div>
+      </div>
+      {% else %}
+      <div class="flex justify-start" id="active-agent-status">
+        <div class="tool-status active">
+          <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
+          <span data-i18n="chat.agent_working">Agent is working…</span>
+        </div>
+      </div>
+      {% endif %}
+      {% endif %}
     </div>
 
     <!-- Input bar -->
@@ -260,6 +288,13 @@
         <div id="chat-image-preview-grid" class="flex flex-wrap gap-2"></div>
       </div>
     </div>
+    <script>
+      // Auto-scroll to bottom on page load
+      (function() {
+        var msgs = document.getElementById('messages');
+        if (msgs) msgs.scrollTop = msgs.scrollHeight;
+      })();
+    </script>
   </div>
   {% endif %}
   {% else if !selected_pipe_id.is_empty() %}

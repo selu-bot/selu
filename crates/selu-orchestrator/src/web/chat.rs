@@ -85,6 +85,11 @@ struct ChatTemplate {
     messages: Vec<MessageView>,
     has_more_messages: bool,
     oldest_message_ts: String,
+    /// If the selected thread has an active agent stream, this contains the stream_id
+    /// so the page can auto-connect via SSE.
+    active_stream_id: Option<String>,
+    /// Last tool-status text for the active stream (shown before first SSE event).
+    active_stream_last_status: Option<String>,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -286,6 +291,8 @@ pub async fn chat_index(
         pipes,
         has_more_messages: false,
         oldest_message_ts: String::new(),
+        active_stream_id: None,
+        active_stream_last_status: None,
     })
 }
 
@@ -313,6 +320,8 @@ pub async fn chat_pipe(
         pipes,
         has_more_messages: false,
         oldest_message_ts: String::new(),
+        active_stream_id: None,
+        active_stream_last_status: None,
     })
 }
 
@@ -331,6 +340,24 @@ pub async fn chat_thread(
     let (messages, has_more_messages, oldest_message_ts) =
         fetch_thread_messages(&state, &thread_id_str, &user.language, &user.user_id, None).await;
 
+    // Check if this thread has an active agent stream (for auto-reconnect)
+    let active_stream_id = state
+        .thread_active_streams
+        .lock()
+        .await
+        .get(&thread_id_str)
+        .cloned();
+    let active_stream_last_status = if active_stream_id.is_some() {
+        state
+            .thread_last_status
+            .lock()
+            .await
+            .get(&thread_id_str)
+            .cloned()
+    } else {
+        None
+    };
+
     render_template(ChatTemplate {
         active_nav: "chat",
         is_admin: user.is_admin,
@@ -343,6 +370,8 @@ pub async fn chat_thread(
         pipes,
         has_more_messages,
         oldest_message_ts: oldest_message_ts.unwrap_or_default(),
+        active_stream_id,
+        active_stream_last_status,
     })
 }
 
@@ -1054,15 +1083,28 @@ async fn process_message(
     let (agent_id, effective_text) =
         agent_router::route(&text, default_agent_id.as_deref(), &user_agents);
 
-    // Retrieve the SSE sender registered by chat_stream
-    let tx = match state.active_streams.lock().await.get(&stream_id).cloned() {
-        Some(t) => t,
-        None => {
-            // SSE client may not have connected yet — create a throwaway sender
-            let (t, _) = mpsc::channel::<LoopEvent>(1);
-            t
+    // Use a stable channel for run_turn, with a forwarder task that relays
+    // events to whichever SSE bridge is currently in active_streams.
+    // This captures last tool status and allows reconnection mid-stream.
+    let (engine_tx, mut engine_rx) = mpsc::channel::<LoopEvent>(64);
+    let fwd_state = state.clone();
+    let fwd_stream_id = stream_id.clone();
+    let fwd_thread_id = thread_id.clone();
+    let forwarder = tokio::spawn(async move {
+        while let Some(event) = engine_rx.recv().await {
+            if let LoopEvent::CapabilityStatus(ref s) = event {
+                fwd_state
+                    .thread_last_status
+                    .lock()
+                    .await
+                    .insert(fwd_thread_id.clone(), s.clone());
+            }
+            let streams = fwd_state.active_streams.lock().await;
+            if let Some(tx) = streams.get(&fwd_stream_id) {
+                let _ = tx.send(event).await;
+            }
         }
-    };
+    });
 
     let params = TurnParams {
         pipe_id,
@@ -1084,7 +1126,7 @@ async fn process_message(
         "process_message setup complete, starting turn"
     );
 
-    match run_turn(&state, params, tx.clone()).await {
+    match run_turn(&state, params, engine_tx.clone()).await {
         Ok(_output) => {
             // Artifacts are now emitted as LoopEvent::Artifacts by the engine
             // before Done, so no post-turn handling needed here.
@@ -1093,10 +1135,14 @@ async fn process_message(
             error!("Agent turn failed: {e}");
             let lang = crate::i18n::user_language(&state.db, &user_id).await;
             let error_text = crate::i18n::t(&lang, "error.agent_turn_failed").to_string();
-            let _ = tx.send(LoopEvent::Error(error_text)).await;
-            let _ = tx.send(LoopEvent::Done).await;
+            let _ = engine_tx.send(LoopEvent::Error(error_text)).await;
+            let _ = engine_tx.send(LoopEvent::Done).await;
         }
     }
+
+    // Drop engine_tx so the forwarder finishes
+    drop(engine_tx);
+    let _ = forwarder.await;
 
     tracing::debug!(
         total_ms = process_start.elapsed().as_millis(),
@@ -1105,6 +1151,7 @@ async fn process_message(
 
     state.active_streams.lock().await.remove(&stream_id);
     state.thread_active_streams.lock().await.remove(&thread_id);
+    state.thread_last_status.lock().await.remove(&thread_id);
 }
 
 async fn parse_chat_send_payload_multipart(

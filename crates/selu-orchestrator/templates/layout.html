@@ -554,6 +554,7 @@
         'chat.confirm.denied': 'Denied',
         'chat.confirm.expired': 'Confirmation expired or already handled.',
         'chat.confirm.queued': 'Approval queued for {tool} (id: {id})',
+        'chat.agent_working': 'Agent is working\u2026',
         'pipes.title': 'Pipes',
         'pipes.desc': 'Pipes connect the outside world to your agents. Add a pipe for each way you want to talk to Selu.',
         'pipes.active': 'Active Pipes',
@@ -1472,6 +1473,7 @@
         'chat.confirm.denied': 'Abgelehnt',
         'chat.confirm.expired': 'Best\u00e4tigung abgelaufen oder bereits bearbeitet.',
         'chat.confirm.queued': 'Genehmigung angefragt f\u00fcr {tool} (id: {id})',
+        'chat.agent_working': 'Agent arbeitet\u2026',
         'pipes.title': 'Pipes',
         'pipes.desc': 'Pipes verbinden die Au\u00dfenwelt mit deinen Agenten. F\u00fcge f\u00fcr jeden Kommunikationsweg eine Pipe hinzu.',
         'pipes.active': 'Aktive Pipes',
@@ -2405,6 +2407,9 @@
       // Show the wrapper on first token
       var wrap = el.closest('[id^="stream-wrap-"]');
       if (wrap && wrap.style.display === 'none') wrap.style.display = '';
+      // Remove the page-load agent status indicator once real content arrives
+      var statusEl = document.getElementById('active-agent-status');
+      if (statusEl) statusEl.remove();
     }
     function finalizeStream(streamId) {
       var el = document.getElementById('stream-' + streamId);

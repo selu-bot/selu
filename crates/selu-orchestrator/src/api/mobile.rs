@@ -787,8 +787,16 @@ async fn send_message(
         let (engine_tx, mut engine_rx) = mpsc::channel::<LoopEvent>(64);
         let fwd_state = bg_state.clone();
         let fwd_stream_id = bg_stream_id.clone();
+        let fwd_thread_id = bg_thread_id.clone();
         let forwarder = tokio::spawn(async move {
             while let Some(event) = engine_rx.recv().await {
+                if let LoopEvent::CapabilityStatus(ref s) = event {
+                    fwd_state
+                        .thread_last_status
+                        .lock()
+                        .await
+                        .insert(fwd_thread_id.clone(), s.clone());
+                }
                 let streams = fwd_state.active_streams.lock().await;
                 if let Some(tx) = streams.get(&fwd_stream_id) {
                     let _ = tx.send(event).await;
@@ -835,6 +843,11 @@ async fn send_message(
             .remove(&bg_stream_id);
         bg_state
             .thread_active_streams
+            .lock()
+            .await
+            .remove(&bg_thread_id);
+        bg_state
+            .thread_last_status
             .lock()
             .await
             .remove(&bg_thread_id);
@@ -897,14 +910,24 @@ async fn active_stream(
     let thread_id_str = thread_id.to_string();
     let tas = state.thread_active_streams.lock().await;
     match tas.get(&thread_id_str) {
-        Some(stream_id) => Json(serde_json::json!({
-            "stream_id": stream_id,
-            "active": true,
-        }))
-        .into_response(),
+        Some(stream_id) => {
+            let last_status = state
+                .thread_last_status
+                .lock()
+                .await
+                .get(&thread_id_str)
+                .cloned();
+            Json(serde_json::json!({
+                "stream_id": stream_id,
+                "active": true,
+                "last_status": last_status,
+            }))
+            .into_response()
+        }
         None => Json(serde_json::json!({
             "stream_id": null,
             "active": false,
+            "last_status": null,
         }))
         .into_response(),
     }
