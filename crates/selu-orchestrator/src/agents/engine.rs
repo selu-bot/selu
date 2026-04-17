@@ -976,6 +976,15 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     .map(|owner| owner.as_ref())
                     .unwrap_or(&current_agent);
 
+                // Look up the tool's terminal_on_success flag from its
+                // capability manifest so the tool loop exits immediately
+                // after a successful invocation (e.g. PDF generation).
+                let terminal = manifests
+                    .get(&cap_id)
+                    .and_then(|m| m.tools.iter().find(|t| t.name == bare_tool))
+                    .map(|t| t.terminal_on_success)
+                    .unwrap_or(false);
+
                 let result = check_policy_and_dispatch(
                     &state,
                     &user,
@@ -991,7 +1000,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     policy_agent,
                     approved,
                     user_confirmed_this_turn,
-                    false,
+                    terminal,
                     loop_approval_tracker.clone(),
                     || {
                         let engine = engine.clone();

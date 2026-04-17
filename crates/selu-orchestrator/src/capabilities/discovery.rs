@@ -66,6 +66,7 @@ pub async fn load_discovered_tools(
             input_schema,
             requires_confirmation: false,
             recommended_policy: recommended,
+            terminal_on_success: false,
         });
     }
 

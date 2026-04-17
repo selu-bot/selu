@@ -77,6 +77,12 @@ pub struct ToolDefinition {
     ///   - `requires_confirmation: false` → `"block"` (secure default)
     #[serde(default)]
     pub recommended_policy: Option<String>,
+    /// When true, a successful invocation of this tool causes the tool loop
+    /// to return immediately instead of giving the LLM another iteration.
+    /// Useful for "produce-and-done" tools like PDF generation where a
+    /// follow-up call would just create a duplicate artifact.
+    #[serde(default)]
+    pub terminal_on_success: bool,
 }
 
 impl ToolDefinition {
