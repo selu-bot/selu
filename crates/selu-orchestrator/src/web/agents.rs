@@ -3157,12 +3157,12 @@ pub async fn check_agent_updates(
     .await
     {
         Ok(0) => Redirect::to(&format!(
-            "{}/agents?success=All+agents+are+up+to+date.",
+            "{}/agents?success=agents_up_to_date",
             base_path
         ))
         .into_response(),
         Ok(n) => Redirect::to(&format!(
-            "{}/agents?success=Updated+{n}+agent(s)+successfully.",
+            "{}/agents?success=agents_updated",
             base_path
         ))
         .into_response(),
