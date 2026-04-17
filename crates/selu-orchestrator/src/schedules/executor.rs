@@ -193,7 +193,7 @@ async fn execute_on_pipe(
         thread_id: Some(thread_id.clone()),
         chain_depth: 0,
         channel_kind,
-        skip_user_persist: false,
+        skip_user_persist: true,
         enable_streaming: true,
         inbound_attachments: Vec::new(),
         delegation_trace: Vec::new(),
