@@ -82,6 +82,10 @@ pub enum LoopEvent {
         approval_message: Option<String>,
         approval_id: String,
     },
+    /// A tool interaction message was added to the conversation.
+    /// Used for incremental persistence so reconnecting clients see
+    /// in-progress tool calls without waiting for the turn to complete.
+    ToolMessage(ChatMessage),
     /// Artifacts produced during this turn (delivered before Done).
     Artifacts(Vec<crate::agents::artifacts::ArtifactRef>),
     /// Final complete text response
@@ -538,6 +542,7 @@ pub async fn run_loop(
             summary,
             calls.clone(),
         ));
+        let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
 
         // Send status events for tools that didn't already get one during streaming.
         // Tools that got an early streaming status (tracked in `status_sent`) are
@@ -601,6 +606,7 @@ pub async fn run_loop(
                         call.name, validation_err
                     ),
                 ));
+                let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
             } else {
                 dispatch_calls.push(call.clone());
             }
@@ -678,6 +684,7 @@ pub async fn run_loop(
                         &call.id,
                         format!("Tool error: {}", e),
                     ));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                     continue;
                 }
                 Ok(dispatch_result) => match dispatch_result {
@@ -687,6 +694,7 @@ pub async fn run_loop(
                         "Tool call completed"
                     );
                     messages.push(ChatMessage::tool_result(&call.id, result));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 }
                 ToolDispatchResult::DoneAndReturn(result) if force_non_terminal => {
                     info!(
@@ -694,6 +702,7 @@ pub async fn run_loop(
                         "Tool call completed (terminal downgraded — parallel batch)"
                     );
                     messages.push(ChatMessage::tool_result(&call.id, result));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 }
                 ToolDispatchResult::DoneAndReturn(result) => {
                     info!(tool = %call.name, "Tool call completed (terminal)");
@@ -705,6 +714,7 @@ pub async fn run_loop(
                 ToolDispatchResult::Blocked(msg) => {
                     warn!(tool = %call.name, "Tool call blocked by policy");
                     messages.push(ChatMessage::tool_error(&call.id, msg));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 }
 
                 ToolDispatchResult::NeedsConfirmation {
@@ -769,6 +779,7 @@ pub async fn run_loop(
                      Acknowledge the denial and ask how they'd like to proceed."
                         .to_string(),
                 ));
+                let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 continue;
             }
             info!(tool = %call.name, "Tool call approved by user (interactive)");
@@ -784,10 +795,12 @@ pub async fn run_loop(
                         &call.id,
                         format!("Tool error: {}", e),
                     ));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 }
                 Ok(ToolDispatchResult::Done(r)) => {
                     info!(tool = %call.name, "Tool call completed after confirmation");
                     messages.push(ChatMessage::tool_result(&call.id, r));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 }
                 Ok(ToolDispatchResult::DoneAndReturn(r)) => {
                     info!(
@@ -803,6 +816,7 @@ pub async fn run_loop(
                         &call.id,
                         "Internal error: tool dispatch failed after approval.".to_string(),
                     ));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 }
             }
         }
@@ -851,6 +865,7 @@ pub async fn run_loop(
                      Acknowledge that the action was not approved and ask how they'd like to proceed."
                         .to_string(),
                 ));
+                let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 continue;
             }
 
@@ -866,10 +881,12 @@ pub async fn run_loop(
                         &call.id,
                         format!("Tool error: {}", e),
                     ));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 }
                 Ok(ToolDispatchResult::Done(r)) => {
                     info!(tool = %call.name, "Tool call completed after async approval");
                     messages.push(ChatMessage::tool_result(&call.id, r));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 }
                 Ok(ToolDispatchResult::DoneAndReturn(r)) => {
                     info!(
@@ -885,6 +902,7 @@ pub async fn run_loop(
                         &call.id,
                         "Internal error: tool dispatch failed after approval.".to_string(),
                     ));
+                    let _ = tx.send(LoopEvent::ToolMessage(messages.last().unwrap().clone())).await;
                 }
             }
         }

@@ -520,6 +520,59 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         "Turn setup complete, entering tool loop"
     );
 
+    // ── Interceptor channel for incremental persistence ──────────────────────
+    // For top-level turns (chain_depth == 0), intercept ToolMessage events to
+    // persist them to the DB as they happen, and accumulate Token text for
+    // reconnection. Delegated turns skip this entirely.
+    let incremental_msg_ids: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let (loop_tx, interceptor_handle) = if chain_depth == 0 && thread_id.is_some() {
+        let (intercept_tx, mut intercept_rx) = mpsc::channel::<LoopEvent>(64);
+        let fwd_tx = tx.clone();
+        let int_state = state.clone();
+        let int_pipe_id = pipe_id.clone();
+        let int_session_id = session_id.clone();
+        let int_thread_id = thread_id.clone().unwrap();
+        let int_msg_ids = incremental_msg_ids.clone();
+        let handle = tokio::spawn(async move {
+            while let Some(event) = intercept_rx.recv().await {
+                match &event {
+                    LoopEvent::Token(t) => {
+                        int_state
+                            .thread_accumulated_text
+                            .lock()
+                            .await
+                            .entry(int_thread_id.clone())
+                            .or_default()
+                            .push_str(t);
+                        // Forward to original tx
+                        let _ = fwd_tx.send(event).await;
+                    }
+                    LoopEvent::ToolMessage(msg) => {
+                        // Persist immediately, do NOT forward to SSE
+                        if let Some(id) = persist_tool_message_incremental(
+                            &int_state.db,
+                            &int_pipe_id,
+                            &int_session_id,
+                            &int_thread_id,
+                            msg,
+                        )
+                        .await
+                        {
+                            int_msg_ids.lock().await.push(id);
+                        }
+                    }
+                    _ => {
+                        // Forward everything else as-is
+                        let _ = fwd_tx.send(event).await;
+                    }
+                }
+            }
+        });
+        (intercept_tx, Some(handle))
+    } else {
+        (tx.clone(), None)
+    };
+
     let tool_loop_start = Instant::now();
     let loop_output = run_loop(
         provider,
@@ -527,7 +580,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         tool_specs,
         temperature,
         max_tool_loop_iterations,
-        tx.clone(),
+        loop_tx,
         enable_streaming,
         user_language.clone(),
         move |tool_name| {
@@ -1145,6 +1198,14 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     }
 
     let loop_output = loop_output?;
+
+    // Wait for the interceptor to finish processing any remaining events.
+    // The interceptor's input channel was dropped when run_loop returned,
+    // so this will complete promptly.
+    if let Some(handle) = interceptor_handle {
+        let _ = handle.await;
+    }
+
     let LoopOutput {
         reply,
         tool_messages,
@@ -1162,109 +1223,128 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     );
 
     // ── Persist tool interaction messages ─────────────────────────────────────
-    // These are the assistant-with-tool-calls and tool-result messages
-    // exchanged during the agentic loop. Persisting them lets context.rs
-    // reconstruct the full tool interaction sequence for future turns.
     //
-    // Delegated turns (chain_depth > 0) skip message persistence entirely.
-    // The parent orchestrator already captures the delegation result via the
-    // delegate_to_agent tool call/result pair and its own reply message.
-    // Persisting the delegated agent's internal tool messages would cause
-    // duplicate entries (tool badges, raw JSON, duplicate attachments) in the
-    // thread for both web and iOS.
-    //
-    // Compaction: when the orchestrator used delegation, only persist the
-    // delegation tool call/result pairs and drop intermediate non-delegation
-    // tool interactions. This prevents multi-hop chains from filling the
-    // 50-message context window with internal orchestrator reasoning.
+    // Three cases:
+    // 1. chain_depth > 0 (delegated turn): skip entirely — parent handles it.
+    // 2. chain_depth == 0 with thread_id: interceptor already persisted
+    //    incrementally. If delegation was used, clean up non-delegation
+    //    messages from the incremental batch.
+    // 3. chain_depth == 0 without thread_id: no interceptor ran, batch
+    //    persist as before (rare — thread-less turns like event fanout).
     let persist_start = Instant::now();
-
-    // Skip all message persistence for delegated (nested) turns
     let skip_message_persist = chain_depth > 0;
+    let incremental_persisted = chain_depth == 0 && thread_id.is_some();
 
-    let has_delegation = !skip_message_persist && tool_messages.iter().any(|m| {
-        m.tool_calls
-            .iter()
-            .any(|tc| tc.name == crate::agents::delegation::TOOL_NAME)
-    });
-    let delegation_call_ids: std::collections::HashSet<String> = if has_delegation {
-        tool_messages
-            .iter()
-            .flat_map(|m| {
-                m.tool_calls
-                    .iter()
-                    .filter(|tc| tc.name == crate::agents::delegation::TOOL_NAME)
-                    .map(|tc| tc.id.clone())
-            })
-            .collect()
-    } else {
-        std::collections::HashSet::new()
-    };
-    let messages_to_persist: Vec<&ChatMessage> = if skip_message_persist {
-        Vec::new()
-    } else if has_delegation {
-        tool_messages
-            .iter()
-            .filter(|msg| {
-                // Keep assistant messages that contain at least one delegation tool call
-                if !msg.tool_calls.is_empty() {
-                    return msg
-                        .tool_calls
-                        .iter()
-                        .any(|tc| tc.name == crate::agents::delegation::TOOL_NAME);
-                }
-                // Keep tool results that correspond to a delegation call
-                if let Some(ref tcid) = msg.tool_call_id {
-                    return delegation_call_ids.contains(tcid);
-                }
-                false
-            })
-            .collect()
-    } else {
-        tool_messages.iter().collect()
-    };
     if skip_message_persist {
         info!(
             chain_depth,
             total_tool_messages = tool_messages.len(),
             "Skipped tool message persistence (delegated turn)"
         );
-    } else if has_delegation {
-        info!(
-            total_tool_messages = tool_messages.len(),
-            persisted_tool_messages = messages_to_persist.len(),
-            "Compacted tool messages (delegation-only)"
-        );
-    }
-    for msg in &messages_to_persist {
-        let msg_id = Uuid::new_v4().to_string();
-        let role_str = msg.role.as_str();
-        let content_str = msg.content.as_text();
-        let tool_call_id = msg.tool_call_id.as_deref();
-        let tool_calls_json = if msg.tool_calls.is_empty() {
-            None
+    } else if incremental_persisted {
+        // Messages were already written to DB by the interceptor.
+        // If delegation was used, delete the non-delegation messages.
+        let has_delegation = tool_messages.iter().any(|m| {
+            m.tool_calls
+                .iter()
+                .any(|tc| tc.name == crate::agents::delegation::TOOL_NAME)
+        });
+        if has_delegation {
+            let delegation_call_ids: HashSet<String> = tool_messages
+                .iter()
+                .flat_map(|m| {
+                    m.tool_calls
+                        .iter()
+                        .filter(|tc| tc.name == crate::agents::delegation::TOOL_NAME)
+                        .map(|tc| tc.id.clone())
+                })
+                .collect();
+
+            // Determine which incrementally-persisted messages to KEEP.
+            // Walk tool_messages and incremental_msg_ids in lockstep — they
+            // correspond 1:1 since the interceptor persists every ToolMessage
+            // event in order.
+            let all_ids = incremental_msg_ids.lock().await;
+            let mut ids_to_delete: Vec<String> = Vec::new();
+            for (idx, msg) in tool_messages.iter().enumerate() {
+                let dominated_by_delegation = if !msg.tool_calls.is_empty() {
+                    msg.tool_calls
+                        .iter()
+                        .any(|tc| tc.name == crate::agents::delegation::TOOL_NAME)
+                } else if let Some(ref tcid) = msg.tool_call_id {
+                    delegation_call_ids.contains(tcid)
+                } else {
+                    false
+                };
+                if !dominated_by_delegation {
+                    if let Some(id) = all_ids.get(idx) {
+                        ids_to_delete.push(id.clone());
+                    }
+                }
+            }
+
+            if !ids_to_delete.is_empty() {
+                let placeholders = ids_to_delete
+                    .iter()
+                    .map(|_| "?")
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let sql = format!(
+                    "DELETE FROM messages WHERE id IN ({})",
+                    placeholders
+                );
+                let mut q = sqlx::query(&sql);
+                for id in &ids_to_delete {
+                    q = q.bind(id);
+                }
+                if let Err(e) = q.execute(&state.db).await {
+                    error!("Failed to compact delegation messages: {e}");
+                }
+                info!(
+                    total_tool_messages = tool_messages.len(),
+                    deleted = ids_to_delete.len(),
+                    kept = all_ids.len() - ids_to_delete.len(),
+                    "Compacted incrementally persisted messages (delegation-only)"
+                );
+            }
         } else {
-            serde_json::to_string(&msg.tool_calls).ok()
-        };
-        let now_ms = chrono::Utc::now()
-            .format("%Y-%m-%dT%H:%M:%S%.3f")
-            .to_string();
-        if let Err(e) = sqlx::query(
-            "INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content, tool_call_id, tool_calls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&msg_id)
-        .bind(&pipe_id)
-        .bind(&session_id)
-        .bind(&thread_id)
-        .bind(role_str)
-        .bind(content_str)
-        .bind(tool_call_id)
-        .bind(tool_calls_json.as_deref())
-        .bind(&now_ms)
-        .execute(&state.db)
-        .await
-        {
-            error!("Failed to persist tool message: {e}");
+            info!(
+                total_tool_messages = tool_messages.len(),
+                "Tool messages already persisted incrementally"
+            );
+        }
+    } else {
+        // Batch persist for thread-less turns (no interceptor ran)
+        for msg in &tool_messages {
+            let msg_id = Uuid::new_v4().to_string();
+            let role_str = msg.role.as_str();
+            let content_str = msg.content.as_text();
+            let tool_call_id = msg.tool_call_id.as_deref();
+            let tool_calls_json = if msg.tool_calls.is_empty() {
+                None
+            } else {
+                serde_json::to_string(&msg.tool_calls).ok()
+            };
+            let now_ms = chrono::Utc::now()
+                .format("%Y-%m-%dT%H:%M:%S%.3f")
+                .to_string();
+            if let Err(e) = sqlx::query(
+                "INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content, tool_call_id, tool_calls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&msg_id)
+            .bind(&pipe_id)
+            .bind(&session_id)
+            .bind(&thread_id)
+            .bind(role_str)
+            .bind(content_str)
+            .bind(tool_call_id)
+            .bind(tool_calls_json.as_deref())
+            .bind(&now_ms)
+            .execute(&state.db)
+            .await
+            {
+                error!("Failed to persist tool message: {e}");
+            }
         }
     }
 
@@ -1497,6 +1577,53 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         );
         output
     })
+}
+
+// ── Incremental tool message persistence ─────────────────────────────────────
+
+/// Persist a single tool interaction message to the database immediately.
+/// Used by the forwarder task to write tool messages as they happen during
+/// the loop, rather than waiting for the turn to complete.
+/// Returns the generated message ID so the caller can track it for
+/// delegation compaction.
+async fn persist_tool_message_incremental(
+    db: &sqlx::SqlitePool,
+    pipe_id: &str,
+    session_id: &str,
+    thread_id: &str,
+    msg: &ChatMessage,
+) -> Option<String> {
+    let msg_id = Uuid::new_v4().to_string();
+    let role_str = msg.role.as_str();
+    let content_str = msg.content.as_text();
+    let tool_call_id = msg.tool_call_id.as_deref();
+    let tool_calls_json = if msg.tool_calls.is_empty() {
+        None
+    } else {
+        serde_json::to_string(&msg.tool_calls).ok()
+    };
+    let now_ms = chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%S%.3f")
+        .to_string();
+    if let Err(e) = sqlx::query(
+        "INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content, tool_call_id, tool_calls_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&msg_id)
+    .bind(pipe_id)
+    .bind(session_id)
+    .bind(thread_id)
+    .bind(role_str)
+    .bind(content_str)
+    .bind(tool_call_id)
+    .bind(tool_calls_json.as_deref())
+    .bind(&now_ms)
+    .execute(db)
+    .await
+    {
+        error!("Failed to incrementally persist tool message: {e}");
+        return None;
+    }
+    Some(msg_id)
 }
 
 // ── Policy check + dispatch helper ────────────────────────────────────────────
@@ -2267,7 +2394,7 @@ fn confirmation_only_sender(parent_tx: LoopSender) -> LoopSender {
                     let _ = parent_tx.send(event).await;
                 }
                 // Discard tokens, artifacts, and Done to prevent duplicate streaming.
-                LoopEvent::Token(_) | LoopEvent::Artifacts(_) | LoopEvent::Done => {}
+                LoopEvent::Token(_) | LoopEvent::Artifacts(_) | LoopEvent::Done | LoopEvent::ToolMessage(_) => {}
                 // Forward errors so the parent stream can surface delegation
                 // failures instead of silently swallowing them.
                 LoopEvent::Error(_) => {

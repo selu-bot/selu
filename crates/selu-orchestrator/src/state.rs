@@ -62,6 +62,10 @@ pub struct AppState {
     /// Allows clients reconnecting mid-stream to immediately show what the
     /// agent is doing before the next SSE event arrives.
     pub thread_last_status: Arc<Mutex<HashMap<String, String>>>,
+    /// Maps thread_id → accumulated streaming text for active agent runs.
+    /// Allows clients reconnecting mid-stream to immediately show partial
+    /// reply text before the next SSE token arrives.
+    pub thread_accumulated_text: Arc<Mutex<HashMap<String, String>>>,
     /// Pending tool-call confirmations keyed by confirmation_id.
     /// The oneshot sender is resolved when the user approves or denies.
     pub pending_confirmations: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
@@ -110,6 +114,7 @@ impl AppState {
             stream_notifies: Arc::new(Mutex::new(HashMap::new())),
             thread_active_streams: Arc::new(Mutex::new(HashMap::new())),
             thread_last_status: Arc::new(Mutex::new(HashMap::new())),
+            thread_accumulated_text: Arc::new(Mutex::new(HashMap::new())),
             pending_confirmations: Arc::new(Mutex::new(HashMap::new())),
             pending_approvals: Arc::new(Mutex::new(HashMap::new())),
             agent_update_jobs: Arc::new(Mutex::new(HashMap::new())),

@@ -851,6 +851,11 @@ async fn send_message(
             .lock()
             .await
             .remove(&bg_thread_id);
+        bg_state
+            .thread_accumulated_text
+            .lock()
+            .await
+            .remove(&bg_thread_id);
 
         // Notify mobile devices via push relay (if enabled in settings)
         if crate::web::system_updates::push_notifications_enabled(&bg_state).await {
@@ -917,10 +922,17 @@ async fn active_stream(
                 .await
                 .get(&thread_id_str)
                 .cloned();
+            let accumulated_text = state
+                .thread_accumulated_text
+                .lock()
+                .await
+                .get(&thread_id_str)
+                .cloned();
             Json(serde_json::json!({
                 "stream_id": stream_id,
                 "active": true,
                 "last_status": last_status,
+                "accumulated_text": accumulated_text,
             }))
             .into_response()
         }
@@ -928,6 +940,7 @@ async fn active_stream(
             "stream_id": null,
             "active": false,
             "last_status": null,
+            "accumulated_text": null,
         }))
         .into_response(),
     }
@@ -994,6 +1007,8 @@ async fn stream_response(
                 });
                 ("approval_queued", payload.to_string())
             }
+            // ToolMessage is handled by the interceptor; ignore if it reaches SSE
+            LoopEvent::ToolMessage(_) => ("tool_message", String::new()),
         };
 
         info!(stream_id = %log_stream_id, event_type, "Sending SSE event to mobile client");

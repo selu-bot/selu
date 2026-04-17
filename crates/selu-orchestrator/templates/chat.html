@@ -217,7 +217,7 @@
       {% endfor %}
       {% if let Some(stream_id) = active_stream_id %}
       <!-- Agent is actively working — auto-connect SSE to resume streaming -->
-      <div class="flex justify-start" id="stream-wrap-{{ stream_id }}" style="display:none">
+      <div class="flex justify-start" id="stream-wrap-{{ stream_id }}"{% if active_stream_accumulated_text.is_none() %} style="display:none"{% endif %}>
         <div class="max-w-[72%] bg-surface-raised border border-edge rounded-2xl rounded-bl-md px-4 py-2.5">
           <div class="text-sm leading-relaxed break-words markdown-body streaming" id="stream-{{ stream_id }}"
                hx-ext="sse"
@@ -227,6 +227,20 @@
           </div>
         </div>
       </div>
+      {% if let Some(json_text) = active_stream_accumulated_text %}
+      <div id="accumulated-text-data" data-text="{{ json_text }}" style="display:none"></div>
+      <script>
+      (function(){
+        var el = document.getElementById('stream-{{ stream_id }}');
+        var dataEl = document.getElementById('accumulated-text-data');
+        if(el && dataEl) {
+          var text = JSON.parse(dataEl.dataset.text);
+          appendStreamToken(el, text);
+          dataEl.remove();
+        }
+      })();
+      </script>
+      {% endif %}
       {% if let Some(status) = active_stream_last_status %}
       <div class="flex justify-start" id="active-agent-status">
         <div class="tool-status active">

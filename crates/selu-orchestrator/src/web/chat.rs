@@ -90,6 +90,9 @@ struct ChatTemplate {
     active_stream_id: Option<String>,
     /// Last tool-status text for the active stream (shown before first SSE event).
     active_stream_last_status: Option<String>,
+    /// Accumulated streaming text for the active stream (pre-fills the streaming
+    /// bubble so reconnecting users see partial reply immediately).
+    active_stream_accumulated_text: Option<String>,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -293,6 +296,7 @@ pub async fn chat_index(
         oldest_message_ts: String::new(),
         active_stream_id: None,
         active_stream_last_status: None,
+        active_stream_accumulated_text: None,
     })
 }
 
@@ -322,6 +326,7 @@ pub async fn chat_pipe(
         oldest_message_ts: String::new(),
         active_stream_id: None,
         active_stream_last_status: None,
+        active_stream_accumulated_text: None,
     })
 }
 
@@ -357,6 +362,17 @@ pub async fn chat_thread(
     } else {
         None
     };
+    let active_stream_accumulated_text = if active_stream_id.is_some() {
+        state
+            .thread_accumulated_text
+            .lock()
+            .await
+            .get(&thread_id_str)
+            // JSON-serialize so the value is safe to embed in <script> blocks
+            .and_then(|t| serde_json::to_string(t).ok())
+    } else {
+        None
+    };
 
     render_template(ChatTemplate {
         active_nav: "chat",
@@ -372,6 +388,7 @@ pub async fn chat_thread(
         oldest_message_ts: oldest_message_ts.unwrap_or_default(),
         active_stream_id,
         active_stream_last_status,
+        active_stream_accumulated_text,
     })
 }
 
@@ -837,6 +854,8 @@ pub async fn chat_stream(
                     id = html_escape(&approval_id),
                 )
             }
+            // ToolMessage is handled by the interceptor; ignore if it reaches SSE
+            LoopEvent::ToolMessage(_) => String::new(),
         };
         Ok::<_, Infallible>(axum::response::sse::Event::default().event("token").data(data))
     });
@@ -1203,6 +1222,7 @@ async fn process_message(
     state.active_streams.lock().await.remove(&stream_id);
     state.thread_active_streams.lock().await.remove(&thread_id);
     state.thread_last_status.lock().await.remove(&thread_id);
+    state.thread_accumulated_text.lock().await.remove(&thread_id);
 
     // Notify mobile devices that the agent has finished (completion push + end Live Activity).
     // Use /api/relay/push (not push-device) so the relay looks up the DynamoDB registration,
