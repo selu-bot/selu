@@ -1205,6 +1205,8 @@ async fn process_message(
     state.thread_last_status.lock().await.remove(&thread_id);
 
     // Notify mobile devices that the agent has finished (completion push + end Live Activity).
+    // Use /api/relay/push (not push-device) so the relay looks up the DynamoDB registration,
+    // finds the activity_push_token, and sends a Live Activity "end" push to dismiss it.
     if !push_device_tokens.is_empty() {
         if let Ok(instance_id) = crate::persistence::db::get_instance_id(&state.db).await {
             let lang = crate::i18n::user_language(&state.db, &user_id).await;
@@ -1213,27 +1215,24 @@ async fn process_message(
             } else {
                 "Agent completed"
             };
+            let payload = serde_json::json!({
+                "instance_id": instance_id,
+                "pipe_id": push_pipe_id,
+                "thread_id": push_thread_id,
+                "event": "end",
+                "title": "selu",
+                "body": push_body,
+            });
             let client = reqwest::Client::new();
-            for token in &push_device_tokens {
-                let payload = serde_json::json!({
-                    "instance_id": instance_id,
-                    "device_token": token,
-                    "pipe_id": push_pipe_id,
-                    "thread_id": push_thread_id,
-                    "event": "end",
-                    "title": "selu",
-                    "body": push_body,
-                });
-                match client
-                    .post("https://selu.bot/api/relay/push-device")
-                    .header("X-Instance-Id", &instance_id)
-                    .json(&payload)
-                    .send()
-                    .await
-                {
-                    Ok(resp) => tracing::debug!(status = %resp.status(), "Completion push sent (web)"),
-                    Err(e) => warn!(error = %e, "Completion push failed (web)"),
-                }
+            match client
+                .post("https://selu.bot/api/relay/push")
+                .header("X-Instance-Id", &instance_id)
+                .json(&payload)
+                .send()
+                .await
+            {
+                Ok(resp) => tracing::debug!(status = %resp.status(), "Completion push sent (web)"),
+                Err(e) => warn!(error = %e, "Completion push failed (web)"),
             }
         }
     }
