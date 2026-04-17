@@ -1068,6 +1068,53 @@ async fn process_message(
         warn!(stream_id = %stream_id, sse_wait_ms, "Slow SSE client connection");
     }
 
+    // Start Live Activity on all registered iOS devices for this user (if push enabled).
+    // This mirrors what mobile.rs does with a single device_token, but broadcasts
+    // to all devices so the user sees agent activity on their phone(s) even when
+    // they started the conversation from the web.
+    let push_device_tokens: Vec<String> =
+        if crate::web::system_updates::push_notifications_enabled(&state).await {
+            sqlx::query_scalar::<_, String>(
+                "SELECT device_token FROM mobile_device_tokens WHERE user_id = ?",
+            )
+            .bind(&user_id)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+    if !push_device_tokens.is_empty() {
+        if let Ok(instance_id) = crate::persistence::db::get_instance_id(&state.db).await {
+            let title: String = if text.is_empty() {
+                "New conversation".to_string()
+            } else {
+                text.chars().take(40).collect()
+            };
+            let client = reqwest::Client::new();
+            for token in &push_device_tokens {
+                let payload = serde_json::json!({
+                    "instance_id": instance_id,
+                    "pipe_id": pipe_id,
+                    "thread_id": thread_id,
+                    "thread_title": title,
+                    "device_token": token,
+                });
+                match client
+                    .post("https://selu.bot/api/relay/start-activity")
+                    .header("X-Instance-Id", &instance_id)
+                    .json(&payload)
+                    .send()
+                    .await
+                {
+                    Ok(resp) => tracing::debug!(status = %resp.status(), "LiveActivity start push sent (web)"),
+                    Err(e) => warn!(error = %e, "LiveActivity start push failed (web)"),
+                }
+            }
+        }
+    }
+
     // Fetch pipe's default agent for routing
     let default_agent_id = sqlx::query!("SELECT default_agent_id FROM pipes WHERE id = ?", pipe_id)
         .fetch_optional(&state.db)
@@ -1105,6 +1152,10 @@ async fn process_message(
             }
         }
     });
+
+    // Keep copies for the completion push after the turn
+    let push_pipe_id = pipe_id.clone();
+    let push_thread_id = thread_id.clone();
 
     let params = TurnParams {
         pipe_id,
@@ -1152,6 +1203,40 @@ async fn process_message(
     state.active_streams.lock().await.remove(&stream_id);
     state.thread_active_streams.lock().await.remove(&thread_id);
     state.thread_last_status.lock().await.remove(&thread_id);
+
+    // Notify mobile devices that the agent has finished (completion push + end Live Activity).
+    if !push_device_tokens.is_empty() {
+        if let Ok(instance_id) = crate::persistence::db::get_instance_id(&state.db).await {
+            let lang = crate::i18n::user_language(&state.db, &user_id).await;
+            let push_body = if lang.starts_with("de") {
+                "Agent ist fertig"
+            } else {
+                "Agent completed"
+            };
+            let client = reqwest::Client::new();
+            for token in &push_device_tokens {
+                let payload = serde_json::json!({
+                    "instance_id": instance_id,
+                    "device_token": token,
+                    "pipe_id": push_pipe_id,
+                    "thread_id": push_thread_id,
+                    "event": "end",
+                    "title": "selu",
+                    "body": push_body,
+                });
+                match client
+                    .post("https://selu.bot/api/relay/push-device")
+                    .header("X-Instance-Id", &instance_id)
+                    .json(&payload)
+                    .send()
+                    .await
+                {
+                    Ok(resp) => tracing::debug!(status = %resp.status(), "Completion push sent (web)"),
+                    Err(e) => warn!(error = %e, "Completion push failed (web)"),
+                }
+            }
+        }
+    }
 }
 
 async fn parse_chat_send_payload_multipart(
