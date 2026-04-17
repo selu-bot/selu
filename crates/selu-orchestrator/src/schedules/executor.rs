@@ -126,6 +126,15 @@ async fn execute_on_pipe(
 
     let thread_id = thread.id.to_string();
 
+    // Pre-set the thread title from the schedule prompt so the sidebar shows
+    // something meaningful instead of falling back to the first message content
+    // (which would be the raw tool-call summary like "[calling set_reminder]").
+    let title: String = prompt.chars().take(60).collect::<String>();
+    let title = title.trim();
+    if !title.is_empty() {
+        let _ = thread_mgr::set_title(&state.db, &thread_id, title).await;
+    }
+
     // Persist a "status" label so the chat UI shows this is a scheduled run.
     // The actual prompt is still persisted as a normal "user" message by
     // run_turn — the LLM requires the conversation to start with a user message.
