@@ -878,6 +878,9 @@ async fn check_for_updates_via_sidecar(
     update_state.available_changelog_body = metadata.changelog_body.clone();
     update_state.last_checked_at = chrono::Utc::now().to_rfc3339();
 
+    // Reset status so is_update_available doesn't short-circuit on STATUS_CHECKING.
+    update_state.status = STATUS_IDLE.to_string();
+
     match ack {
         Ok(ack) => {
             let has_update = is_update_available(&update_state);
