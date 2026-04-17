@@ -229,75 +229,12 @@
                        class="text-xs font-medium text-coral hover:text-amber bg-coral/10 border border-coral/20 hover:border-coral/40 px-2.5 py-1 rounded-lg transition-colors"
                        data-i18n="agents.setup">Setup</a>
                     {% endif %}
-                    <button onclick="toggleModelPopover(this)"
+                    <button onclick="openModelModal('{{ agent.id }}', '{{ agent.provider_id }}', '{{ agent.model_id }}', '{{ agent.model_display_name }}', 'model')"
                             class="text-xs text-txt hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                             data-i18n="agents.model">Model</button>
-                    <div class="hidden absolute z-20 right-0 mt-1 bg-surface-alt border border-edge rounded-2xl p-4 min-w-[320px] shadow-xl shadow-black/40">
-                      <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/model" class="space-y-3">
-                        <div>
-                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
-                          <select name="provider_id"
-                                  onchange="fetchModels(this.value, this.closest('form').querySelector('select[name=model_id]'))"
-                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
-                            <option value="" data-i18n="agents.globaldefaultoption">-- Global default --</option>
-                            {% for p in providers %}
-                            <option value="{{ p.id }}" {% if p.id == agent.provider_id %}selected{% endif %}>{{ p.display_name }}</option>
-                            {% endfor %}
-                          </select>
-                        </div>
-                        <div>
-                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.model">Model</label>
-                          <select name="model_id" data-current="{{ agent.model_id }}"
-                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
-                            {% if agent.model_id.is_empty() %}
-                            <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
-                            {% else %}
-                            <option value="{{ agent.model_id }}" selected>{{ agent.model_display_name }}</option>
-                            {% endif %}
-                          </select>
-                        </div>
-                        <div>
-                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.temperature">Temperature</label>
-                          <input type="text" name="temperature" value="0.7" placeholder="0.7"
-                                 class="w-20 bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition" />
-                        </div>
-                        <button type="submit"
-                                class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-all cursor-pointer"
-                                data-i18n="agents.save">Save</button>
-                      </form>
-                    </div>
-                    <button onclick="toggleModelPopover(this)"
+                    <button onclick="openModelModal('{{ agent.id }}', '{{ agent.image_provider_id }}', '{{ agent.image_model_id }}', '{{ agent.image_model_display_name }}', 'image')"
                             class="text-xs text-txt hover:text-txt-heading border border-edge hover:border-muted px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                             data-i18n="agents.image_model">Image model</button>
-                    <div class="hidden absolute z-20 right-0 mt-1 bg-surface-alt border border-edge rounded-2xl p-4 min-w-[320px] shadow-xl shadow-black/40">
-                      <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/image-model" class="space-y-3">
-                        <div>
-                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
-                          <select name="provider_id"
-                                  onchange="fetchModels(this.value, this.closest('form').querySelector('select[name=model_id]'))"
-                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
-                            <option value="" data-i18n="agents.globaldefaultoption">-- Global default --</option>
-                            {% for p in providers %}
-                            <option value="{{ p.id }}" {% if p.id == agent.image_provider_id %}selected{% endif %}>{{ p.display_name }}</option>
-                            {% endfor %}
-                          </select>
-                        </div>
-                        <div>
-                          <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.image_model">Image model</label>
-                          <select name="model_id" data-current="{{ agent.image_model_id }}"
-                                  class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading focus:outline-none focus:border-coral transition">
-                            {% if agent.image_model_id.is_empty() %}
-                            <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
-                            {% else %}
-                            <option value="{{ agent.image_model_id }}" selected>{{ agent.image_model_display_name }}</option>
-                            {% endif %}
-                          </select>
-                        </div>
-                        <button type="submit"
-                                class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-all cursor-pointer"
-                                data-i18n="agents.save">Save</button>
-                      </form>
-                    </div>
                     {% if !agent.is_bundled %}
                     <!-- Auto-update toggle -->
                     <form method="POST" action="{{ base_path }}/agents/{{ agent.id }}/auto-update" class="inline">
@@ -426,6 +363,51 @@
   </div>
 </div>
 
+<!-- Model Selection Modal -->
+<div id="model-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target===this)closeModelModal()">
+  <div class="bg-surface-raised border border-edge rounded-2xl p-6 w-full max-w-md shadow-2xl shadow-black/40 animate-fadein">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="model-modal-title" class="text-base font-bold text-txt-heading">Model</h3>
+      <button onclick="closeModelModal()" class="text-txt-muted hover:text-txt-heading transition-colors cursor-pointer p-1">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form id="model-modal-form" method="POST" class="space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
+        <select name="provider_id" id="modal-provider-select"
+                onchange="fetchModels(this.value, document.getElementById('modal-model-select'))"
+                class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+          <option value="" data-i18n="agents.globaldefaultoption">-- Global default --</option>
+          {% for p in providers %}
+          <option value="{{ p.id }}">{{ p.display_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.model">Model</label>
+        <select name="model_id" id="modal-model-select"
+                class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+          <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
+        </select>
+      </div>
+      <div id="modal-temp-group">
+        <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.temperature">Temperature</label>
+        <input type="text" name="temperature" value="0.7" placeholder="0.7"
+               class="w-20 bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+      </div>
+      <div class="flex items-center justify-end gap-3 pt-2">
+        <button type="button" onclick="closeModelModal()"
+                class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-muted px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                data-i18n="common.cancel">Cancel</button>
+        <button type="submit"
+                class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
+                data-i18n="agents.save">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
 function showTab(tab) {
   document.getElementById('panel-installed').classList.toggle('hidden', tab !== 'installed');
@@ -473,28 +455,52 @@ function filterMarketplace(filter) {
   });
 }
 
-function toggleModelPopover(btn) {
-  var popover = btn.nextElementSibling;
-  var isHidden = popover.classList.contains('hidden');
-  document.querySelectorAll('[data-popover]').forEach(function(el) { el.classList.add('hidden'); });
-  if (isHidden) {
-    popover.classList.remove('hidden');
-    popover.setAttribute('data-popover', '');
-    var provSelect = popover.querySelector('select[name=provider_id]');
-    var modelSelect = popover.querySelector('select[name=model_id]');
-    if (provSelect.value && modelSelect.options.length <= 1) {
-      fetchModels(provSelect.value, modelSelect);
-    }
+function openModelModal(agentId, providerId, modelId, modelDisplayName, kind) {
+  var modal = document.getElementById('model-modal');
+  var form = document.getElementById('model-modal-form');
+  var provSelect = document.getElementById('modal-provider-select');
+  var modelSelect = document.getElementById('modal-model-select');
+  var tempGroup = document.getElementById('modal-temp-group');
+  var titleEl = document.getElementById('model-modal-title');
+
+  if (kind === 'image') {
+    form.action = BASE_PATH + '/agents/' + agentId + '/image-model';
+    titleEl.textContent = t('agents.image_model');
+    tempGroup.classList.add('hidden');
   } else {
-    popover.classList.add('hidden');
+    form.action = BASE_PATH + '/agents/' + agentId + '/model';
+    titleEl.textContent = t('agents.model');
+    tempGroup.classList.remove('hidden');
   }
+
+  /* Reset provider select */
+  for (var i = 0; i < provSelect.options.length; i++) {
+    provSelect.options[i].selected = (provSelect.options[i].value === providerId);
+  }
+
+  /* Reset model select */
+  if (modelId) {
+    modelSelect.innerHTML = '<option value="' + modelId + '" selected>' + modelDisplayName + '</option>';
+    modelSelect.dataset.current = modelId;
+  } else {
+    modelSelect.innerHTML = '<option value="">' + t('agents.selectproviderfirst') + '</option>';
+    modelSelect.dataset.current = '';
+  }
+
+  /* Load models if provider is set */
+  if (providerId) {
+    fetchModels(providerId, modelSelect);
+  }
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
 }
 
-document.addEventListener('click', function(e) {
-  if (!e.target.closest('[data-popover]') && !e.target.closest('button')) {
-    document.querySelectorAll('[data-popover]').forEach(function(el) { el.classList.add('hidden'); });
-  }
-});
+function closeModelModal() {
+  var modal = document.getElementById('model-modal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
 
 function fetchModels(providerId, target) {
   var sel = (typeof target === 'string') ? document.querySelector(target) : target;
