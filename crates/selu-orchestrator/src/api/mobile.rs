@@ -56,6 +56,8 @@ pub fn router() -> Router<AppState> {
         .route("/api/mobile/schedules", get(list_schedules))
         .route("/api/mobile/schedules/{schedule_id}", delete(delete_schedule))
         .route("/api/mobile/schedules/{schedule_id}/toggle", post(toggle_schedule))
+        // Device token registration (for server-initiated push, e.g. schedules)
+        .route("/api/mobile/device-token", post(register_device_token))
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -164,6 +166,11 @@ struct SendResponse {
 #[derive(Deserialize)]
 struct ApprovalQuery {
     approved: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct DeviceTokenRequest {
+    device_token: String,
 }
 
 // ── Auth helper ──────────────────────────────────────────────────────────────
@@ -298,6 +305,43 @@ async fn instance_info(
         push_enabled,
     })
     .into_response()
+}
+
+// ── POST /api/mobile/device-token ────────────────────────────────────────────
+
+async fn register_device_token(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<DeviceTokenRequest>,
+) -> impl IntoResponse {
+    let user = match extract_mobile_user(&headers, &state.db).await {
+        Ok(u) => u,
+        Err(s) => return s.into_response(),
+    };
+
+    if req.device_token.is_empty() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    match sqlx::query!(
+        "INSERT INTO mobile_device_tokens (user_id, device_token, updated_at)
+         VALUES (?, ?, datetime('now'))
+         ON CONFLICT (user_id, device_token) DO UPDATE SET updated_at = datetime('now')",
+        user.user_id,
+        req.device_token,
+    )
+    .execute(&state.db)
+    .await
+    {
+        Ok(_) => {
+            info!(user_id = %user.user_id, "Device token registered");
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to register device token");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 // ── GET /api/mobile/pipes ────────────────────────────────────────────────────

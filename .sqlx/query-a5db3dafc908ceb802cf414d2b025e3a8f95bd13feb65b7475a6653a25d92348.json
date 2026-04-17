@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO mobile_device_tokens (user_id, device_token, updated_at)\n         VALUES (?, ?, datetime('now'))\n         ON CONFLICT (user_id, device_token) DO UPDATE SET updated_at = datetime('now')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a5db3dafc908ceb802cf414d2b025e3a8f95bd13feb65b7475a6653a25d92348"
+}

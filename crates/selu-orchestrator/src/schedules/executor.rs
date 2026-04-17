@@ -261,6 +261,57 @@ async fn execute_on_pipe(
             );
         }
     }
+
+    // Notify the schedule owner's mobile device(s) via push (if enabled).
+    if crate::web::system_updates::push_notifications_enabled(&state).await {
+        let instance_id = match crate::persistence::db::get_instance_id(&state.db).await {
+            Ok(id) => id,
+            Err(e) => {
+                warn!(error = %e, "Failed to load instance_id for schedule push");
+                return;
+            }
+        };
+
+        let tokens: Vec<String> = sqlx::query_scalar::<_, String>(
+            "SELECT device_token FROM mobile_device_tokens WHERE user_id = ?",
+        )
+        .bind(user_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
+        if tokens.is_empty() {
+            debug!(user_id = %user_id, "No device tokens for schedule push");
+            return;
+        }
+
+        let push_body = if user_lang.starts_with("de") {
+            "Zeitplan abgeschlossen"
+        } else {
+            "Schedule completed"
+        };
+        let client = reqwest::Client::new();
+        for token in &tokens {
+            let payload = serde_json::json!({
+                "instance_id": instance_id,
+                "device_token": token,
+                "pipe_id": pipe_id,
+                "thread_id": thread_id,
+                "title": "selu",
+                "body": push_body,
+            });
+            match client
+                .post("https://selu.bot/api/relay/push-device")
+                .header("X-Instance-Id", &instance_id)
+                .json(&payload)
+                .send()
+                .await
+            {
+                Ok(resp) => info!(status = %resp.status(), "Schedule push sent to device"),
+                Err(e) => warn!(error = %e, "Schedule push to device failed"),
+            }
+        }
+    }
 }
 
 fn resolve_target_agent_id(
