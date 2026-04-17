@@ -1166,12 +1166,23 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     // exchanged during the agentic loop. Persisting them lets context.rs
     // reconstruct the full tool interaction sequence for future turns.
     //
+    // Delegated turns (chain_depth > 0) skip message persistence entirely.
+    // The parent orchestrator already captures the delegation result via the
+    // delegate_to_agent tool call/result pair and its own reply message.
+    // Persisting the delegated agent's internal tool messages would cause
+    // duplicate entries (tool badges, raw JSON, duplicate attachments) in the
+    // thread for both web and iOS.
+    //
     // Compaction: when the orchestrator used delegation, only persist the
     // delegation tool call/result pairs and drop intermediate non-delegation
     // tool interactions. This prevents multi-hop chains from filling the
     // 50-message context window with internal orchestrator reasoning.
     let persist_start = Instant::now();
-    let has_delegation = tool_messages.iter().any(|m| {
+
+    // Skip all message persistence for delegated (nested) turns
+    let skip_message_persist = chain_depth > 0;
+
+    let has_delegation = !skip_message_persist && tool_messages.iter().any(|m| {
         m.tool_calls
             .iter()
             .any(|tc| tc.name == crate::agents::delegation::TOOL_NAME)
@@ -1189,7 +1200,9 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     } else {
         std::collections::HashSet::new()
     };
-    let messages_to_persist: Vec<&ChatMessage> = if has_delegation {
+    let messages_to_persist: Vec<&ChatMessage> = if skip_message_persist {
+        Vec::new()
+    } else if has_delegation {
         tool_messages
             .iter()
             .filter(|msg| {
@@ -1210,7 +1223,13 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     } else {
         tool_messages.iter().collect()
     };
-    if has_delegation {
+    if skip_message_persist {
+        info!(
+            chain_depth,
+            total_tool_messages = tool_messages.len(),
+            "Skipped tool message persistence (delegated turn)"
+        );
+    } else if has_delegation {
         info!(
             total_tool_messages = tool_messages.len(),
             persisted_tool_messages = messages_to_persist.len(),
@@ -1250,7 +1269,10 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     }
 
     // ── Persist assistant reply ───────────────────────────────────────────────
-    let reply_msg_id = if !reply.is_empty() {
+    // Delegated turns skip reply persistence — the parent orchestrator
+    // captures the delegated reply as the delegate_to_agent tool result
+    // and writes its own summary reply for the thread.
+    let reply_msg_id = if !reply.is_empty() && !skip_message_persist {
         let reply_id = Uuid::new_v4().to_string();
         let asst_role = Role::Assistant.to_string();
         let now_ms = chrono::Utc::now()
@@ -1269,7 +1291,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     } else {
         None
     };
-    if !reply.is_empty() {
+    if !reply.is_empty() && !skip_message_persist {
 
         // ── Personality extraction (best-effort, non-blocking) ────────────────
         {
@@ -1408,7 +1430,11 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
             merged_attachments.push(attachment);
         }
     }
-    if !merged_attachments.is_empty() {
+    // Delegated turns skip artifact persistence — the parent orchestrator
+    // collects delegated attachments via TurnOutput and persists them on its
+    // own reply message, preventing duplicate thread_artifacts entries and
+    // duplicate attachment display.
+    if !merged_attachments.is_empty() && !skip_message_persist {
         crate::agents::artifacts::persist_refs_for_thread(
             &state.db,
             &state.artifacts,
@@ -1421,7 +1447,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     }
 
     // Persist attachment metadata on the reply message so it survives reload.
-    if !merged_attachments.is_empty() {
+    if !merged_attachments.is_empty() && !skip_message_persist {
         if let Some(ref mid) = reply_msg_id {
             let att_json = serde_json::to_string(&merged_attachments).unwrap_or_default();
             if let Err(e) = sqlx::query!(
