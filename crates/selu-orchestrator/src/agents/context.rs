@@ -346,22 +346,46 @@ pub async fn build(
     }
 
     // Second pass: sanitize tool_use / tool_result pairing.
-    // Collect the set of tool_call IDs that have a corresponding tool_use in
-    // a preceding assistant message. Drop any orphaned tool_result messages
-    // (e.g. from cross-session history loaded via shared thread_id).
-    let mut known_tool_call_ids: std::collections::HashSet<String> =
+    // The LLM API requires every tool_use block to be followed by a matching
+    // tool_result. Orphaned entries arise when:
+    //   - A delegated agent loads thread history that includes the parent's
+    //     in-progress tool_use (persisted incrementally) before its result exists.
+    //   - Cross-session history has incomplete interactions.
+    //
+    // Strategy: two scans.
+    //   1. Collect all tool_result IDs present in the history.
+    //   2. Keep assistant+tool_calls only if ALL their call IDs have a result.
+    //      Keep tool_results only if a matching tool_use was kept.
+
+    // Scan 1: gather every tool_result ID in the history.
+    let result_ids: std::collections::HashSet<String> = history_msgs
+        .iter()
+        .filter_map(|m| m.tool_call_id.clone())
+        .collect();
+
+    // Scan 2: filter messages, tracking which tool_call IDs we actually kept.
+    let mut kept_tool_call_ids: std::collections::HashSet<String> =
         std::collections::HashSet::new();
     let mut sanitized: Vec<ChatMessage> = Vec::with_capacity(history_msgs.len());
     for msg in history_msgs {
         if !msg.tool_calls.is_empty() {
-            // Assistant message with tool calls — register all call IDs.
-            for tc in &msg.tool_calls {
-                known_tool_call_ids.insert(tc.id.clone());
+            // Assistant message with tool calls — keep only if every call
+            // has a corresponding result in the history.
+            let all_have_results = msg.tool_calls.iter().all(|tc| result_ids.contains(&tc.id));
+            if all_have_results {
+                for tc in &msg.tool_calls {
+                    kept_tool_call_ids.insert(tc.id.clone());
+                }
+                sanitized.push(msg);
+            } else {
+                debug!(
+                    tool_ids = ?msg.tool_calls.iter().map(|tc| &tc.id).collect::<Vec<_>>(),
+                    "Dropped assistant message with orphaned tool_use(s) from history (missing tool_result)"
+                );
             }
-            sanitized.push(msg);
         } else if let Some(ref tc_id) = msg.tool_call_id {
-            // Tool result — only keep if we saw a matching tool_use.
-            if known_tool_call_ids.contains(tc_id) {
+            // Tool result — only keep if we kept the matching tool_use.
+            if kept_tool_call_ids.contains(tc_id) {
                 sanitized.push(msg);
             } else {
                 debug!(
