@@ -48,6 +48,77 @@ pub struct DueSchedule {
 
 // ── Cron helpers ─────────────────────────────────────────────────────────────
 
+/// Adjust the day-of-week field from standard cron convention (0=Sun..6=Sat)
+/// to the `cron` crate's convention (1=Sun..7=Sat).
+///
+/// The 6-field format is: second minute hour day-of-month month day-of-week.
+/// This function increments each numeric weekday value by 1 in the last field.
+fn adjust_weekday_field(cron_expr: &str) -> Result<String> {
+    let fields: Vec<&str> = cron_expr.split_whitespace().collect();
+    if fields.len() != 6 {
+        anyhow::bail!("Expected 6-field cron expression, got {}: '{}'", fields.len(), cron_expr);
+    }
+
+    let dow = fields[5];
+
+    // Wildcard needs no adjustment
+    if dow == "*" || dow == "?" {
+        return Ok(cron_expr.to_string());
+    }
+
+    // Process comma-separated parts (e.g. "1,3,5" or "1-5,0")
+    let adjusted_parts: Vec<String> = dow
+        .split(',')
+        .map(|part| adjust_dow_part(part))
+        .collect::<Result<Vec<_>>>()?;
+
+    let adjusted_dow = adjusted_parts.join(",");
+    Ok(format!(
+        "{} {} {} {} {} {}",
+        fields[0], fields[1], fields[2], fields[3], fields[4], adjusted_dow
+    ))
+}
+
+/// Adjust a single day-of-week part: a number, range (e.g. "1-5"), or step (e.g. "*/2").
+fn adjust_dow_part(part: &str) -> Result<String> {
+    // Step expressions like */2 or 1-5/2
+    if let Some((base, step)) = part.split_once('/') {
+        let adjusted_base = if base == "*" {
+            "*".to_string()
+        } else {
+            adjust_dow_part(base)?
+        };
+        return Ok(format!("{}/{}", adjusted_base, step));
+    }
+
+    // Range like 1-5
+    if let Some((start, end)) = part.split_once('-') {
+        let s: u8 = start.parse().map_err(|_| anyhow::anyhow!("Invalid weekday: {}", start))?;
+        let e: u8 = end.parse().map_err(|_| anyhow::anyhow!("Invalid weekday: {}", end))?;
+        return Ok(format!("{}-{}", shift_dow(s), shift_dow(e)));
+    }
+
+    // Single number
+    let n: u8 = part.parse().map_err(|_| anyhow::anyhow!("Invalid weekday: {}", part))?;
+    Ok(shift_dow(n).to_string())
+}
+
+/// Map standard weekday (0/7=Sun, 1=Mon..6=Sat) to crate weekday (1=Sun..7=Sat).
+fn shift_dow(n: u8) -> u8 {
+    match n {
+        0 | 7 => 1, // Sunday
+        1..=6 => n + 1,
+        _ => n + 1, // let the crate reject out-of-range values
+    }
+}
+
+/// Parse a cron expression, adjusting the weekday field for the crate's convention.
+fn parse_cron(cron_expr: &str) -> Result<CronSchedule> {
+    let adjusted = adjust_weekday_field(cron_expr)?;
+    CronSchedule::from_str(&adjusted)
+        .map_err(|e| anyhow::anyhow!("Invalid cron expression '{}': {}", cron_expr, e))
+}
+
 /// Compute the next run time for a cron expression in the user's timezone,
 /// returning the result as UTC.
 pub fn compute_next_run(
@@ -59,8 +130,7 @@ pub fn compute_next_run(
         .parse()
         .map_err(|_| anyhow::anyhow!("Invalid timezone: {}", timezone))?;
 
-    let schedule = CronSchedule::from_str(cron_expr)
-        .map_err(|e| anyhow::anyhow!("Invalid cron expression '{}': {}", cron_expr, e))?;
+    let schedule = parse_cron(cron_expr)?;
 
     // Convert `after` to the user's local time, find the next occurrence,
     // then convert back to UTC.
@@ -75,8 +145,7 @@ pub fn compute_next_run(
 
 /// Validate that a cron expression is parseable.
 pub fn validate_cron(cron_expr: &str) -> Result<()> {
-    CronSchedule::from_str(cron_expr)
-        .map_err(|e| anyhow::anyhow!("Invalid cron expression '{}': {}", cron_expr, e))?;
+    parse_cron(cron_expr)?;
     Ok(())
 }
 
@@ -907,5 +976,24 @@ mod tests {
     fn test_parse_user_datetime_to_utc_with_offset_keeps_absolute_time() {
         let dt = parse_user_datetime_to_utc("2026-03-04T11:10:00+01:00", "UTC").unwrap();
         assert_eq!(dt.format("%Y-%m-%d %H:%M").to_string(), "2026-03-04 10:10");
+    }
+
+    #[test]
+    fn test_weekday_cron_1_to_5_means_monday_to_friday() {
+        // 0 0 21 * * 1-5 = weekdays at 21:00
+        // After Friday 2026-04-17 22:00 UTC, next should be Monday 2026-04-20
+        let cron = "0 0 21 * * 1-5";
+        let after = chrono::NaiveDate::from_ymd_opt(2026, 4, 17)
+            .unwrap()
+            .and_hms_opt(22, 0, 0)
+            .unwrap()
+            .and_utc();
+
+        let next = compute_next_run(cron, "UTC", after).unwrap();
+        // Must be Monday 2026-04-20, NOT Sunday 2026-04-19
+        assert_eq!(
+            next.format("%Y-%m-%d %H:%M %A").to_string(),
+            "2026-04-20 21:00 Monday"
+        );
     }
 }
