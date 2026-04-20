@@ -271,7 +271,20 @@ async fn execute_on_pipe(
         }
     }
 
-    // Notify the schedule owner's mobile device(s) via push (if enabled).
+    // Notify the schedule owner's mobile device(s) via push only when the
+    // schedule targets a "web" (mobile) pipe.  Schedules on iMessage/webhook
+    // pipes already deliver via their channel — no extra push needed.
+    let pipe_transport: Option<String> =
+        sqlx::query_scalar!("SELECT transport FROM pipes WHERE id = ?", pipe_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten();
+    if pipe_transport.as_deref() != Some("web") {
+        debug!(pipe_id = %pipe_id, transport = ?pipe_transport, "Skipping push — not a mobile pipe");
+        return;
+    }
+
     if crate::web::system_updates::push_notifications_enabled(&state).await {
         let instance_id = match crate::persistence::db::get_instance_id(&state.db).await {
             Ok(id) => id,
