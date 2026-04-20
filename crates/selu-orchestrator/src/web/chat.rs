@@ -67,6 +67,7 @@ pub struct MessageView {
     pub created_at: String,
     pub tool_calls: Vec<ToolCallView>,
     pub attachments: Vec<AttachmentView>,
+    pub compacted: bool,
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
@@ -190,6 +191,7 @@ async fn fetch_thread_messages(
             tool_calls,
             attachments,
             created_at: format_timestamp_for_user(&r.created_at, language),
+            compacted: r.compacted,
         });
     }
     (out, has_more, oldest_ts)
@@ -1046,10 +1048,23 @@ fn render_message_html(msg: &MessageView) -> String {
                 rest = chevron_or_close,
             )
         }).collect();
-        format!(
-            r#"<div class="flex justify-start"><div class="tool-calls-group">{}</div></div>"#,
-            calls_html.join("")
-        )
+        if msg.compacted {
+            let step_label = if msg.tool_calls.len() == 1 {
+                "1 intermediate step".to_string()
+            } else {
+                format!("{} intermediate steps", msg.tool_calls.len())
+            };
+            format!(
+                r#"<div class="flex justify-start"><details class="tool-calls-group compacted"><summary class="tool-call-summary compacted-summary"><svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg><span>{label}</span><svg class="tool-result-chevron w-3 h-3 flex-shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></summary>{calls}</details></div>"#,
+                label = html_escape(&step_label),
+                calls = calls_html.join(""),
+            )
+        } else {
+            format!(
+                r#"<div class="flex justify-start"><div class="tool-calls-group">{}</div></div>"#,
+                calls_html.join("")
+            )
+        }
     } else {
         // Assistant message
         format!(

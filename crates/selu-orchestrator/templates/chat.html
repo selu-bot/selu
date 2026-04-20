@@ -175,6 +175,32 @@
           </div>
         </details>
       </div>
+      {% else if msg.compacted && !msg.tool_calls.is_empty() %}
+      <div class="flex justify-start">
+        <details class="tool-calls-group compacted">
+          <summary class="tool-call-summary compacted-summary">
+            <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            <span>{{ msg.tool_calls.len() }} intermediate step{% if msg.tool_calls.len() != 1 %}s{% endif %}</span>
+            <svg class="tool-result-chevron w-3 h-3 flex-shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          {% for tc in msg.tool_calls %}
+          <details class="tool-call-item">
+            <summary class="tool-call-summary">
+              <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
+              <span>{{ tc.name }}</span>
+              {% if !tc.result.is_empty() %}
+              <svg class="tool-result-chevron w-3 h-3 flex-shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              {% endif %}
+            </summary>
+            {% if !tc.result.is_empty() %}
+            <div class="tool-result-body">
+              <pre class="tool-result-pre"><code>{{ tc.result }}</code></pre>
+            </div>
+            {% endif %}
+          </details>
+          {% endfor %}
+        </details>
+      </div>
       {% else if !msg.tool_calls.is_empty() %}
       <div class="flex justify-start">
         <div class="tool-calls-group">

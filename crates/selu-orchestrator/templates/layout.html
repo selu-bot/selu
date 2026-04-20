@@ -275,6 +275,24 @@
       background: none; border: none;
     }
 
+    /* ── Compacted (intermediate steps) ──────────────────────── */
+    .tool-calls-group.compacted {
+      border: 1px dashed var(--c-edge);
+      border-radius: 0.75rem;
+      background: var(--c-surface-raised);
+      opacity: 0.65;
+      overflow: hidden;
+    }
+    .tool-calls-group.compacted:hover { opacity: 0.85; }
+    .tool-calls-group.compacted[open] { opacity: 0.85; }
+    .compacted-summary {
+      font-style: italic;
+    }
+    .tool-calls-group.compacted > .compacted-summary::-webkit-details-marker { display: none; }
+    .tool-calls-group.compacted > .compacted-summary::marker { display: none; content: ''; }
+    .tool-calls-group.compacted .tool-call-item { border-left: none; border-right: none; border-radius: 0; }
+    .tool-calls-group.compacted .tool-call-item:last-child { border-bottom: none; }
+
     /* ── Confirmation card ───────────────────────────────────────── */
     .confirm-card {
       background: var(--c-card-bg); border: 1px solid var(--c-card-border);

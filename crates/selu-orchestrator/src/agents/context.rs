@@ -295,7 +295,7 @@ pub async fn build(
     let history = if let Some(tid) = thread_id {
         sqlx::query(
             "SELECT role, content, tool_call_id, tool_calls_json FROM messages
-             WHERE thread_id = ? AND pipe_id = ?
+             WHERE thread_id = ? AND pipe_id = ? AND compacted = 0
              ORDER BY created_at DESC, rowid DESC
              LIMIT 50",
         )
@@ -307,7 +307,7 @@ pub async fn build(
         sqlx::query(
             "SELECT role, content, tool_call_id, tool_calls_json FROM messages
              WHERE pipe_id = ? AND (session_id = ? OR session_id IS NULL)
-               AND thread_id IS NULL
+               AND thread_id IS NULL AND compacted = 0
              ORDER BY created_at DESC, rowid DESC
              LIMIT 50",
         )

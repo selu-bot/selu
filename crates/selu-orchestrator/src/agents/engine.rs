@@ -1290,7 +1290,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     .collect::<Vec<_>>()
                     .join(",");
                 let sql = format!(
-                    "DELETE FROM messages WHERE id IN ({})",
+                    "UPDATE messages SET compacted = 1 WHERE id IN ({})",
                     placeholders
                 );
                 let mut q = sqlx::query(&sql);
@@ -1298,13 +1298,13 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     q = q.bind(id);
                 }
                 if let Err(e) = q.execute(&state.db).await {
-                    error!("Failed to compact delegation messages: {e}");
+                    error!("Failed to mark delegation messages as compacted: {e}");
                 }
                 info!(
                     total_tool_messages = tool_messages.len(),
-                    deleted = ids_to_delete.len(),
+                    compacted = ids_to_delete.len(),
                     kept = all_ids.len() - ids_to_delete.len(),
-                    "Compacted incrementally persisted messages (delegation-only)"
+                    "Marked non-delegation messages as compacted"
                 );
             }
         } else {

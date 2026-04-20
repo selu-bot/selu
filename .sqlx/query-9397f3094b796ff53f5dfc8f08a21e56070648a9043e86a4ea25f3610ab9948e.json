@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, role, content, created_at, tool_calls_json, tool_call_id, attachments_json\n         FROM messages\n         WHERE thread_id = ? AND (? IS NULL OR created_at < ?)\n         ORDER BY created_at DESC LIMIT ?",
+  "query": "SELECT id, role, content, created_at, tool_calls_json, tool_call_id, attachments_json, compacted\n         FROM messages\n         WHERE thread_id = ? AND (? IS NULL OR created_at < ?)\n         ORDER BY created_at DESC LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -37,6 +37,11 @@
         "name": "attachments_json",
         "ordinal": 6,
         "type_info": "Text"
+      },
+      {
+        "name": "compacted",
+        "ordinal": 7,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
@@ -49,8 +54,9 @@
       false,
       true,
       true,
-      true
+      true,
+      false
     ]
   },
-  "hash": "939a707a99ff46f6bc12732675db3bd637979790736ba1837360cd96ecddd96f"
+  "hash": "9397f3094b796ff53f5dfc8f08a21e56070648a9043e86a4ea25f3610ab9948e"
 }

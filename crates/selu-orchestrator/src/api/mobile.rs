@@ -112,6 +112,8 @@ struct MessageResponse {
     tool_calls: Option<Vec<ToolCallResponse>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     attachments: Option<Vec<AttachmentResponse>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    compacted: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -634,6 +636,7 @@ async fn list_messages(
                     )
                 },
                 attachments,
+                compacted: if r.compacted { Some(true) } else { None },
             }
         })
         .collect();
