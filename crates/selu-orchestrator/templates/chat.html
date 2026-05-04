@@ -34,7 +34,7 @@
         <!-- Thread list (shown for selected pipe, or always when single pipe) -->
         {% if selected_pipe_id == pipe.id || pipes.len() == 1 %}
         <div class="{% if pipes.len() > 1 %}ml-3 border-l border-edge{% endif %}">
-          {% for thread in threads %}
+          {% for thread in conversation_threads %}
           <div class="group flex items-center {% if selected_thread_id == thread.id %}bg-coral/10{% else %}hover:bg-sidebar-hover{% endif %}">
             <a href="{{ base_path }}/chat/{{ pipe.id }}/t/{{ thread.id }}"
                onclick="closeChatSidebar()"
@@ -72,6 +72,39 @@
               <span data-i18n="chat.new">New conversation</span>
             </button>
           </form>
+
+          {% if !schedule_threads.is_empty() %}
+          <div class="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-txt-faint" data-i18n="chat.schedules">Schedules</div>
+          {% for thread in schedule_threads %}
+          <div class="group flex items-center {% if selected_thread_id == thread.id %}bg-amber/10{% else %}hover:bg-sidebar-hover{% endif %}">
+            <a href="{{ base_path }}/chat/{{ pipe.id }}/t/{{ thread.id }}"
+               onclick="closeChatSidebar()"
+               class="flex-1 min-w-0 block pl-4 py-2 text-xs transition-all {% if selected_thread_id == thread.id %}text-txt-heading{% else %}text-txt-muted hover:text-txt{% endif %}">
+              <div class="flex items-center justify-between gap-2">
+                <span class="truncate">
+                  {% if thread.agent_active %}
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-coral animate-pulse mr-1"></span>
+                  {% else if thread.status == "completed" %}
+                  <span class="text-emerald-400 mr-1">&#x2713;</span>
+                  {% endif %}
+                  <span class="text-amber mr-1">&#x23F1;</span>{{ thread.title }}
+                </span>
+                <span class="shrink-0 text-[10px] {% if selected_thread_id == thread.id %}text-txt-muted{% else %}text-txt-faint{% endif %}">{{ thread.last_activity_at }}</span>
+              </div>
+            </a>
+            <form method="post"
+                  action="{{ base_path }}/chat/{{ pipe.id }}/t/{{ thread.id }}/delete"
+                  onsubmit="return openDeleteThreadModal(this)"
+                  class="pr-2">
+              <button type="submit"
+                      class="p-1 rounded text-txt-faint hover:text-rosie hover:bg-surface-input transition-colors cursor-pointer {% if selected_thread_id == thread.id %}opacity-100{% else %}opacity-0 group-hover:opacity-100{% endif %}">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                <span class="sr-only" data-i18n="chat.delete">Delete conversation</span>
+              </button>
+            </form>
+          </div>
+          {% endfor %}
+          {% endif %}
         </div>
         {% endif %}
       </div>
@@ -119,7 +152,8 @@
       <div>
         <div class="text-sm font-semibold text-txt-heading font-heading">{{ pipe.name }}</div>
         <div class="text-xs text-txt-muted">
-          {% for t in threads %}{% if t.id == selected_thread_id %}{{ t.title }}{% endif %}{% endfor %}
+          {% for t in conversation_threads %}{% if t.id == selected_thread_id %}{{ t.title }}{% endif %}{% endfor %}
+          {% for t in schedule_threads %}{% if t.id == selected_thread_id %}{{ t.title }}{% endif %}{% endfor %}
         </div>
       </div>
     </div>
@@ -356,7 +390,7 @@
       <ellipse cx="352" cy="292" rx="28" ry="14" fill="#FF4070" opacity="0.2"/>
       <line x1="232" y1="318" x2="280" y2="318" stroke="#2D2B55" stroke-width="5" stroke-linecap="round"/>
     </svg>
-    {% if threads.is_empty() %}
+    {% if conversation_threads.is_empty() && schedule_threads.is_empty() %}
     <p class="text-sm text-txt-muted" data-i18n="chat.noconversations">No conversations yet</p>
     <form method="post" action="{{ base_path }}/chat/{{ selected_pipe_id }}/t/new">
       <button type="submit"

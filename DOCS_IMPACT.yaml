@@ -2273,3 +2273,32 @@ entries:
       of a long silent gap.
 
       New i18n key: `chat.tool.delegating_progress` (en/de).
+- id: 2026-05-04-schedule-thread-section
+  date: "2026-05-04"
+  pr:
+  area: channels
+  type: changed
+  audience: both
+  summary: "Scheduled runs now reuse one schedule thread per pipe and appear in a separate schedule section"
+  affected_files:
+    - crates/selu-orchestrator/src/schedules/executor.rs
+    - crates/selu-orchestrator/src/services/chat.rs
+    - crates/selu-orchestrator/src/api/mobile.rs
+    - crates/selu-orchestrator/src/web/chat.rs
+    - crates/selu-orchestrator/templates/chat.html
+    - crates/selu-orchestrator/migrations/0059_schedule_threads.sql
+    - ../selu-ios/Selu/Models/Models.swift
+    - ../selu-ios/Selu/Views/Chat/ChatNavigationView.swift
+  docs_sections:
+    - user-guide/channels/web-chat
+    - user-guide/channels/imessage
+    - reference/api
+  details: |
+    Threads now have `thread_kind` (`conversation` or `schedule`) and optional
+    `schedule_id` metadata. The schedule executor reuses the same thread for
+    each schedule and pipe instead of creating a new conversation for every
+    run. Web Chat and the iOS app render schedule-created threads in a
+    separate "Schedules" section so normal conversations are not flooded.
+
+    The mobile thread list response includes two new fields:
+    `thread_kind` and `schedule_id`. Existing clients can ignore them.

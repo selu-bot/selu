@@ -3156,16 +3156,12 @@ pub async fn check_agent_updates(
     )
     .await
     {
-        Ok(0) => Redirect::to(&format!(
-            "{}/agents?success=agents_up_to_date",
-            base_path
-        ))
-        .into_response(),
-        Ok(n) => Redirect::to(&format!(
-            "{}/agents?success=agents_updated",
-            base_path
-        ))
-        .into_response(),
+        Ok(0) => {
+            Redirect::to(&format!("{}/agents?success=agents_up_to_date", base_path)).into_response()
+        }
+        Ok(_n) => {
+            Redirect::to(&format!("{}/agents?success=agents_updated", base_path)).into_response()
+        }
         Err(e) => {
             error!("Manual agent update check failed: {e}");
             Redirect::to(&format!(

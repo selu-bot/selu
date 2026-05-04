@@ -12,7 +12,6 @@ use tracing::{debug, warn};
 
 const AGGREGATION_WINDOW: Duration = Duration::from_secs(2);
 
-
 type AggregationKey = (String, String);
 
 #[derive(Debug)]

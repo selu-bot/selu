@@ -57,15 +57,6 @@ pub fn new_store() -> ArtifactStore {
     Arc::new(RwLock::new(HashMap::new()))
 }
 
-pub async fn list_session_artifacts(
-    store: &ArtifactStore,
-    user_id: &str,
-    session_id: &str,
-    limit: usize,
-) -> Vec<ArtifactRef> {
-    list_session_artifacts_scoped(store, user_id, session_id, None, limit).await
-}
-
 /// List artifacts scoped to a specific thread.
 ///
 /// When `thread_id` is `Some`, only artifacts that belong to that thread (or

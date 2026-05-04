@@ -1,7 +1,7 @@
 /// Schedule executor: background task that fires due schedules.
 ///
 /// Runs every 30 seconds, finds schedules where `next_run_at <= now()`,
-/// creates a new thread for each target pipe, and runs the schedule's
+/// creates or reuses a schedule thread for each target pipe, and runs the schedule's
 /// prompt through the agent engine.  The agent's reply is then delivered
 /// to the pipe via the channel registry (iMessage, webhooks, etc.).
 use tracing::{debug, error, info, warn};
@@ -55,6 +55,8 @@ pub async fn tick(state: &AppState) {
             let pipe_id = pipe_id.clone();
             let user_id = schedule.user_id.clone();
             let schedule_agent_id = schedule.agent_id.clone();
+            let schedule_id = schedule.id.clone();
+            let schedule_name = schedule.name.clone();
             let prompt = schedule.prompt.clone();
             let one_shot = schedule.one_shot;
 
@@ -64,6 +66,8 @@ pub async fn tick(state: &AppState) {
                     &pipe_id,
                     &user_id,
                     schedule_agent_id.as_deref(),
+                    &schedule_id,
+                    &schedule_name,
                     &prompt,
                     one_shot,
                 )
@@ -83,6 +87,8 @@ async fn execute_on_pipe(
     pipe_id: &str,
     user_id: &str,
     schedule_agent_id: Option<&str>,
+    schedule_id: &str,
+    schedule_name: &str,
     prompt: &str,
     one_shot: bool,
 ) {
@@ -103,21 +109,22 @@ async fn execute_on_pipe(
         .map(|a| a.session.requires_thread_isolation())
         .unwrap_or(false);
 
-    // Create a new thread for this schedule run
-    let thread = match thread_mgr::create_thread(
+    // Reuse one thread per schedule and pipe so scheduled activity stays in
+    // one predictable place instead of flooding the main conversation list.
+    let thread = match thread_mgr::find_or_create_schedule_thread(
         &state.db,
         pipe_id,
         user_id,
         &agent_id,
+        schedule_id,
         force_new_session,
-        None,
     )
     .await
     {
         Ok(t) => t,
         Err(e) => {
             error!(
-                "Failed to create thread for schedule on pipe {}: {}",
+                "Failed to create or reuse thread for schedule on pipe {}: {}",
                 pipe_id, e
             );
             return;
@@ -129,7 +136,12 @@ async fn execute_on_pipe(
     // Pre-set the thread title from the schedule prompt so the sidebar shows
     // something meaningful instead of falling back to the first message content
     // (which would be the raw tool-call summary like "[calling set_reminder]").
-    let title: String = prompt.chars().take(60).collect::<String>();
+    let title_source = if schedule_name.trim().is_empty() {
+        prompt
+    } else {
+        schedule_name
+    };
+    let title: String = title_source.chars().take(60).collect::<String>();
     let title = title.trim();
     if !title.is_empty() {
         let _ = thread_mgr::set_title(&state.db, &thread_id, title).await;
@@ -185,12 +197,16 @@ async fn execute_on_pipe(
     // Without this, words like "schicke" in schedule prompts cause the agent to
     // delegate to email instead of simply replying.
     let delivery_hint = match user_lang.as_str() {
-        "de" => "Deine Antwort wird automatisch in diesem Kanal zugestellt. \
+        "de" => {
+            "Deine Antwort wird automatisch in diesem Kanal zugestellt. \
                  Antworte direkt mit dem Text — sende KEINE E-Mail, \
-                 es sei denn, der Prompt verlangt es ausdrücklich. ",
-        _ => "Your reply will be delivered to this channel automatically. \
+                 es sei denn, der Prompt verlangt es ausdrücklich. "
+        }
+        _ => {
+            "Your reply will be delivered to this channel automatically. \
               Reply with the text directly — do NOT send email \
-              unless the prompt explicitly asks for it. ",
+              unless the prompt explicitly asks for it. "
+        }
     };
     let full_prompt = format!("{}{}{}", lang_instruction, delivery_hint, prompt);
 

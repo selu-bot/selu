@@ -275,15 +275,14 @@ pub async fn personality_update(
     }
 
     // Return the updated row fragment
-    let source =
-        sqlx::query_as::<_, (String,)>("SELECT source FROM user_profile WHERE id = ?")
-            .bind(&memory_id)
-            .fetch_optional(&state.db)
-            .await
-            .ok()
-            .flatten()
-            .map(|(s,)| s)
-            .unwrap_or_else(|| "manual".to_string());
+    let source = sqlx::query_as::<_, (String,)>("SELECT source FROM user_profile WHERE id = ?")
+        .bind(&memory_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .map(|(s,)| s)
+        .unwrap_or_else(|| "manual".to_string());
 
     let row = FactRow {
         id: memory_id,

@@ -119,8 +119,7 @@ pub fn trim_to_budget(messages: &mut Vec<ChatMessage>, provider: &dyn LlmProvide
     // Walk from oldest history message forward, marking messages for removal.
     // We track tool_call IDs of dropped assistant messages so their paired
     // tool_results are also dropped.
-    let mut dropped_tc_ids: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut dropped_tc_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     let history = &messages[history_start..];
 
     for msg in history {
@@ -198,12 +197,7 @@ mod tests {
             fn max_context_tokens(&self) -> usize {
                 200_000
             }
-            async fn chat(
-                &self,
-                _: &[ChatMessage],
-                _: &[ToolSpec],
-                _: f32,
-            ) -> Result<LlmResponse> {
+            async fn chat(&self, _: &[ChatMessage], _: &[ToolSpec], _: f32) -> Result<LlmResponse> {
                 Ok(LlmResponse::Text(String::new()))
             }
             async fn chat_stream(
@@ -249,12 +243,7 @@ mod tests {
                 // 20K tokens total → ~1500 available after reserves
                 20_000
             }
-            async fn chat(
-                &self,
-                _: &[ChatMessage],
-                _: &[ToolSpec],
-                _: f32,
-            ) -> Result<LlmResponse> {
+            async fn chat(&self, _: &[ChatMessage], _: &[ToolSpec], _: f32) -> Result<LlmResponse> {
                 Ok(LlmResponse::Text(String::new()))
             }
             async fn chat_stream(
@@ -285,12 +274,7 @@ mod tests {
             fn max_context_tokens(&self) -> usize {
                 200_000
             }
-            async fn chat(
-                &self,
-                _: &[ChatMessage],
-                _: &[ToolSpec],
-                _: f32,
-            ) -> Result<LlmResponse> {
+            async fn chat(&self, _: &[ChatMessage], _: &[ToolSpec], _: f32) -> Result<LlmResponse> {
                 Ok(LlmResponse::Text(String::new()))
             }
             async fn chat_stream(

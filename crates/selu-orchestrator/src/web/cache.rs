@@ -10,8 +10,8 @@ use sqlx::Row;
 use tracing::{error, warn};
 
 use crate::state::AppState;
-use crate::web::auth::AuthUser;
 use crate::web::BasePath;
+use crate::web::auth::AuthUser;
 
 // ── View structs ──────────────────────────────────────────────────────────────
 

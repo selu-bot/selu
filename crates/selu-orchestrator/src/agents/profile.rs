@@ -31,7 +31,19 @@ pub struct ProfileFact {
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 
 pub async fn list_facts(db: &SqlitePool, user_id: &str, limit: i64) -> Result<Vec<ProfileFact>> {
-    let rows = sqlx::query_as::<_, (String, String, String, String, String, String, String, String)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+        ),
+    >(
         r#"SELECT id, user_id, fact_text, category, source, agent_id, created_at, updated_at
            FROM user_profile
            WHERE user_id = ?
@@ -46,8 +58,8 @@ pub async fn list_facts(db: &SqlitePool, user_id: &str, limit: i64) -> Result<Ve
 
     Ok(rows
         .into_iter()
-        .map(|(id, user_id, fact, category, source, agent_id, created_at, updated_at)| {
-            ProfileFact {
+        .map(
+            |(id, user_id, fact, category, source, agent_id, created_at, updated_at)| ProfileFact {
                 id,
                 user_id,
                 fact,
@@ -56,8 +68,8 @@ pub async fn list_facts(db: &SqlitePool, user_id: &str, limit: i64) -> Result<Ve
                 agent_id,
                 created_at,
                 updated_at,
-            }
-        })
+            },
+        )
         .collect())
 }
 
@@ -135,7 +147,11 @@ pub async fn build_context_block(db: &SqlitePool, user_id: &str) -> Result<Optio
     for &cat in CATEGORIES {
         let mut count = 0usize;
         for fact in &all_facts {
-            let effective_cat = if fact.category.is_empty() { "other" } else { &fact.category };
+            let effective_cat = if fact.category.is_empty() {
+                "other"
+            } else {
+                &fact.category
+            };
             if effective_cat != cat {
                 continue;
             }
@@ -169,12 +185,10 @@ const OPTIMIZE_MIN_FACTS: usize = 5;
 
 /// Run optimization for every user that has profile facts.
 pub async fn run_optimization(db: &SqlitePool, creds: &CredentialStore) -> Result<()> {
-    let user_ids: Vec<String> = sqlx::query_scalar(
-        "SELECT DISTINCT user_id FROM user_profile",
-    )
-    .fetch_all(db)
-    .await
-    .context("Failed to list users with profile facts")?;
+    let user_ids: Vec<String> = sqlx::query_scalar("SELECT DISTINCT user_id FROM user_profile")
+        .fetch_all(db)
+        .await
+        .context("Failed to list users with profile facts")?;
 
     for user_id in &user_ids {
         if let Err(e) = optimize_facts(db, creds, user_id).await {
@@ -188,11 +202,7 @@ pub async fn run_optimization(db: &SqlitePool, creds: &CredentialStore) -> Resul
 /// Use an LLM to deduplicate, recategorize and consolidate profile facts for
 /// a single user.  Replaces existing facts with the optimized set in a single
 /// transaction.
-async fn optimize_facts(
-    db: &SqlitePool,
-    creds: &CredentialStore,
-    user_id: &str,
-) -> Result<()> {
+async fn optimize_facts(db: &SqlitePool, creds: &CredentialStore, user_id: &str) -> Result<()> {
     let facts = list_facts(db, user_id, 500).await?;
     if facts.len() < OPTIMIZE_MIN_FACTS {
         return Ok(());
@@ -328,7 +338,9 @@ Respond ONLY with the JSON array, nothing else."#,
         .context("Failed to insert optimized fact")?;
     }
 
-    tx.commit().await.context("Failed to commit optimized facts")?;
+    tx.commit()
+        .await
+        .context("Failed to commit optimized facts")?;
 
     info!(
         user_id = %user_id,

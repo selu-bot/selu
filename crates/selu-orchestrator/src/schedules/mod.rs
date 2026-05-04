@@ -39,6 +39,7 @@ pub struct DueSchedule {
     pub id: String,
     pub user_id: String,
     pub agent_id: Option<String>,
+    pub name: String,
     pub prompt: String,
     pub cron_expression: String,
     pub timezone: String,
@@ -56,7 +57,11 @@ pub struct DueSchedule {
 fn adjust_weekday_field(cron_expr: &str) -> Result<String> {
     let fields: Vec<&str> = cron_expr.split_whitespace().collect();
     if fields.len() != 6 {
-        anyhow::bail!("Expected 6-field cron expression, got {}: '{}'", fields.len(), cron_expr);
+        anyhow::bail!(
+            "Expected 6-field cron expression, got {}: '{}'",
+            fields.len(),
+            cron_expr
+        );
     }
 
     let dow = fields[5];
@@ -93,13 +98,19 @@ fn adjust_dow_part(part: &str) -> Result<String> {
 
     // Range like 1-5
     if let Some((start, end)) = part.split_once('-') {
-        let s: u8 = start.parse().map_err(|_| anyhow::anyhow!("Invalid weekday: {}", start))?;
-        let e: u8 = end.parse().map_err(|_| anyhow::anyhow!("Invalid weekday: {}", end))?;
+        let s: u8 = start
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Invalid weekday: {}", start))?;
+        let e: u8 = end
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Invalid weekday: {}", end))?;
         return Ok(format!("{}-{}", shift_dow(s), shift_dow(e)));
     }
 
     // Single number
-    let n: u8 = part.parse().map_err(|_| anyhow::anyhow!("Invalid weekday: {}", part))?;
+    let n: u8 = part
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid weekday: {}", part))?;
     Ok(shift_dow(n).to_string())
 }
 
@@ -531,7 +542,7 @@ pub async fn find_by_name(
 pub async fn fetch_due_schedules(db: &SqlitePool) -> Result<Vec<DueSchedule>> {
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let rows = sqlx::query!(
-        r#"SELECT s.id, s.user_id, s.agent_id, s.prompt, s.cron_expression, s.one_shot, u.timezone
+        r#"SELECT s.id, s.user_id, s.agent_id, s.name, s.prompt, s.cron_expression, s.one_shot, u.timezone
            FROM schedules s
            LEFT JOIN users u ON s.user_id = u.id
            WHERE s.active = 1 AND s.next_run_at <= ?"#,
@@ -556,6 +567,7 @@ pub async fn fetch_due_schedules(db: &SqlitePool) -> Result<Vec<DueSchedule>> {
             id: schedule_id,
             user_id: r.user_id,
             agent_id: r.agent_id,
+            name: r.name,
             prompt: r.prompt,
             cron_expression: r.cron_expression,
             timezone: r.timezone,

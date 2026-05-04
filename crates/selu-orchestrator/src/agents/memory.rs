@@ -498,5 +498,4 @@ mod tests {
         let all = list_memories(&db, "user-1", 50).await.unwrap();
         assert_eq!(all.len(), 2);
     }
-
 }

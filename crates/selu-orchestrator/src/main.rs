@@ -273,8 +273,7 @@ async fn main() -> Result<()> {
             % 3600;
         // Initial delay: 2 minutes + instance jitter
         tokio::time::sleep(std::time::Duration::from_secs(120 + jitter_secs)).await;
-        let mut interval =
-            tokio::time::interval(std::time::Duration::from_secs(12 * 60 * 60));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(12 * 60 * 60));
         loop {
             interval.tick().await;
             match agents::marketplace::auto_update_agents(
@@ -304,8 +303,7 @@ async fn main() -> Result<()> {
             .subsec_nanos() as u64)
             % 3600;
         tokio::time::sleep(std::time::Duration::from_secs(90 + jitter_secs)).await;
-        let mut interval =
-            tokio::time::interval(std::time::Duration::from_secs(12 * 60 * 60));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(12 * 60 * 60));
         loop {
             if let Err(e) =
                 web::system_updates::run_auto_check_if_enabled(&system_update_state).await

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO threads (id, pipe_id, session_id, user_id, status, origin_message_ref, thread_kind, schedule_id)\n         VALUES (?, ?, ?, ?, 'active', ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "ef32ac2222d9eb1494d1b8f29cceb3074ae2e1b03432eceb64024f8020f551cc"
+}

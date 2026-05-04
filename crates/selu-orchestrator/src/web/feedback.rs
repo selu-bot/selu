@@ -1,18 +1,18 @@
 use anyhow::{Context, Result};
 use askama::Template;
 use axum::{
-    extract::State,
-    response::{Html, IntoResponse, Response},
     Form,
+    extract::State,
     http::StatusCode,
+    response::{Html, IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::llm::provider::ToolSpec;
 use crate::state::AppState;
-use crate::web::auth::AuthUser;
 use crate::web::BasePath;
+use crate::web::auth::AuthUser;
 
 // ── Template ─────────────────────────────────────────────────────────────────
 
@@ -26,10 +26,7 @@ struct FeedbackTemplate {
 
 // ── GET /feedback ───────────────────────────────────────────────────────────
 
-pub async fn feedback_page(
-    user: AuthUser,
-    BasePath(base_path): BasePath,
-) -> Response {
+pub async fn feedback_page(user: AuthUser, BasePath(base_path): BasePath) -> Response {
     let tmpl = FeedbackTemplate {
         active_nav: "feedback",
         is_admin: user.is_admin,
@@ -104,7 +101,15 @@ pub async fn feedback_submit(
         }
     };
 
-    match submit_to_gateway(&gateway_base, &instance_id, &form.category, None, description).await {
+    match submit_to_gateway(
+        &gateway_base,
+        &instance_id,
+        &form.category,
+        None,
+        description,
+    )
+    .await
+    {
         Ok(resp) => {
             let url = crate::web::chat::html_escape(&resp.issue_url);
             Html(format!(
@@ -234,8 +239,8 @@ pub async fn dispatch_submit_feedback(
     let parsed: SubmitFeedbackArgs =
         serde_json::from_str(args).context("Invalid submit_feedback arguments")?;
 
-    let api_base = feedback_api_base_url(marketplace_url)
-        .context("Could not derive feedback API base URL")?;
+    let api_base =
+        feedback_api_base_url(marketplace_url).context("Could not derive feedback API base URL")?;
 
     let instance_id = crate::persistence::db::get_instance_id(db)
         .await

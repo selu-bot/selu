@@ -41,6 +41,7 @@ pub struct ThreadView {
     pub id: String,
     pub title: String,
     pub status: String,
+    pub thread_kind: String,
     pub last_activity_at: String,
     pub agent_active: bool,
 }
@@ -55,8 +56,6 @@ pub struct ToolCallView {
 pub struct AttachmentView {
     pub filename: String,
     pub download_url: String,
-    pub mime_type: String,
-    pub size_bytes: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -81,7 +80,8 @@ struct ChatTemplate {
     pipes: Vec<PipeView>,
     selected_pipe_id: String,
     selected_pipe: Option<PipeView>,
-    threads: Vec<ThreadView>,
+    conversation_threads: Vec<ThreadView>,
+    schedule_threads: Vec<ThreadView>,
     selected_thread_id: String,
     messages: Vec<MessageView>,
     has_more_messages: bool,
@@ -126,6 +126,7 @@ async fn fetch_threads(
                 id: r.id,
                 title,
                 status: r.status,
+                thread_kind: r.thread_kind,
                 last_activity_at: format_timestamp_for_user(&last_activity_raw, language),
                 agent_active,
             }
@@ -144,13 +145,8 @@ async fn fetch_thread_messages(
     let page_size: i32 = if before.is_some() { 50 } else { 200 };
     let web_base = state.config.base_path().to_string();
 
-    let (rows, has_more) = crate::services::chat::list_thread_messages(
-        &state.db,
-        thread_id,
-        before,
-        page_size,
-    )
-    .await;
+    let (rows, has_more) =
+        crate::services::chat::list_thread_messages(&state.db, thread_id, before, page_size).await;
 
     let oldest_ts = rows.first().map(|r| r.created_at.clone());
 
@@ -219,8 +215,6 @@ fn parse_attachments_for_view(
             AttachmentView {
                 filename: r.filename,
                 download_url,
-                mime_type: r.mime_type,
-                size_bytes: r.size_bytes,
             }
         })
         .collect()
@@ -290,7 +284,8 @@ pub async fn chat_index(
         base_path,
         selected_pipe_id: String::new(),
         selected_pipe: None,
-        threads: vec![],
+        conversation_threads: vec![],
+        schedule_threads: vec![],
         selected_thread_id: String::new(),
         messages: vec![],
         pipes,
@@ -312,6 +307,9 @@ pub async fn chat_pipe(
     let pipe_id_str = pipe_id.to_string();
     let pipes = fetch_pipes(&state.db, &user.user_id).await;
     let threads = fetch_threads(&state, &pipe_id_str, &user.user_id, &user.language).await;
+    let (schedule_threads, conversation_threads): (Vec<_>, Vec<_>) = threads
+        .into_iter()
+        .partition(|t| t.thread_kind == "schedule");
     let selected = pipes.iter().find(|p| p.id == pipe_id_str).cloned();
 
     render_template(ChatTemplate {
@@ -320,7 +318,8 @@ pub async fn chat_pipe(
         base_path,
         selected_pipe_id: pipe_id_str,
         selected_pipe: selected,
-        threads,
+        conversation_threads,
+        schedule_threads,
         selected_thread_id: String::new(),
         messages: vec![],
         pipes,
@@ -343,6 +342,9 @@ pub async fn chat_thread(
     let thread_id_str = thread_id.to_string();
     let pipes = fetch_pipes(&state.db, &user.user_id).await;
     let threads = fetch_threads(&state, &pipe_id_str, &user.user_id, &user.language).await;
+    let (schedule_threads, conversation_threads): (Vec<_>, Vec<_>) = threads
+        .into_iter()
+        .partition(|t| t.thread_kind == "schedule");
     let selected = pipes.iter().find(|p| p.id == pipe_id_str).cloned();
     let (messages, has_more_messages, oldest_message_ts) =
         fetch_thread_messages(&state, &thread_id_str, &user.language, &user.user_id, None).await;
@@ -382,7 +384,8 @@ pub async fn chat_thread(
         base_path,
         selected_pipe_id: pipe_id_str,
         selected_pipe: selected,
-        threads,
+        conversation_threads,
+        schedule_threads,
         selected_thread_id: thread_id_str,
         messages,
         pipes,
@@ -973,8 +976,14 @@ pub async fn chat_older_messages(
         return StatusCode::BAD_REQUEST.into_response();
     };
 
-    let (messages, has_more, oldest_ts) =
-        fetch_thread_messages(&state, &thread_id_str, &user.language, &user.user_id, Some(before_ts)).await;
+    let (messages, has_more, oldest_ts) = fetch_thread_messages(
+        &state,
+        &thread_id_str,
+        &user.language,
+        &user.user_id,
+        Some(before_ts),
+    )
+    .await;
 
     // Build HTML fragment wrapped in a new load-older-wrap so subsequent
     // pages can target it again.  The outerHTML swap replaces the old wrapper.
@@ -1009,12 +1018,18 @@ fn render_message_html(msg: &MessageView) -> String {
             let imgs: Vec<String> = msg.image_urls.iter().map(|url| {
                 format!(r#"<img src="{}" alt="image" class="w-[110px] h-[82px] object-cover rounded-lg border border-coral/30 bg-surface-input" />"#, html_escape(url))
             }).collect();
-            format!(r#"<div class="mt-2 flex flex-wrap gap-2">{}</div>"#, imgs.join(""))
+            format!(
+                r#"<div class="mt-2 flex flex-wrap gap-2">{}</div>"#,
+                imgs.join("")
+            )
         };
         let content_html = if msg.content.is_empty() {
             String::new()
         } else {
-            format!(r#"<p class="text-sm leading-relaxed whitespace-pre-wrap break-words text-txt-heading">{}</p>"#, html_escape(&msg.content))
+            format!(
+                r#"<p class="text-sm leading-relaxed whitespace-pre-wrap break-words text-txt-heading">{}</p>"#,
+                html_escape(&msg.content)
+            )
         };
         format!(
             r#"<div class="flex justify-end"><div class="max-w-[72%] bg-gradient-to-br from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">{content}{images}<p class="text-[10px] text-txt-muted mt-1.5">{ts}</p></div></div>"#,
@@ -1142,7 +1157,9 @@ async fn process_message(
                     .send()
                     .await
                 {
-                    Ok(resp) => tracing::debug!(status = %resp.status(), "LiveActivity start push sent (web)"),
+                    Ok(resp) => {
+                        tracing::debug!(status = %resp.status(), "LiveActivity start push sent (web)")
+                    }
                     Err(e) => warn!(error = %e, "LiveActivity start push failed (web)"),
                 }
             }
@@ -1237,7 +1254,11 @@ async fn process_message(
     state.active_streams.lock().await.remove(&stream_id);
     state.thread_active_streams.lock().await.remove(&thread_id);
     state.thread_last_status.lock().await.remove(&thread_id);
-    state.thread_accumulated_text.lock().await.remove(&thread_id);
+    state
+        .thread_accumulated_text
+        .lock()
+        .await
+        .remove(&thread_id);
 
     // Notify mobile devices that the agent has finished (completion push + end Live Activity).
     // Use /api/relay/push (not push-device) so the relay looks up the DynamoDB registration,

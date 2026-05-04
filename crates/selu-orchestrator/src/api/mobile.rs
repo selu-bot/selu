@@ -1,10 +1,9 @@
 use axum::{
-    Json,
+    Json, Router,
     extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response, Sse},
     routing::{delete, get, post, put},
-    Router,
 };
 use chrono::{Duration, Utc};
 use futures::StreamExt;
@@ -34,28 +33,64 @@ pub fn router() -> Router<AppState> {
         .route("/api/mobile/redeem", post(redeem_setup_token))
         .route("/api/mobile/info", get(instance_info))
         .route("/api/mobile/pipes", get(list_pipes))
-        .route("/api/mobile/pipes/{pipe_id}/threads", get(list_threads).post(create_thread))
+        .route(
+            "/api/mobile/pipes/{pipe_id}/threads",
+            get(list_threads).post(create_thread),
+        )
         .route("/api/mobile/pipes/{pipe_id}/search", get(search_threads))
-        .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}", delete(delete_thread))
-        .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}/messages", get(list_messages))
+        .route(
+            "/api/mobile/pipes/{pipe_id}/threads/{thread_id}",
+            delete(delete_thread),
+        )
+        .route(
+            "/api/mobile/pipes/{pipe_id}/threads/{thread_id}/messages",
+            get(list_messages),
+        )
         .route(
             "/api/mobile/pipes/{pipe_id}/threads/{thread_id}/send",
             post(send_message).layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
         )
-        .route("/api/mobile/pipes/{pipe_id}/threads/{thread_id}/active-stream", get(active_stream))
-        .route("/api/mobile/pipes/{pipe_id}/stream/{stream_id}", get(stream_response))
-        .route("/api/mobile/approvals/{confirmation_id}", post(resolve_approval))
+        .route(
+            "/api/mobile/pipes/{pipe_id}/threads/{thread_id}/active-stream",
+            get(active_stream),
+        )
+        .route(
+            "/api/mobile/pipes/{pipe_id}/stream/{stream_id}",
+            get(stream_response),
+        )
+        .route(
+            "/api/mobile/approvals/{confirmation_id}",
+            post(resolve_approval),
+        )
         .route("/api/mobile/artifacts/{artifact_id}", get(get_artifact))
         // Profile (About You)
-        .route("/api/mobile/profile", get(list_profile_facts).post(create_profile_fact))
-        .route("/api/mobile/profile/{fact_id}", put(update_profile_fact).delete(delete_profile_fact))
+        .route(
+            "/api/mobile/profile",
+            get(list_profile_facts).post(create_profile_fact),
+        )
+        .route(
+            "/api/mobile/profile/{fact_id}",
+            put(update_profile_fact).delete(delete_profile_fact),
+        )
         // Agent Memories
-        .route("/api/mobile/memories", get(list_memories).post(create_memory))
-        .route("/api/mobile/memories/{memory_id}", put(update_memory).delete(delete_memory))
+        .route(
+            "/api/mobile/memories",
+            get(list_memories).post(create_memory),
+        )
+        .route(
+            "/api/mobile/memories/{memory_id}",
+            put(update_memory).delete(delete_memory),
+        )
         // Schedules
         .route("/api/mobile/schedules", get(list_schedules))
-        .route("/api/mobile/schedules/{schedule_id}", delete(delete_schedule))
-        .route("/api/mobile/schedules/{schedule_id}/toggle", post(toggle_schedule))
+        .route(
+            "/api/mobile/schedules/{schedule_id}",
+            delete(delete_schedule),
+        )
+        .route(
+            "/api/mobile/schedules/{schedule_id}/toggle",
+            post(toggle_schedule),
+        )
         // Device token registration (for server-initiated push, e.g. schedules)
         .route("/api/mobile/device-token", post(register_device_token))
 }
@@ -98,6 +133,8 @@ struct ThreadResponse {
     pipe_id: String,
     title: Option<String>,
     status: String,
+    thread_kind: String,
+    schedule_id: Option<String>,
     created_at: String,
     last_activity_at: Option<String>,
     agent_active: bool,
@@ -186,7 +223,10 @@ struct MobileUser {
     language: String,
 }
 
-async fn extract_mobile_user(headers: &HeaderMap, db: &sqlx::SqlitePool) -> Result<MobileUser, StatusCode> {
+async fn extract_mobile_user(
+    headers: &HeaderMap,
+    db: &sqlx::SqlitePool,
+) -> Result<MobileUser, StatusCode> {
     let session_id = headers
         .get("cookie")
         .and_then(|v| v.to_str().ok())
@@ -216,7 +256,10 @@ async fn mobile_login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    use argon2::{Argon2, password_hash::{PasswordHash, PasswordVerifier}};
+    use argon2::{
+        Argon2,
+        password_hash::{PasswordHash, PasswordVerifier},
+    };
 
     let username = req.username.trim().to_string();
 
@@ -289,10 +332,7 @@ struct InstanceInfoResponse {
     push_enabled: bool,
 }
 
-async fn instance_info(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+async fn instance_info(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     if let Err(s) = extract_mobile_user(&headers, &state.db).await {
         return s.into_response();
     }
@@ -348,29 +388,27 @@ async fn register_device_token(
 
 // ── GET /api/mobile/pipes ────────────────────────────────────────────────────
 
-async fn list_pipes(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+async fn list_pipes(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     let user = match extract_mobile_user(&headers, &state.db).await {
         Ok(u) => u,
         Err(s) => return s.into_response(),
     };
 
-    let pipes: Vec<PipeResponse> = crate::services::chat::list_user_pipes(&state.db, &user.user_id, None)
-        .await
-        .into_iter()
-        .map(|r| PipeResponse {
-            id: r.id,
-            user_id: r.user_id,
-            name: r.name,
-            transport: r.transport,
-            outbound_url: r.outbound_url,
-            default_agent_id: r.default_agent_id,
-            active: r.active,
-            created_at: r.created_at,
-        })
-        .collect();
+    let pipes: Vec<PipeResponse> =
+        crate::services::chat::list_user_pipes(&state.db, &user.user_id, None)
+            .await
+            .into_iter()
+            .map(|r| PipeResponse {
+                id: r.id,
+                user_id: r.user_id,
+                name: r.name,
+                transport: r.transport,
+                outbound_url: r.outbound_url,
+                default_agent_id: r.default_agent_id,
+                active: r.active,
+                created_at: r.created_at,
+            })
+            .collect();
     Json(pipes).into_response()
 }
 
@@ -387,7 +425,8 @@ async fn list_threads(
     };
 
     let pipe_id_str = pipe_id.to_string();
-    let rows = crate::services::chat::list_pipe_threads(&state.db, &pipe_id_str, &user.user_id, 50).await;
+    let rows =
+        crate::services::chat::list_pipe_threads(&state.db, &pipe_id_str, &user.user_id, 50).await;
     let active_streams = state.thread_active_streams.lock().await;
     let threads: Vec<ThreadResponse> = rows
         .into_iter()
@@ -398,6 +437,8 @@ async fn list_threads(
                 pipe_id: r.pipe_id,
                 title: r.title,
                 status: r.status,
+                thread_kind: r.thread_kind,
+                schedule_id: r.schedule_id,
                 created_at: r.created_at,
                 last_activity_at: r.last_activity_at,
                 agent_active,
@@ -484,6 +525,8 @@ async fn create_thread(
             pipe_id: pipe_id_str,
             title: thread.title,
             status: thread.status.to_string(),
+            thread_kind: "conversation".to_string(),
+            schedule_id: None,
             created_at: thread.created_at.to_string(),
             last_activity_at: None,
             agent_active: false,
@@ -539,8 +582,7 @@ async fn delete_thread(
             .await
             .unwrap_or_default();
 
-    let _ =
-        crate::agents::artifacts::delete_thread_artifacts_rows(&mut tx, &thread_id_str).await;
+    let _ = crate::agents::artifacts::delete_thread_artifacts_rows(&mut tx, &thread_id_str).await;
 
     let _ = sqlx::query!("DELETE FROM messages WHERE thread_id = ?", thread_id_str)
         .execute(&mut *tx)
@@ -642,9 +684,13 @@ async fn list_messages(
         .collect();
 
     (
-        [(axum::http::header::HeaderName::from_static("x-has-more"), if has_more { "true" } else { "false" })],
+        [(
+            axum::http::header::HeaderName::from_static("x-has-more"),
+            if has_more { "true" } else { "false" },
+        )],
         Json(result),
-    ).into_response()
+    )
+        .into_response()
 }
 
 // ── POST /api/mobile/pipes/{pipe_id}/threads/{thread_id}/send ────────────────
@@ -684,10 +730,9 @@ async fn send_message(
     // Parse image attachment
     let mut inbound_attachments = Vec::new();
     if let Some(img) = req.image {
-        if let Ok(data) = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            &img.data_base64,
-        ) {
+        if let Ok(data) =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &img.data_base64)
+        {
             inbound_attachments.push(InboundAttachmentInput {
                 filename: img.filename,
                 mime_type: img.mime_type,
@@ -738,9 +783,7 @@ async fn send_message(
 
         // Start a LiveActivity via push-to-start so it appears on Lock Screen / Dynamic Island
         if crate::web::system_updates::push_notifications_enabled(&bg_state).await {
-            if let Ok(instance_id) =
-                crate::persistence::db::get_instance_id(&bg_state.db).await
-            {
+            if let Ok(instance_id) = crate::persistence::db::get_instance_id(&bg_state.db).await {
                 let title = if text.is_empty() || text == "[Shared photos]" {
                     "[Shared photos]".to_string()
                 } else {
@@ -839,11 +882,7 @@ async fn send_message(
         drop(engine_tx);
         let _ = forwarder.await;
 
-        bg_state
-            .active_streams
-            .lock()
-            .await
-            .remove(&bg_stream_id);
+        bg_state.active_streams.lock().await.remove(&bg_stream_id);
         bg_state
             .thread_active_streams
             .lock()
@@ -1282,13 +1321,11 @@ async fn update_profile_fact(
     };
 
     // Verify ownership before updating.
-    let owner: Option<String> = sqlx::query_scalar(
-        "SELECT user_id FROM user_profile WHERE id = ?",
-    )
-    .bind(&fact_id)
-    .fetch_optional(&state.db)
-    .await
-    .unwrap_or(None);
+    let owner: Option<String> = sqlx::query_scalar("SELECT user_id FROM user_profile WHERE id = ?")
+        .bind(&fact_id)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or(None);
 
     match owner {
         Some(uid) if uid == user.user_id => {}
@@ -1362,13 +1399,12 @@ async fn resolve_agent_names(
             names.insert(aid.clone(), "Manual".to_string());
             continue;
         }
-        let display_name: Option<String> = sqlx::query_scalar(
-            "SELECT display_name FROM agents WHERE id = ?",
-        )
-        .bind(aid)
-        .fetch_optional(db)
-        .await
-        .unwrap_or(None);
+        let display_name: Option<String> =
+            sqlx::query_scalar("SELECT display_name FROM agents WHERE id = ?")
+                .bind(aid)
+                .fetch_optional(db)
+                .await
+                .unwrap_or(None);
         names.insert(aid.clone(), display_name.unwrap_or_else(|| aid.clone()));
     }
     names
@@ -1562,10 +1598,7 @@ struct ScheduleResponse {
     pipe_names: Vec<String>,
 }
 
-async fn list_schedules(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+async fn list_schedules(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     let user = match extract_mobile_user(&headers, &state.db).await {
         Ok(u) => u,
         Err(s) => return s.into_response(),
@@ -1634,15 +1667,13 @@ async fn toggle_schedule(
 
     match schedules::toggle_schedule(&state.db, &schedule_id, &user.user_id).await {
         Ok(true) => {
-            let active = sqlx::query_scalar!(
-                "SELECT active FROM schedules WHERE id = ?",
-                schedule_id,
-            )
-            .fetch_optional(&state.db)
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or(0);
+            let active =
+                sqlx::query_scalar!("SELECT active FROM schedules WHERE id = ?", schedule_id,)
+                    .fetch_optional(&state.db)
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or(0);
 
             Json(serde_json::json!({ "active": active != 0 })).into_response()
         }

@@ -160,7 +160,14 @@ impl CapabilityEngine {
         };
 
         let client = self
-            .get_or_start(manifests, &cap_id, &key, session_for_start, user_for_start, &egress_policy)
+            .get_or_start(
+                manifests,
+                &cap_id,
+                &key,
+                session_for_start,
+                user_for_start,
+                &egress_policy,
+            )
             .await?;
 
         let result = client

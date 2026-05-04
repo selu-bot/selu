@@ -19,6 +19,8 @@ pub struct ThreadRow {
     pub pipe_id: String,
     pub title: Option<String>,
     pub status: String,
+    pub thread_kind: String,
+    pub schedule_id: Option<String>,
     pub created_at: String,
     pub last_activity_at: Option<String>,
 }
@@ -66,8 +68,7 @@ pub async fn list_user_pipes(
     .await
     .unwrap_or_default();
 
-    rows
-        .into_iter()
+    rows.into_iter()
         .map(|r| PipeRow {
             id: r.id.unwrap_or_default(),
             user_id: r.user_id,
@@ -90,7 +91,7 @@ pub async fn list_pipe_threads(
     limit: i32,
 ) -> Vec<ThreadRow> {
     let rows = sqlx::query!(
-        r#"SELECT t.id, t.pipe_id, t.title, t.status, t.created_at,
+        r#"SELECT t.id, t.pipe_id, t.title, t.status, t.thread_kind, t.schedule_id, t.created_at,
                   (SELECT content FROM messages WHERE thread_id = t.id ORDER BY created_at ASC LIMIT 1) as first_msg,
                   (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as "last_activity_at?: String"
            FROM threads t
@@ -122,6 +123,8 @@ pub async fn list_pipe_threads(
                 pipe_id: r.pipe_id,
                 title,
                 status: r.status,
+                thread_kind: r.thread_kind,
+                schedule_id: r.schedule_id,
                 created_at: r.created_at,
                 last_activity_at: r.last_activity_at,
             }
@@ -186,10 +189,7 @@ pub async fn list_thread_messages(
                 for (tc_idx, call) in calls.iter().enumerate() {
                     let name = call["name"].as_str().unwrap_or("tool").to_string();
                     let id = call["id"].as_str().unwrap_or_default().to_string();
-                    tool_calls.push(ToolCallRow {
-                        name,
-                        result: None,
-                    });
+                    tool_calls.push(ToolCallRow { name, result: None });
                     if !id.is_empty() {
                         tool_call_map.insert(id, (msg_idx, tc_idx));
                     }

@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, pipe_id, session_id, user_id, status, title,\n                  origin_message_ref, last_reply_guid, created_at, completed_at\n           FROM threads\n           WHERE pipe_id = ? AND user_id = ? AND schedule_id = ?\n           LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "session_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "origin_message_ref",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "last_reply_guid",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "completed_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "68f2f3a554fa365977a635b42118767cfbc907968485d52ec2f2595c7c321288"
+}

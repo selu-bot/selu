@@ -419,9 +419,15 @@ mod tests {
     async fn test_list_truncation() {
         let db = test_db().await;
         for i in 0..105 {
-            set(&db, "agent1", "user1", &format!("key_{i:03}"), &format!("val_{i}"))
-                .await
-                .unwrap();
+            set(
+                &db,
+                "agent1",
+                "user1",
+                &format!("key_{i:03}"),
+                &format!("val_{i}"),
+            )
+            .await
+            .unwrap();
         }
         let (entries, truncated) = list(&db, "agent1", "user1").await.unwrap();
         assert_eq!(entries.len(), 100);

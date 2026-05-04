@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id, t.pipe_id, t.title, t.status, t.thread_kind, t.schedule_id, t.created_at,\n                  (SELECT content FROM messages WHERE thread_id = t.id ORDER BY created_at ASC LIMIT 1) as first_msg,\n                  (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id) as \"last_activity_at?: String\"\n           FROM threads t\n           WHERE t.pipe_id = ? AND t.user_id = ?\n           ORDER BY COALESCE(\n               (SELECT MAX(created_at) FROM messages WHERE thread_id = t.id),\n               t.created_at\n           ) DESC\n           LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "pipe_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "thread_kind",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "schedule_id",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "first_msg",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "last_activity_at?: String",
+        "ordinal": 8,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "7c2964c472a0841532a0026701a21cdfc5963d6cb9e8204e20f37fd3182c5fd2"
+}

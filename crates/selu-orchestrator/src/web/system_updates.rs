@@ -483,10 +483,7 @@ pub async fn updates_toggle_push_notifications(
     .await
     {
         error!("Failed to save push notifications setting: {e}");
-        return redirect_with_error(
-            &base_path,
-            "updates.error.push_notifications_save_failed",
-        );
+        return redirect_with_error(&base_path, "updates.error.push_notifications_save_failed");
     }
 
     redirect_with_success(&base_path, "updates.flash.push_notifications_saved")

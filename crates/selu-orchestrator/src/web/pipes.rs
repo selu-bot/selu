@@ -392,8 +392,7 @@ pub async fn pipes_new(
         .map(|cfg| cfg.config_id);
     let existing_imessage_config_id =
         super::integrations::has_active_imessage_pipe(&state.db).await;
-    let existing_telegram_config_id =
-        super::telegram::has_active_telegram_pipe(&state.db).await;
+    let existing_telegram_config_id = super::telegram::has_active_telegram_pipe(&state.db).await;
 
     let pipes = PIPE_TYPES
         .iter()
@@ -507,8 +506,7 @@ pub async fn pipes_new_redirect(
         "web" => Some(format!("{}/pipes/web/new", base_path)),
         "webhook" => Some(format!("{}/pipes/webhook/new", base_path)),
         "imessage" => {
-            if let Some(config_id) =
-                super::integrations::has_active_imessage_pipe(&state.db).await
+            if let Some(config_id) = super::integrations::has_active_imessage_pipe(&state.db).await
             {
                 Some(format!("{}/pipes/imessage/{}", base_path, config_id))
             } else {
@@ -516,9 +514,7 @@ pub async fn pipes_new_redirect(
             }
         }
         "telegram" if external_origin.starts_with("https://") => {
-            if let Some(config_id) =
-                super::telegram::has_active_telegram_pipe(&state.db).await
-            {
+            if let Some(config_id) = super::telegram::has_active_telegram_pipe(&state.db).await {
                 Some(format!("{}/pipes/telegram/{}", base_path, config_id))
             } else {
                 Some(format!("{}/pipes/telegram/setup", base_path))

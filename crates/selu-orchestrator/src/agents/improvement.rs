@@ -998,7 +998,11 @@ Respond ONLY with the JSON array, nothing else."#,
 
         let id = Uuid::new_v4().to_string();
         let activated_at = if status == "active" {
-            Some(chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3f").to_string())
+            Some(
+                chrono::Utc::now()
+                    .format("%Y-%m-%dT%H:%M:%S%.3f")
+                    .to_string(),
+            )
         } else {
             None
         };

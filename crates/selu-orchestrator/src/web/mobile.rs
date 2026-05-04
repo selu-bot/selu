@@ -69,14 +69,13 @@ pub async fn create_setup_token(
         .format("%Y-%m-%d %H:%M:%S")
         .to_string();
 
-    if let Err(e) = sqlx::query(
-        "INSERT INTO mobile_setup_tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
-    )
-    .bind(&token)
-    .bind(&user_id)
-    .bind(&expires_at)
-    .execute(&state.db)
-    .await
+    if let Err(e) =
+        sqlx::query("INSERT INTO mobile_setup_tokens (token, user_id, expires_at) VALUES (?, ?, ?)")
+            .bind(&token)
+            .bind(&user_id)
+            .bind(&expires_at)
+            .execute(&state.db)
+            .await
     {
         error!("Failed to create setup token: {e}");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();

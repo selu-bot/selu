@@ -1031,11 +1031,13 @@ async fn clear_whatsapp_bridge_bind_mount(
     mount_path: &str,
     channel: &str,
 ) -> Result<()> {
-    let channel = if channel.trim().is_empty() { "stable" } else { channel.trim() };
-    let image = resolve_whatsapp_bridge_image_ref(
-        &state.config.whatsapp_bridge_image_repo,
-        channel,
-    )?;
+    let channel = if channel.trim().is_empty() {
+        "stable"
+    } else {
+        channel.trim()
+    };
+    let image =
+        resolve_whatsapp_bridge_image_ref(&state.config.whatsapp_bridge_image_repo, channel)?;
 
     let helper_name = format!(
         "selu-whatsapp-auth-cleanup-{}",

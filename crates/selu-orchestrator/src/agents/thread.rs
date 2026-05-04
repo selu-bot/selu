@@ -20,6 +20,69 @@ pub async fn create_thread(
     force_new_session: bool,
     origin_message_ref: Option<&str>,
 ) -> Result<Thread> {
+    create_thread_with_origin(
+        db,
+        pipe_id,
+        user_id,
+        agent_id,
+        force_new_session,
+        origin_message_ref,
+        "conversation",
+        None,
+    )
+    .await
+}
+
+/// Create or reuse the single thread that belongs to a schedule on a pipe.
+pub async fn find_or_create_schedule_thread(
+    db: &SqlitePool,
+    pipe_id: &str,
+    user_id: &str,
+    agent_id: &str,
+    schedule_id: &str,
+    force_new_session: bool,
+) -> Result<Thread> {
+    if let Some(thread) = find_schedule_thread(db, pipe_id, user_id, schedule_id).await? {
+        let thread_id = thread.id.to_string();
+        sqlx::query!(
+            "UPDATE threads SET status = 'active', completed_at = NULL WHERE id = ?",
+            thread_id,
+        )
+        .execute(db)
+        .await?;
+        session_mgr::bind_thread_agent_session(
+            db,
+            &thread_id,
+            agent_id,
+            &thread.session_id.to_string(),
+        )
+        .await?;
+        return Ok(thread);
+    }
+
+    create_thread_with_origin(
+        db,
+        pipe_id,
+        user_id,
+        agent_id,
+        force_new_session,
+        None,
+        "schedule",
+        Some(schedule_id),
+    )
+    .await
+}
+
+async fn create_thread_with_origin(
+    db: &SqlitePool,
+    pipe_id: &str,
+    user_id: &str,
+    agent_id: &str,
+    force_new_session: bool,
+    origin_message_ref: Option<&str>,
+    thread_kind: &str,
+    schedule_id: Option<&str>,
+) -> Result<Thread> {
     let thread_id = Uuid::new_v4().to_string();
     // Ensure we have a session for this user + agent.
     // For thread-isolated agents, always start with a fresh session.
@@ -40,13 +103,15 @@ pub async fn create_thread(
     );
 
     sqlx::query!(
-        "INSERT INTO threads (id, pipe_id, session_id, user_id, status, origin_message_ref)
-         VALUES (?, ?, ?, ?, 'active', ?)",
+        "INSERT INTO threads (id, pipe_id, session_id, user_id, status, origin_message_ref, thread_kind, schedule_id)
+         VALUES (?, ?, ?, ?, 'active', ?, ?, ?)",
         thread_id,
         pipe_id,
         session_id,
         user_id,
         origin_message_ref,
+        thread_kind,
+        schedule_id,
     )
     .execute(db)
     .await?;
@@ -65,6 +130,46 @@ pub async fn create_thread(
         created_at: now,
         completed_at: None,
     })
+}
+
+async fn find_schedule_thread(
+    db: &SqlitePool,
+    pipe_id: &str,
+    user_id: &str,
+    schedule_id: &str,
+) -> Result<Option<Thread>> {
+    let row = sqlx::query!(
+        r#"SELECT id, pipe_id, session_id, user_id, status, title,
+                  origin_message_ref, last_reply_guid, created_at, completed_at
+           FROM threads
+           WHERE pipe_id = ? AND user_id = ? AND schedule_id = ?
+           LIMIT 1"#,
+        pipe_id,
+        user_id,
+        schedule_id,
+    )
+    .fetch_optional(db)
+    .await?;
+
+    row.map(|r| {
+        Ok(Thread {
+            id: Uuid::parse_str(r.id.as_deref().unwrap_or_default())?,
+            pipe_id: Uuid::parse_str(&r.pipe_id)?,
+            session_id: Uuid::parse_str(&r.session_id)?,
+            user_id: Uuid::parse_str(&r.user_id)?,
+            status: match r.status.as_str() {
+                "completed" => ThreadStatus::Completed,
+                "failed" => ThreadStatus::Failed,
+                _ => ThreadStatus::Active,
+            },
+            title: r.title,
+            origin_message_ref: r.origin_message_ref,
+            last_reply_guid: r.last_reply_guid,
+            created_at: r.created_at.parse().unwrap_or_default(),
+            completed_at: r.completed_at.and_then(|s: String| s.parse().ok()),
+        })
+    })
+    .transpose()
 }
 
 /// Find an active thread by matching a message GUID.
@@ -391,6 +496,8 @@ mod tests {
                 title TEXT,
                 origin_message_ref TEXT,
                 last_reply_guid TEXT,
+                thread_kind TEXT NOT NULL DEFAULT 'conversation',
+                schedule_id TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 completed_at TEXT
             )"#,
@@ -470,6 +577,33 @@ mod tests {
         .unwrap()
         .get("session_id");
         assert_eq!(mapped_session_id, session_id);
+    }
+
+    #[tokio::test]
+    async fn schedule_thread_reuses_existing_thread_for_same_schedule_and_pipe() {
+        let db = setup_db().await;
+        let pipe_id = Uuid::new_v4().to_string();
+        let user_id = Uuid::new_v4().to_string();
+        let schedule_id = Uuid::new_v4().to_string();
+
+        let first =
+            find_or_create_schedule_thread(&db, &pipe_id, &user_id, "default", &schedule_id, false)
+                .await
+                .unwrap();
+        complete_thread(&db, &first.id.to_string()).await.unwrap();
+
+        let second =
+            find_or_create_schedule_thread(&db, &pipe_id, &user_id, "default", &schedule_id, false)
+                .await
+                .unwrap();
+
+        assert_eq!(second.id, first.id);
+        let status: String = sqlx::query_scalar("SELECT status FROM threads WHERE id = ?")
+            .bind(first.id.to_string())
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(status, "active");
     }
 
     #[tokio::test]

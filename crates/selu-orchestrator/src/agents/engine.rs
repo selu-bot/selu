@@ -31,11 +31,10 @@ use crate::llm::registry::load_provider;
 use crate::llm::tool_loop::{LoopEvent, LoopOutput, LoopSender, ToolDispatchResult, run_loop};
 use crate::permissions::approval_queue;
 use crate::permissions::tool_policy::{
-    self, BUILTIN_CAPABILITY_ID, BUILTIN_IMAGE_EDIT, BUILTIN_IMAGE_GENERATE,
-    BUILTIN_MEMORY_FORGET, BUILTIN_MEMORY_LIST, BUILTIN_MEMORY_REMEMBER, BUILTIN_MEMORY_SEARCH,
-    BUILTIN_SET_REMINDER, BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET,
-    BUILTIN_STORE_LIST, BUILTIN_STORE_SET, BUILTIN_SUBMIT_FEEDBACK, BUILTIN_SUPPRESS_REPLY,
-    ToolPolicy,
+    self, BUILTIN_CAPABILITY_ID, BUILTIN_IMAGE_EDIT, BUILTIN_IMAGE_GENERATE, BUILTIN_MEMORY_FORGET,
+    BUILTIN_MEMORY_LIST, BUILTIN_MEMORY_REMEMBER, BUILTIN_MEMORY_SEARCH, BUILTIN_SET_REMINDER,
+    BUILTIN_SET_SCHEDULE, BUILTIN_STORE_DELETE, BUILTIN_STORE_GET, BUILTIN_STORE_LIST,
+    BUILTIN_STORE_SET, BUILTIN_SUBMIT_FEEDBACK, ToolPolicy,
 };
 use crate::state::AppState;
 
@@ -1372,7 +1371,6 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         None
     };
     if !reply.is_empty() && !skip_message_persist {
-
         // ── Personality extraction (best-effort, non-blocking) ────────────────
         {
             let db = state.db.clone();
@@ -2394,7 +2392,10 @@ fn confirmation_only_sender(parent_tx: LoopSender) -> LoopSender {
                     let _ = parent_tx.send(event).await;
                 }
                 // Discard tokens, artifacts, and Done to prevent duplicate streaming.
-                LoopEvent::Token(_) | LoopEvent::Artifacts(_) | LoopEvent::Done | LoopEvent::ToolMessage(_) => {}
+                LoopEvent::Token(_)
+                | LoopEvent::Artifacts(_)
+                | LoopEvent::Done
+                | LoopEvent::ToolMessage(_) => {}
                 // Forward errors so the parent stream can surface delegation
                 // failures instead of silently swallowing them.
                 LoopEvent::Error(_) => {
@@ -2507,18 +2508,34 @@ fn is_explicit_confirmation_message(text: &str) -> bool {
     // Uses word-boundary matching to avoid false positives like "now" matching "no".
     if has_send_verb {
         let single_word_negations: &[&str] = &[
-            "don't", "dont", "not", "no",
-            "never", "stop", "cancel", "wait",
-            "nicht", "kein", "keine", "keinen", "nein",
-            "stopp", "abbrechen", "warte",
+            "don't",
+            "dont",
+            "not",
+            "no",
+            "never",
+            "stop",
+            "cancel",
+            "wait",
+            "nicht",
+            "kein",
+            "keine",
+            "keinen",
+            "nein",
+            "stopp",
+            "abbrechen",
+            "warte",
         ];
         let multi_word_negations: &[&str] = &["do not"];
         let words: Vec<&str> = collapsed.split_whitespace().collect();
         let prefix_len = words.len().min(5);
         let prefix_words = &words[..prefix_len];
         let prefix_str = prefix_words.join(" ");
-        if single_word_negations.iter().any(|neg| prefix_words.contains(neg))
-            || multi_word_negations.iter().any(|neg| prefix_str.contains(neg))
+        if single_word_negations
+            .iter()
+            .any(|neg| prefix_words.contains(neg))
+            || multi_word_negations
+                .iter()
+                .any(|neg| prefix_str.contains(neg))
         {
             return false;
         }
@@ -2701,21 +2718,11 @@ mod tests {
         ));
         assert!(is_explicit_confirmation_message("Please send this PDF now"));
         // Negated send-intent should NOT match as confirmation
-        assert!(!is_explicit_confirmation_message(
-            "Don't send the email"
-        ));
-        assert!(!is_explicit_confirmation_message(
-            "Nicht die PDF senden"
-        ));
-        assert!(!is_explicit_confirmation_message(
-            "No, do not send this"
-        ));
-        assert!(!is_explicit_confirmation_message(
-            "Cancel sending the PDF"
-        ));
-        assert!(!is_explicit_confirmation_message(
-            "Stop, nicht senden"
-        ));
+        assert!(!is_explicit_confirmation_message("Don't send the email"));
+        assert!(!is_explicit_confirmation_message("Nicht die PDF senden"));
+        assert!(!is_explicit_confirmation_message("No, do not send this"));
+        assert!(!is_explicit_confirmation_message("Cancel sending the PDF"));
+        assert!(!is_explicit_confirmation_message("Stop, nicht senden"));
         assert!(!is_explicit_confirmation_message(
             "Wait, don't send the attachment"
         ));
