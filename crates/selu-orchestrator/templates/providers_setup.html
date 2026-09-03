@@ -29,7 +29,7 @@
           <input type="password" name="api_key" required
                  placeholder=""
                  data-i18n-placeholder="{{ api_key_placeholder_key }}"
-                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           {% if has_key %}
           <p class="text-[11px] text-txt-faint mt-1" data-i18n="providers.key_will_replace">A key already exists. Saving will replace it.</p>
           {% endif %}
@@ -43,7 +43,7 @@
                  value="{{ base_url }}"
                  placeholder=""
                  data-i18n-placeholder="{{ base_url_placeholder_key }}"
-                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           <p class="text-[11px] text-txt-faint mt-1" data-i18n="{{ base_url_hint_key }}">Connection details</p>
         </div>
         {% else %}
@@ -53,7 +53,7 @@
                  value="{{ base_url }}"
                  placeholder=""
                  data-i18n-placeholder="{{ base_url_placeholder_key }}"
-                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           <p class="text-[11px] text-txt-faint mt-1" data-i18n="{{ base_url_hint_key }}">Connection details</p>
         </div>
         {% endif %}
@@ -61,7 +61,7 @@
         <div class="pt-2 flex items-center gap-3">
           <a href="{{ base_path }}/providers" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
           <button type="submit"
-                  class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                  class="bg-linear-to-r/srgb from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                   data-i18n="providers.check_and_save">Check & Save</button>
         </div>
       </form>

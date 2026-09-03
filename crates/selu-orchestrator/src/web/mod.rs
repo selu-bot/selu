@@ -427,6 +427,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             post(agents::set_runtime_settings_handler),
         )
         .route(
+            "/agents/{agent_id}/capabilities/{capability_id}/image/download",
+            post(agents::download_capability_image),
+        )
+        .route(
             "/agents/{agent_id}/setup",
             get(agents::setup_wizard).post(agents::setup_submit),
         )

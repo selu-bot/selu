@@ -8,9 +8,9 @@
     "start": "node src/index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.18",
-    "express": "^4.21.2",
-    "pino": "^9.6.0",
+    "@whiskeysockets/baileys": "^6.7.24",
+    "express": "^5.2.1",
+    "pino": "^10.3.1",
     "qrcode": "^1.5.4"
   }
 }

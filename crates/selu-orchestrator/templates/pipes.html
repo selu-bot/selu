@@ -12,7 +12,7 @@
         <p class="text-sm text-txt-muted mt-1" data-i18n="pipes.desc">Pipes connect the outside world to your agents. Add a pipe for each way you want to talk to Selu.</p>
       </div>
       <a href="{{ base_path }}/pipes/new"
-         class="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-coral to-amber text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-coral/20 hover:shadow-coral/30 transition-all">
+         class="inline-flex items-center justify-center gap-2 bg-linear-to-r/srgb from-coral to-amber text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-coral/20 hover:shadow-coral/30 transition-all">
         <span data-i18n="pipes.add">Add Pipe</span>
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       </a>
@@ -33,9 +33,9 @@
     {% if let Some(f) = flash %}
     <div class="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm space-y-1.5">
       <p class="font-semibold">Webhook pipe created.</p>
-      <p>Inbound URL: <code class="font-mono text-xs bg-surface-alt px-1.5 py-0.5 rounded break-all">{{ f.inbound_url }}</code></p>
-      <p>Bearer token (save this -- shown only once): <code class="font-mono text-xs bg-surface-alt px-1.5 py-0.5 rounded break-all">{{ f.inbound_token }}</code></p>
-      <p class="text-txt-muted text-xs">POST to the inbound URL with <code class="font-mono bg-surface-alt px-1 py-0.5 rounded">Authorization: Bearer &lt;token&gt;</code> and a JSON body <code class="font-mono bg-surface-alt px-1 py-0.5 rounded">{"sender_ref":"...","text":"..."}</code>.</p>
+      <p>Inbound URL: <code class="font-mono text-xs bg-surface-alt px-1.5 py-0.5 rounded-sm break-all">{{ f.inbound_url }}</code></p>
+      <p>Bearer token (save this -- shown only once): <code class="font-mono text-xs bg-surface-alt px-1.5 py-0.5 rounded-sm break-all">{{ f.inbound_token }}</code></p>
+      <p class="text-txt-muted text-xs">POST to the inbound URL with <code class="font-mono bg-surface-alt px-1 py-0.5 rounded-sm">Authorization: Bearer &lt;token&gt;</code> and a JSON body <code class="font-mono bg-surface-alt px-1 py-0.5 rounded-sm">{"sender_ref":"...","text":"..."}</code>.</p>
     </div>
     {% endif %}
 
@@ -53,7 +53,7 @@
            class="block bg-surface-raised border border-edge rounded-2xl p-5 hover:border-coral/40 transition-all group">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-4">
-              <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+              <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
                 <svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               </div>
               <div>
@@ -79,7 +79,7 @@
            class="block bg-surface-raised border border-edge rounded-2xl p-5 hover:border-coral/40 transition-all group">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-4">
-              <div class="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center flex-shrink-0">
+              <div class="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center shrink-0">
                 <svg class="w-5 h-5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="m10 8 4 4-4 4"/></svg>
               </div>
               <div>
@@ -105,7 +105,7 @@
            class="block bg-surface-raised border border-edge rounded-2xl p-5 hover:border-coral/40 transition-all group">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-4">
-              <div class="w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0">
+              <div class="w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center shrink-0">
                 <svg class="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5A8.38 8.38 0 0 1 9.5 20L4 21l1-5.5A8.5 8.5 0 1 1 20 11.5z"/></svg>
               </div>
               <div>
@@ -131,11 +131,11 @@
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-4">
               {% if pipe.transport == "web" %}
-              <div class="w-10 h-10 rounded-xl bg-coral/10 border border-coral/20 flex items-center justify-center flex-shrink-0">
+              <div class="w-10 h-10 rounded-xl bg-coral/10 border border-coral/20 flex items-center justify-center shrink-0">
                 <svg class="w-5 h-5 text-coral" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
               </div>
               {% else %}
-              <div class="w-10 h-10 rounded-xl bg-amber/10 border border-amber/20 flex items-center justify-center flex-shrink-0">
+              <div class="w-10 h-10 rounded-xl bg-amber/10 border border-amber/20 flex items-center justify-center shrink-0">
                 <svg class="w-5 h-5 text-amber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
               </div>
               {% endif %}

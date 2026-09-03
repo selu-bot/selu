@@ -1,6 +1,6 @@
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 use askama::Template;
 use axum::{
@@ -316,20 +316,14 @@ pub async fn setup_submit(
         error!("Failed to generate random salt");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-    let salt = match SaltString::encode_b64(&salt_bytes) {
-        Ok(s) => s,
-        Err(e) => {
-            error!("Failed to encode SaltString: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-    let hash = match Argon2::default().hash_password(form.password.as_bytes(), &salt) {
-        Ok(h) => h.to_string(),
-        Err(e) => {
-            error!("Argon2 hashing failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+    let hash =
+        match Argon2::default().hash_password_with_salt(form.password.as_bytes(), &salt_bytes) {
+            Ok(h) => h.to_string(),
+            Err(e) => {
+                error!("Argon2 hashing failed: {e}");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
 
     let user_id = Uuid::new_v4().to_string();
     let username = form.username.trim().to_string();

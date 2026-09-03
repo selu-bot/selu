@@ -4,16 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>selu. — First-Run Setup</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: { extend: { fontFamily: {
-        heading: ['Nunito', 'sans-serif'],
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-      }}}
-    }
-  </script>
+  {% include "_tailwind.html" %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -81,20 +72,20 @@
     {% endif %}
 
     <!-- Form -->
-    <div class="backdrop-blur-sm rounded-2xl p-6" style="background:var(--bg-card);border:1px solid var(--border)">
+    <div class="backdrop-blur-xs rounded-2xl p-6" style="background:var(--bg-card);border:1px solid var(--border)">
       <form method="POST" action="{{ base_path }}/setup" class="space-y-4">
         <div>
           <label for="username" class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Username</label>
           <input type="text" id="username" name="username" required autofocus
                  placeholder="admin"
-                 class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#FF6B5A] focus:ring-1 focus:ring-[#FF6B5A]/50 transition"
+                 class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-hidden focus:border-[#FF6B5A] focus:ring-1 focus:ring-[#FF6B5A]/50 transition"
                  style="background:var(--input-bg);border:1px solid var(--input-border);color:var(--text-heading)" />
         </div>
         <div>
           <label for="display_name" class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Display Name</label>
           <input type="text" id="display_name" name="display_name"
                  placeholder="Jan"
-                 class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#FF6B5A] focus:ring-1 focus:ring-[#FF6B5A]/50 transition"
+                 class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-hidden focus:border-[#FF6B5A] focus:ring-1 focus:ring-[#FF6B5A]/50 transition"
                  style="background:var(--input-bg);border:1px solid var(--input-border);color:var(--text-heading)" />
           <p class="text-xs mt-1" id="dn-hint" style="color:var(--text-muted)">Defaults to username if left blank.</p>
         </div>
@@ -102,11 +93,11 @@
           <label for="password" class="block text-xs font-medium mb-1.5" style="color:var(--text-muted)">Password</label>
           <input type="password" id="password" name="password" required
                  placeholder="Choose a strong password"
-                 class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#FF6B5A] focus:ring-1 focus:ring-[#FF6B5A]/50 transition"
+                 class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-hidden focus:border-[#FF6B5A] focus:ring-1 focus:ring-[#FF6B5A]/50 transition"
                  style="background:var(--input-bg);border:1px solid var(--input-border);color:var(--text-heading)" />
         </div>
         <button type="submit" id="setup-btn"
-                class="w-full bg-gradient-to-r from-[#FF6B5A] to-[#FF9F67] hover:from-[#FF6B5A]/90 hover:to-[#FF9F67]/90 text-white font-semibold text-sm py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-[#FF6B5A]/20 hover:shadow-[#FF6B5A]/30">
+                class="w-full bg-linear-to-r/srgb from-[#FF6B5A] to-[#FF9F67] hover:from-[#FF6B5A]/90 hover:to-[#FF9F67]/90 text-white font-semibold text-sm py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-[#FF6B5A]/20 hover:shadow-[#FF6B5A]/30">
           Create Account &amp; Start
         </button>
       </form>

@@ -4,7 +4,7 @@
       hx-swap="outerHTML">
   <div class="flex-1 min-w-0 flex gap-3">
     <select name="category"
-            class="bg-surface-input border border-edge rounded-lg px-2.5 py-1.5 text-xs text-txt-heading focus:outline-none focus:border-coral transition">
+            class="bg-surface-input border border-edge rounded-lg px-2.5 py-1.5 text-xs text-txt-heading focus:outline-hidden focus:border-coral transition">
       <option value="personal" {% if fact.category == "personal" %}selected{% endif %} data-i18n="personality.cat.personal">Personal</option>
       <option value="preferences" {% if fact.category == "preferences" %}selected{% endif %} data-i18n="personality.cat.preferences">Preferences</option>
       <option value="location" {% if fact.category == "location" %}selected{% endif %} data-i18n="personality.cat.location">Location</option>
@@ -12,7 +12,7 @@
       <option value="other" {% if fact.category == "other" %}selected{% endif %} data-i18n="personality.cat.other">Other</option>
     </select>
     <input name="fact" type="text" value="{{ fact.fact }}" required
-           class="flex-1 bg-surface-input border border-edge rounded-lg px-3 py-1.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+           class="flex-1 bg-surface-input border border-edge rounded-lg px-3 py-1.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
   </div>
   <div class="flex items-center gap-2">
     <button type="submit"

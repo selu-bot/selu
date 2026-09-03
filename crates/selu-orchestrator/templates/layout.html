@@ -5,68 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>selu. — {% block title %}Your personal agent{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0.2' y1='0' x2='0.8' y2='1'%3E%3Cstop offset='0%25' stop-color='%23FF7EB3'/%3E%3Cstop offset='100%25' stop-color='%23FF6B5A'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='108' fill='url(%23g)'/%3E%3Cellipse cx='195' cy='222' rx='36' ry='44' fill='white'/%3E%3Ccircle cx='205' cy='214' r='21' fill='%232D2B55'/%3E%3Ccircle cx='213' cy='205' r='7.5' fill='white' opacity='0.9'/%3E%3Cellipse cx='317' cy='222' rx='36' ry='44' fill='white'/%3E%3Ccircle cx='327' cy='214' r='21' fill='%232D2B55'/%3E%3Ccircle cx='335' cy='205' r='7.5' fill='white' opacity='0.9'/%3E%3Cpath d='M 212,326 Q 256,370 300,326' stroke='%232D2B55' stroke-width='7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
-  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
-  <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50:  '#FFF5F3',
-              100: '#FFE8E4',
-              200: '#FFD0C9',
-              300: '#FFB0A3',
-              400: '#FF8D7D',
-              500: '#FF6B5A',
-              600: '#E85A4A',
-              700: '#CC4A3C',
-              800: '#A33B30',
-              900: '#7A2C24',
-            },
-            coral:  '#FF6B5A',
-            amber:  '#FF9F67',
-            blush:  '#FF7EB3',
-            navy:   '#2D2B55',
-            dark:   '#1E1B3A',
-            muted:  '#8E8AA0',
-            warm:   '#FFF8F5',
-            sunny:  '#FFD93D',
-            rosie:  '#FF4070',
-            /* Semantic colors via CSS vars */
-            surface: {
-              DEFAULT: 'var(--c-surface)',
-              alt:     'var(--c-surface-alt)',
-              raised:  'var(--c-surface-raised)',
-              input:   'var(--c-surface-input)',
-            },
-            edge: {
-              DEFAULT: 'var(--c-edge)',
-              strong:  'var(--c-edge-strong)',
-            },
-            txt: {
-              DEFAULT: 'var(--c-text)',
-              heading: 'var(--c-text-heading)',
-              muted:   'var(--c-text-muted)',
-              faint:   'var(--c-text-faint)',
-            },
-            sidebar: {
-              DEFAULT: 'var(--c-sidebar)',
-              hover:   'var(--c-sidebar-hover)',
-            },
-          },
-          fontFamily: {
-            heading: ['Nunito', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
-            mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'monospace'],
-          }
-        }
-      }
-    }
-  </script>
+  <script src="https://unpkg.com/htmx.org@2.0.10/dist/htmx.min.js"></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.4/sse.js"></script>
+  {% include "_tailwind.html" %}
+  <script src="https://cdn.jsdelivr.net/npm/marked@18.0.11/lib/marked.umd.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -360,13 +302,13 @@
        onclick="document.getElementById('sidebar').classList.add('-translate-x-full');this.classList.add('hidden')"></div>
 
   <!-- Sidebar Navigation -->
-  <aside id="sidebar" class="w-[230px] bg-sidebar backdrop-blur-sm border-r border-edge flex flex-col flex-shrink-0
+  <aside id="sidebar" class="w-[230px] bg-sidebar backdrop-blur-xs border-r border-edge flex flex-col shrink-0
          fixed md:relative z-50 h-full transition-transform duration-200
          -translate-x-full md:translate-x-0">
     <!-- Logo -->
     <div class="px-5 h-16 flex items-center border-b border-edge">
       <a href="{{ base_path }}/chat" class="flex items-center gap-3 group">
-        <svg class="w-9 h-9 flex-shrink-0 animate-float" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <svg class="w-9 h-9 shrink-0 animate-float" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
           <defs><linearGradient id="selu-g" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0%" stop-color="#FF7EB3"/><stop offset="100%" stop-color="#FF6B5A"/></linearGradient></defs>
           <circle cx="165" cy="90" r="50" fill="url(#selu-g)"/>
           <circle cx="347" cy="90" r="50" fill="url(#selu-g)"/>
@@ -389,66 +331,66 @@
     <nav class="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
       <div class="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-faint" data-i18n="nav.main">Main</div>
 
-      <a href="{{ base_path }}/chat" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "chat" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <a href="{{ base_path }}/chat" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "chat" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span data-i18n="nav.chat">Chat</span>
       </a>
 
-      <a href="{{ base_path }}/personality" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "personality" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><path d="M10 21h4"/></svg>
+      <a href="{{ base_path }}/personality" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "personality" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><path d="M10 21h4"/></svg>
         <span data-i18n="nav.personality">Memory</span>
       </a>
 
-      <a href="{{ base_path }}/schedules" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "schedules" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <a href="{{ base_path }}/schedules" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "schedules" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span data-i18n="nav.schedules">Schedules</span>
       </a>
 
-      <a href="{{ base_path }}/users" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "users" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <a href="{{ base_path }}/users" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "users" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span data-i18n="nav.users">Users</span>
       </a>
 
-      <a href="{{ base_path }}/mobile" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "mobile" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      <a href="{{ base_path }}/mobile" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "mobile" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
         <span data-i18n="nav.mobile">Mobile App</span>
       </a>
 
-      <a href="{{ base_path }}/feedback" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "feedback" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      <a href="{{ base_path }}/feedback" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "feedback" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         <span data-i18n="nav.feedback">Feedback</span>
       </a>
 
       {% if is_admin %}
-      <a href="{{ base_path }}/pipes" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "pipes" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <a href="{{ base_path }}/pipes" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "pipes" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         <span data-i18n="nav.pipes">Pipes</span>
       </a>
 
-      <a href="{{ base_path }}/agents" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "agents" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
+      <a href="{{ base_path }}/agents" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "agents" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
         <span data-i18n="nav.agents">Agents</span>
       </a>
 
-      <a href="{{ base_path }}/providers" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "providers" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+      <a href="{{ base_path }}/providers" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "providers" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
         <span data-i18n="nav.providers">Providers</span>
       </a>
 
-      <a href="{{ base_path }}/system-updates" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "system_updates" %}nav-active text-txt-heading font-medium{% else %}text-[--c-nav-text] hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="2" y1="14" x2="6" y2="14"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="18" y1="16" x2="22" y2="16"/></svg>
+      <a href="{{ base_path }}/system-updates" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "system_updates" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="2" y1="14" x2="6" y2="14"/><line x1="10" y1="8" x2="14" y2="8"/><line x1="18" y1="16" x2="22" y2="16"/></svg>
         <span data-i18n="nav.system_updates">Settings</span>
       </a>
 
       <div class="px-3 pt-5 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-faint" data-i18n="nav.advanced">Advanced</div>
 
       <a href="{{ base_path }}/credentials" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "credentials" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         <span data-i18n="nav.credentials">Credentials</span>
       </a>
 
       <a href="{{ base_path }}/cache" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "cache" %}nav-active text-txt-heading font-medium{% else %}text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         <span data-i18n="nav.cache">Caches</span>
       </a>
 
@@ -461,21 +403,21 @@
       <button onclick="toggleTheme()" id="theme-toggle"
               class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover transition-all cursor-pointer">
         <!-- Sun icon (shown in dark mode) -->
-        <svg id="theme-icon-sun" class="w-[18px] h-[18px] flex-shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="theme-icon-sun" class="w-[18px] h-[18px] shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
         <!-- Moon icon (shown in light mode) -->
-        <svg id="theme-icon-moon" class="w-[18px] h-[18px] flex-shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="theme-icon-moon" class="w-[18px] h-[18px] shrink-0 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <span id="theme-label">Light mode</span>
       </button>
       <!-- Language Toggle -->
       <button onclick="toggleLang()" id="lang-toggle"
               class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-txt-heading hover:bg-sidebar-hover transition-all cursor-pointer">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
         <span id="lang-label">EN</span>
       </button>
       <!-- Logout -->
       <form method="POST" action="{{ base_path }}/logout">
         <button type="submit" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-txt-muted hover:text-rosie hover:bg-rosie/5 transition-all cursor-pointer">
-          <svg class="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           <span data-i18n="nav.signout">Sign out</span>
         </button>
       </form>
@@ -790,6 +732,11 @@
         'agents.detail.remove': 'Remove',
         'agents.detail.deny': 'Deny',
         'agents.detail.resources': 'Resources',
+        'agents.detail.image.available': 'Files ready',
+        'agents.detail.image.missing': 'Download needed',
+        'agents.detail.image.unknown': 'Status unavailable',
+        'agents.detail.image.missing_hint': 'Selu will download these files automatically when this capability is used.',
+        'agents.detail.image.download': 'Download now',
         'agents.detail.memory': 'Memory',
         'agents.detail.cpu': 'CPU',
         'agents.detail.pids': 'PIDs',
@@ -957,6 +904,8 @@
         'agents.success.automation_enabled': 'Managed automation enabled.',
         'agents.success.automation_disabled': 'Managed automation disabled.',
         'agents.success.runtime_settings_saved': 'Autonomy settings saved.',
+        'agents.success.image_downloaded': 'Capability files downloaded. It is ready to use.',
+        'agents.success.image_already_available': 'Capability files are already available.',
         'agents.error.encrypt_failed': 'Couldn\'t save the credential. Please try again.',
         'agents.error.store_cred_failed': 'Couldn\'t store the credential. Please try again.',
         'agents.error.save_perms_failed': 'Couldn\'t save tool permissions. Please try again.',
@@ -976,6 +925,7 @@
         'agents.error.automation_invalid_action': 'Invalid automation action.',
         'agents.error.runtime_settings_invalid': 'Please check autonomy and advanced limit values.',
         'agents.error.runtime_settings_save_failed': 'Couldn\'t save these settings. Please try again.',
+        'agents.error.image_download_failed': 'Couldn\'t download the capability files. Check Docker and your internet connection, then try again.',
         'agents.error.runtime_settings_save_failed': 'Couldn\'t save these settings. Please try again.',
         'providers.title': 'LLM Providers',
         'providers.desc': 'Configure API keys and endpoints for LLM providers. Keys are encrypted at rest with AES-256-GCM.',
@@ -1713,6 +1663,11 @@
         'agents.detail.remove': 'Entfernen',
         'agents.detail.deny': 'Verbieten',
         'agents.detail.resources': 'Ressourcen',
+        'agents.detail.image.available': 'Dateien bereit',
+        'agents.detail.image.missing': 'Download erforderlich',
+        'agents.detail.image.unknown': 'Status nicht verfügbar',
+        'agents.detail.image.missing_hint': 'Selu lädt diese Dateien automatisch herunter, sobald diese Fähigkeit verwendet wird.',
+        'agents.detail.image.download': 'Jetzt herunterladen',
         'agents.detail.memory': 'Speicher',
         'agents.detail.cpu': 'CPU',
         'agents.detail.pids': 'PIDs',
@@ -1880,6 +1835,8 @@
         'agents.success.automation_enabled': 'Verwaltete Automatisierung aktiviert.',
         'agents.success.automation_disabled': 'Verwaltete Automatisierung deaktiviert.',
         'agents.success.runtime_settings_saved': 'Autonomie-Einstellungen gespeichert.',
+        'agents.success.image_downloaded': 'Die benötigten Dateien wurden heruntergeladen. Die Fähigkeit ist einsatzbereit.',
+        'agents.success.image_already_available': 'Die benötigten Dateien sind bereits verfügbar.',
         'agents.error.encrypt_failed': 'Zugangsdaten konnten nicht gespeichert werden. Bitte versuche es erneut.',
         'agents.error.store_cred_failed': 'Zugangsdaten konnten nicht gespeichert werden. Bitte versuche es erneut.',
         'agents.error.save_perms_failed': 'Tool-Berechtigungen konnten nicht gespeichert werden. Bitte versuche es erneut.',
@@ -1899,6 +1856,7 @@
         'agents.error.automation_invalid_action': 'Ungültige Automatisierungsaktion.',
         'agents.error.runtime_settings_invalid': 'Bitte prüfe Autonomie-Stufe und erweiterte Limits.',
         'agents.error.runtime_settings_save_failed': 'Diese Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut.',
+        'agents.error.image_download_failed': 'Die benötigten Dateien konnten nicht heruntergeladen werden. Prüfe Docker und die Internetverbindung und versuche es erneut.',
         'agents.error.runtime_settings_save_failed': 'Diese Einstellungen konnten nicht gespeichert werden. Bitte versuche es erneut.',
         'providers.title': 'LLM-Anbieter',
         'providers.desc': 'API-Schl\u00fcssel und Endpunkte f\u00fcr LLM-Anbieter konfigurieren. Schl\u00fcssel werden mit AES-256-GCM verschl\u00fcsselt.',

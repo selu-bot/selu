@@ -54,7 +54,7 @@
             <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
             <select name="provider_id" id="global-provider-select"
                     onchange="fetchModels(this.value, '#global-model-select')"
-                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               <option value="" data-i18n="agents.selectprovider">-- Select provider --</option>
               {% for p in providers %}
               <option value="{{ p.id }}" {% if p.id == global_provider %}selected{% endif %}>{{ p.display_name }}</option>
@@ -64,7 +64,7 @@
           <div class="flex-[2] min-w-[200px]">
             <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.model">Model</label>
             <select name="model_id" id="global-model-select" data-current="{{ global_model }}"
-                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               {% if global_model.is_empty() %}
               <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
               {% else %}
@@ -75,10 +75,10 @@
           <div class="w-20">
             <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.temperature">Temp</label>
             <input type="text" name="temperature" value="{{ global_temperature }}" placeholder="0.7"
-                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           </div>
           <button type="submit"
-                  class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                  class="bg-linear-to-r/srgb from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                   data-i18n="agents.save">Save</button>
         </form>
         {% if providers.is_empty() %}
@@ -99,7 +99,7 @@
             <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
             <select name="provider_id" id="global-image-provider-select"
                     onchange="fetchModels(this.value, '#global-image-model-select')"
-                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               <option value="" data-i18n="agents.globaldefaultoption">-- Global default --</option>
               {% for p in providers %}
               <option value="{{ p.id }}" {% if p.id == global_image_provider %}selected{% endif %}>{{ p.display_name }}</option>
@@ -109,7 +109,7 @@
           <div class="flex-[2] min-w-[200px]">
             <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.image_model">Image model</label>
             <select name="model_id" id="global-image-model-select" data-current="{{ global_image_model }}"
-                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               {% if global_image_model.is_empty() %}
               <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
               {% else %}
@@ -118,7 +118,7 @@
             </select>
           </div>
           <button type="submit"
-                  class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                  class="bg-linear-to-r/srgb from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                   data-i18n="agents.save">Save</button>
         </form>
       </div>
@@ -164,7 +164,7 @@
                 <td class="px-5 py-3.5">
                   <a href="{{ base_path }}/agents/{{ agent.id }}" class="font-medium text-txt-heading hover:text-coral transition-colors">{{ agent.name }}</a>
                   {% if agent.is_bundled %}
-                   <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral" data-i18n="agents.bundled">Bundled</span>
+                   <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-coral/15 text-coral" data-i18n="agents.bundled">Bundled</span>
                   {% endif %}
                   <div class="text-[10px] text-txt-faint font-mono mt-0.5">{{ agent.id }}{% if agent.capability_count > 0 %} &middot; {{ agent.capability_count }} cap{% endif %}</div>
                   {% if !agent.is_bundled %}
@@ -188,15 +188,15 @@
                 </td>
                 <td class="px-5 py-3.5">
                   {% if !agent.provider_id.is_empty() %}
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral">{{ agent.provider_id }}</span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-coral/15 text-coral">{{ agent.provider_id }}</span>
                   <span class="text-txt ml-1">{{ agent.model_display_name }}</span>
                   {% else %}
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-alt text-txt-muted" data-i18n="agents.globaldefault">Global default</span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-surface-alt text-txt-muted" data-i18n="agents.globaldefault">Global default</span>
                   {% endif %}
                   <div class="mt-1 text-xs text-txt-muted">
                     <span data-i18n="agents.image_model_short">Image:</span>
                     {% if !agent.image_provider_id.is_empty() %}
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber/15 text-amber">{{ agent.image_provider_id }}</span>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-amber/15 text-amber">{{ agent.image_provider_id }}</span>
                     <span class="text-txt ml-1">{{ agent.image_model_display_name }}</span>
                     {% else %}
                     <span data-i18n="agents.globaldefault">Global default</span>
@@ -336,7 +336,7 @@
                     data-agent-version="{{ agent.version }}">
                 <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
                 <button type="submit" data-agent-update-id="{{ agent.id }}"
-                        class="bg-gradient-to-r from-amber to-coral text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-amber/20"
+                        class="bg-linear-to-r/srgb from-amber to-coral text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-amber/20"
                         data-i18n="agents.update">Update</button>
               </form>
               <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -352,7 +352,7 @@
               <form method="POST" action="{{ base_path }}/agents/install">
                 <input type="hidden" name="entry_json" value='{{ agent.entry_json }}' />
                 <button type="submit"
-                        class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
+                        class="bg-linear-to-r/srgb from-coral to-amber text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
                         data-i18n="agents.install">Install</button>
               </form>
               {% endif %}
@@ -366,7 +366,7 @@
 </div>
 
 <!-- Model Selection Modal -->
-<div id="model-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm p-4" onclick="if(event.target===this)closeModelModal()">
+<div id="model-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-xs p-4" onclick="if(event.target===this)closeModelModal()">
   <div class="bg-surface-raised border border-edge rounded-2xl p-6 w-full max-w-md shadow-2xl shadow-black/40 animate-fadein">
     <div class="flex items-center justify-between mb-4">
       <h3 id="model-modal-title" class="text-base font-bold text-txt-heading">Model</h3>
@@ -379,7 +379,7 @@
         <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.provider">Provider</label>
         <select name="provider_id" id="modal-provider-select"
                 onchange="fetchModels(this.value, document.getElementById('modal-model-select'))"
-                class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
           <option value="" data-i18n="agents.globaldefaultoption">-- Global default --</option>
           {% for p in providers %}
           <option value="{{ p.id }}">{{ p.display_name }}</option>
@@ -389,21 +389,21 @@
       <div>
         <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.model">Model</label>
         <select name="model_id" id="modal-model-select"
-                class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
           <option value="" data-i18n="agents.selectproviderfirst">-- Select a provider first --</option>
         </select>
       </div>
       <div id="modal-temp-group">
         <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="agents.temperature">Temperature</label>
         <input type="text" name="temperature" value="0.7" placeholder="0.7"
-               class="w-20 bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+               class="w-20 bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
       </div>
       <div class="flex items-center justify-end gap-3 pt-2">
         <button type="button" onclick="closeModelModal()"
                 class="text-xs text-txt-muted hover:text-txt-heading border border-edge hover:border-muted px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                 data-i18n="common.cancel">Cancel</button>
         <button type="submit"
-                class="bg-gradient-to-r from-coral to-amber text-white text-xs font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
+                class="bg-linear-to-r/srgb from-coral to-amber text-white text-xs font-medium px-4 py-2 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
                 data-i18n="agents.save">Save</button>
       </div>
     </form>

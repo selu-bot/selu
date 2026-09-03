@@ -605,7 +605,7 @@ pub async fn chat_send(
             let escaped_reply = html_escape(&result.text);
             let html = format!(
                 r#"<div class="flex justify-end">
-  <div class="max-w-[72%] bg-gradient-to-br from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">
+  <div class="max-w-[72%] bg-linear-to-br/srgb from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">
     <p class="text-sm leading-relaxed whitespace-pre-wrap break-words text-txt-heading">{escaped_input}</p>
   </div>
 </div>
@@ -666,7 +666,7 @@ pub async fn chat_send(
     };
     let html = format!(
         r#"<div class="flex justify-end">
-  <div class="max-w-[72%] bg-gradient-to-br from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">
+  <div class="max-w-[72%] bg-linear-to-br/srgb from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">
     <p class="text-sm leading-relaxed whitespace-pre-wrap break-words text-txt-heading">{escaped_text}</p>
     {image_preview_html}
   </div>
@@ -789,7 +789,7 @@ pub async fn chat_stream(
                     let escaped_url = html_escape(&url)
                         .replace('\'', "\\'");
                     cards.push_str(&format!(
-                        "html += '<a href=\"{url}\" target=\"_blank\" download class=\"flex items-center gap-2 px-3 py-2 bg-surface-input border border-edge rounded-lg hover:border-coral/40 transition-colors text-sm no-underline\"><svg class=\"w-4 h-4 flex-shrink-0 text-coral\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"12\" y1=\"18\" x2=\"12\" y2=\"12\"/><polyline points=\"9 15 12 18 15 15\"/></svg><span class=\"truncate text-txt-heading\">{name}</span></a>';\n",
+                        "html += '<a href=\"{url}\" target=\"_blank\" download class=\"flex items-center gap-2 px-3 py-2 bg-surface-input border border-edge rounded-lg hover:border-coral/40 transition-colors text-sm no-underline\"><svg class=\"w-4 h-4 shrink-0 text-coral\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"12\" y1=\"18\" x2=\"12\" y2=\"12\"/><polyline points=\"9 15 12 18 15 15\"/></svg><span class=\"truncate text-txt-heading\">{name}</span></a>';\n",
                         url = escaped_url,
                         name = escaped_name,
                     ));
@@ -1032,14 +1032,14 @@ fn render_message_html(msg: &MessageView) -> String {
             )
         };
         format!(
-            r#"<div class="flex justify-end"><div class="max-w-[72%] bg-gradient-to-br from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">{content}{images}<p class="text-[10px] text-txt-muted mt-1.5">{ts}</p></div></div>"#,
+            r#"<div class="flex justify-end"><div class="max-w-[72%] bg-linear-to-br/srgb from-coral/20 to-amber/10 border border-coral/20 rounded-2xl rounded-br-md px-4 py-2.5">{content}{images}<p class="text-[10px] text-txt-muted mt-1.5">{ts}</p></div></div>"#,
             content = content_html,
             images = images_html,
             ts = html_escape(&msg.created_at),
         )
     } else if msg.role == "tool" {
         format!(
-            r#"<div class="flex justify-start"><details class="tool-result max-w-[72%]"><summary class="tool-result-summary"><svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>Tool result</span><svg class="tool-result-chevron w-3 h-3 flex-shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></summary><div class="tool-result-body"><pre class="tool-result-pre"><code>{content}</code></pre></div></details></div>"#,
+            r#"<div class="flex justify-start"><details class="tool-result max-w-[72%]"><summary class="tool-result-summary"><svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>Tool result</span><svg class="tool-result-chevron w-3 h-3 shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></summary><div class="tool-result-body"><pre class="tool-result-pre"><code>{content}</code></pre></div></details></div>"#,
             content = html_escape(&msg.content),
         )
     } else if !msg.tool_calls.is_empty() {
@@ -1048,7 +1048,7 @@ fn render_message_html(msg: &MessageView) -> String {
                 String::new()
             } else {
                 format!(
-                    r#"<svg class="tool-result-chevron w-3 h-3 flex-shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></summary><div class="tool-result-body"><pre class="tool-result-pre"><code>{}</code></pre></div>"#,
+                    r#"<svg class="tool-result-chevron w-3 h-3 shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></summary><div class="tool-result-body"><pre class="tool-result-pre"><code>{}</code></pre></div>"#,
                     html_escape(&tc.result)
                 )
             };
@@ -1058,7 +1058,7 @@ fn render_message_html(msg: &MessageView) -> String {
                 result_part
             };
             format!(
-                r#"<details class="tool-call-item"><summary class="tool-call-summary"><svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg><span>{name}</span>{rest}</details>"#,
+                r#"<details class="tool-call-item"><summary class="tool-call-summary"><svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg><span>{name}</span>{rest}</details>"#,
                 name = html_escape(&tc.name),
                 rest = chevron_or_close,
             )
@@ -1070,7 +1070,7 @@ fn render_message_html(msg: &MessageView) -> String {
                 format!("{} intermediate steps", msg.tool_calls.len())
             };
             format!(
-                r#"<div class="flex justify-start"><details class="tool-calls-group compacted"><summary class="tool-call-summary compacted-summary"><svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg><span>{label}</span><svg class="tool-result-chevron w-3 h-3 flex-shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></summary>{calls}</details></div>"#,
+                r#"<div class="flex justify-start"><details class="tool-calls-group compacted"><summary class="tool-call-summary compacted-summary"><svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg><span>{label}</span><svg class="tool-result-chevron w-3 h-3 shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></summary>{calls}</details></div>"#,
                 label = html_escape(&step_label),
                 calls = calls_html.join(""),
             )
@@ -1491,7 +1491,7 @@ fn build_confirmation_html(
     s.push_str("  h += '<div class=\"flex items-center gap-2 text-sm font-medium text-amber-300 mb-2\">';\n");
     s.push_str("  h += '<svg class=\"w-4 h-4\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg>';\n");
     s.push_str("  h += ' ' + t('chat.confirm.title') + '</div>';\n");
-    s.push_str("  h += '<p class=\"text-xs text-txt-muted mb-1\">' + t('chat.confirm.tool') + ' <code class=\"bg-surface-input px-1.5 py-0.5 rounded text-brand-300 text-xs\">");
+    s.push_str("  h += '<p class=\"text-xs text-txt-muted mb-1\">' + t('chat.confirm.tool') + ' <code class=\"bg-surface-input px-1.5 py-0.5 rounded-sm text-brand-300 text-xs\">");
     s.push_str(&tool_esc);
     s.push_str("</code></p>';\n");
     if let Some(message) = approval_message_esc {

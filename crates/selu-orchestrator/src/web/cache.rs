@@ -146,7 +146,13 @@ async fn fetch_volume_sizes() -> HashMap<String, i64> {
         }
     };
 
-    let df = match docker.df().await {
+    let df = match docker
+        .df(Some(bollard::query_parameters::DataUsageOptions {
+            _type: Some(vec!["volume".to_string()]),
+            verbose: true,
+        }))
+        .await
+    {
         Ok(df) => df,
         Err(e) => {
             warn!("Docker df failed: {e}");
@@ -154,11 +160,20 @@ async fn fetch_volume_sizes() -> HashMap<String, i64> {
         }
     };
 
+    volume_sizes_from_usage(df)
+}
+
+fn volume_sizes_from_usage(df: bollard::models::SystemDataUsageResponse) -> HashMap<String, i64> {
     let mut sizes = HashMap::new();
-    if let Some(volumes) = df.volumes {
-        for v in volumes {
-            if let Some(usage) = v.usage_data {
-                sizes.insert(v.name, usage.size);
+    if let Some(volume_usage) = df.volume_usage
+        && let Some(volumes) = volume_usage.items
+    {
+        for value in volumes {
+            if let Ok(volume) = serde_json::from_value::<bollard::models::Volume>(value)
+                && let Some(usage) = volume.usage_data
+                && usage.size >= 0
+            {
+                sizes.insert(volume.name, usage.size);
             }
         }
     }
@@ -178,5 +193,29 @@ fn format_bytes(bytes: i64) -> String {
         format!("{:.1} MB", b / MB)
     } else {
         format!("{:.2} GB", b / GB)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::volume_sizes_from_usage;
+    use serde_json::json;
+
+    #[test]
+    fn extracts_verbose_docker_volume_usage_and_skips_unavailable_sizes() {
+        let volume = |name: &str, size: i64| {
+            json!({
+                "Name": name, "Driver": "local", "Mountpoint": "/volumes/test",
+                "Labels": {}, "Options": {}, "Scope": "local",
+                "UsageData": {"Size": size, "RefCount": 1}
+            })
+        };
+        let response = serde_json::from_value(json!({
+            "VolumeUsage": {"Items": [volume("selu-cache-test", 2048), volume("unavailable", -1), {}]}
+        })).unwrap();
+        let sizes = volume_sizes_from_usage(response);
+        assert_eq!(sizes.len(), 1);
+        assert_eq!(sizes.get("selu-cache-test"), Some(&2048));
+        assert!(volume_sizes_from_usage(Default::default()).is_empty());
     }
 }

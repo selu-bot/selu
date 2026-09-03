@@ -14,7 +14,7 @@
 
     <!-- Privacy Warning -->
     <div class="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
-      <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <svg class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       <p class="text-sm text-amber-600 dark:text-amber-400" data-i18n="feedback.privacy_warning">Your feedback will be posted publicly. Please don't include personal information, passwords, or private data.</p>
     </div>
 
@@ -71,7 +71,7 @@
         <div>
           <label for="description" class="block text-sm font-medium text-txt-heading mb-2" data-i18n="feedback.description_label">Describe your feedback</label>
           <textarea id="description" name="description" rows="5" required minlength="10" maxlength="2000"
-                    class="w-full bg-surface-input border border-edge rounded-xl px-4 py-3 text-sm text-txt-body placeholder:text-txt-faint focus:outline-none focus:ring-2 focus:ring-coral/30 focus:border-coral resize-y"
+                    class="w-full bg-surface-input border border-edge rounded-xl px-4 py-3 text-sm text-txt-body placeholder:text-txt-faint focus:outline-hidden focus:ring-2 focus:ring-coral/30 focus:border-coral resize-y"
                     data-i18n-placeholder="feedback.description_placeholder"
                     placeholder="Describe what happened or what you'd like to see..."></textarea>
           <p class="text-xs text-txt-faint mt-1" data-i18n="feedback.description_hint">Minimum 10 characters</p>
@@ -86,7 +86,7 @@
           <span data-i18n="feedback.sending">Sending...</span>
         </div>
         <button type="submit"
-                class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 hover:from-coral/90 hover:to-amber/90">
+                class="bg-linear-to-r/srgb from-coral to-amber text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 hover:from-coral/90 hover:to-amber/90">
           <span data-i18n="feedback.submit">Send Feedback</span>
         </button>
       </div>

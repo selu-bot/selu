@@ -290,7 +290,10 @@ pub async fn list_schedules(db: &SqlitePool, user_id: &str) -> Result<Vec<Schedu
         .unwrap_or_default();
 
         let pipe_ids: Vec<String> = pipes.iter().map(|p| p.pipe_id.clone()).collect();
-        let pipe_names: Vec<String> = pipes.iter().map(|p| p.name.clone()).collect();
+        let pipe_names: Vec<String> = pipes
+            .iter()
+            .map(|p| p.name.clone().unwrap_or_default())
+            .collect();
 
         schedules.push(ScheduleRow {
             id: schedule_id,
@@ -570,7 +573,7 @@ pub async fn fetch_due_schedules(db: &SqlitePool) -> Result<Vec<DueSchedule>> {
             name: r.name,
             prompt: r.prompt,
             cron_expression: r.cron_expression,
-            timezone: r.timezone,
+            timezone: r.timezone.unwrap_or_else(|| "UTC".to_string()),
             one_shot: r.one_shot != 0,
             pipe_ids: pipe_rows,
         });

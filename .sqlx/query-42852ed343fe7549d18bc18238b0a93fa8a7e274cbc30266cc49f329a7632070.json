@@ -6,12 +6,24 @@
       {
         "name": "name",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "name"
+          }
+        }
       },
       {
         "name": "transport",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "transport"
+          }
+        }
       }
     ],
     "parameters": {

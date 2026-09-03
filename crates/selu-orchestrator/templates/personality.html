@@ -40,7 +40,7 @@
             <div>
               <label for="p-category" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="personality.category">Category</label>
               <select id="p-category" name="category"
-                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
                 <option value="personal" data-i18n="personality.cat.personal">Personal</option>
                 <option value="preferences" data-i18n="personality.cat.preferences">Preferences</option>
                 <option value="location" data-i18n="personality.cat.location">Location</option>
@@ -53,12 +53,12 @@
               <input id="p-fact" name="fact" type="text" required autocomplete="off"
                      data-i18n-placeholder="personality.fact.placeholder"
                      placeholder="e.g. My name is Jan, I live in Berlin..."
-                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             </div>
           </div>
           <div class="flex justify-end">
             <button type="submit"
-                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                     data-i18n="personality.add">Add a fact</button>
           </div>
         </div>

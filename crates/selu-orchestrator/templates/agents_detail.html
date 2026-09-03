@@ -13,7 +13,7 @@
 
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-coral/10 border border-coral/20 flex items-center justify-center flex-shrink-0">
+        <div class="w-10 h-10 rounded-xl bg-coral/10 border border-coral/20 flex items-center justify-center shrink-0">
           <svg class="w-5 h-5 text-coral" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4m-8.66-13H7.34m9.32 0h4m-14.14 5.66l2.83-2.83m7.07-7.07l2.83-2.83M4.22 4.22l2.83 2.83m7.07 7.07l2.83 2.83"/></svg>
         </div>
         <div>
@@ -46,6 +46,7 @@
       {% else if err == "automation_invalid_action" %}<span data-i18n="agents.error.automation_invalid_action">Invalid automation action.</span>
       {% else if err == "runtime_settings_invalid" %}<span data-i18n="agents.error.runtime_settings_invalid">Please check autonomy and advanced limit values.</span>
       {% else if err == "runtime_settings_save_failed" %}<span data-i18n="agents.error.runtime_settings_save_failed">Couldn't save these settings. Please try again.</span>
+      {% else if err == "image_download_failed" %}<span data-i18n="agents.error.image_download_failed">Couldn't download the capability files. Check Docker and your internet connection, then try again.</span>
       {% else %}{{ err }}
       {% endif %}
     </div>
@@ -58,6 +59,8 @@
       {% else if msg == "automation_enabled" %}<span data-i18n="agents.success.automation_enabled">Managed automation enabled.</span>
       {% else if msg == "automation_disabled" %}<span data-i18n="agents.success.automation_disabled">Managed automation disabled.</span>
       {% else if msg == "runtime_settings_saved" %}<span data-i18n="agents.success.runtime_settings_saved">Autonomy settings saved.</span>
+      {% else if msg == "image_downloaded" %}<span data-i18n="agents.success.image_downloaded">Capability files downloaded. It is ready to use.</span>
+      {% else if msg == "image_already_available" %}<span data-i18n="agents.success.image_already_available">Capability files are already available.</span>
       {% else %}{{ msg }}
       {% endif %}
     </div>
@@ -148,7 +151,7 @@
             <input type="hidden" name="action" value="enable" />
             <button type="submit"
                     {% if !automation.ready %}disabled{% endif %}
-                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
                     data-i18n="agents.detail.automation.enable">Enable automation</button>
           </form>
           {% endif %}
@@ -166,7 +169,7 @@
           <div class="flex flex-wrap items-center gap-2">
             <select id="autonomy-level-input"
                     name="autonomy_level"
-                    class="w-52 bg-surface-input border border-edge rounded-lg px-3 py-1.5 text-sm text-txt-heading focus:outline-none focus:ring-2 focus:ring-coral/50">
+                    class="w-52 bg-surface-input border border-edge rounded-lg px-3 py-1.5 text-sm text-txt-heading focus:outline-hidden focus:ring-2 focus:ring-coral/50">
               <option value="low" {% if runtime_settings.autonomy_level == "low" %}selected{% endif %} data-i18n="agents.detail.runtime.level.low">Low</option>
               <option value="medium" {% if runtime_settings.autonomy_level == "medium" %}selected{% endif %} data-i18n="agents.detail.runtime.level.medium">Balanced (Recommended)</option>
               <option value="high" {% if runtime_settings.autonomy_level == "high" %}selected{% endif %} data-i18n="agents.detail.runtime.level.high">High</option>
@@ -189,7 +192,7 @@
                          min="0"
                          step="1"
                          value="{{ runtime_settings.max_tool_loop_iterations }}"
-                         class="mt-1 w-full bg-surface-input border border-edge rounded-lg px-3 py-1.5 text-sm text-txt-heading focus:outline-none focus:ring-2 focus:ring-coral/50" />
+                         class="mt-1 w-full bg-surface-input border border-edge rounded-lg px-3 py-1.5 text-sm text-txt-heading focus:outline-hidden focus:ring-2 focus:ring-coral/50" />
                 </div>
                 <div>
                   <label class="block text-xs text-txt-muted" for="runtime-hops-input" data-i18n="agents.detail.runtime.advanced.hops">Max specialist handoffs</label>
@@ -199,7 +202,7 @@
                          min="0"
                          step="1"
                          value="{{ runtime_settings.max_delegation_hops }}"
-                         class="mt-1 w-full bg-surface-input border border-edge rounded-lg px-3 py-1.5 text-sm text-txt-heading focus:outline-none focus:ring-2 focus:ring-coral/50" />
+                         class="mt-1 w-full bg-surface-input border border-edge rounded-lg px-3 py-1.5 text-sm text-txt-heading focus:outline-hidden focus:ring-2 focus:ring-coral/50" />
                 </div>
               </div>
             </div>
@@ -207,7 +210,7 @@
 
           <div class="flex flex-wrap items-center gap-2">
             <button type="submit"
-                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20"
                     data-i18n="agents.detail.runtime.save">Save</button>
           </div>
         </form>
@@ -245,13 +248,43 @@
         <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
           {% for cap in capabilities %}
           <div class="bg-surface-alt/30 rounded-xl p-3 space-y-2">
-            <p class="text-sm font-semibold text-txt-heading">{{ cap.id }}</p>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p class="text-sm font-semibold text-txt-heading">{{ cap.id }}</p>
+              {% if cap.image_status == "available" %}
+              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span data-i18n="agents.detail.image.available">Files ready</span>
+              </span>
+              {% else if cap.image_status == "missing" %}
+              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                <span data-i18n="agents.detail.image.missing">Download needed</span>
+              </span>
+              {% else %}
+              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface-alt text-txt-muted border border-edge">
+                <span class="w-1.5 h-1.5 rounded-full bg-txt-muted"></span>
+                <span data-i18n="agents.detail.image.unknown">Status unavailable</span>
+              </span>
+              {% endif %}
+            </div>
             <div class="grid grid-cols-2 gap-2 text-xs text-txt-muted">
               <span><span data-i18n="agents.detail.memory">Memory</span>: {{ cap.max_memory_mb }}MB</span>
               <span><span data-i18n="agents.detail.cpu">CPU</span>: {{ cap.max_cpu_fraction }}</span>
               <span><span data-i18n="agents.detail.pids">PIDs</span>: {{ cap.pids_limit }}</span>
               <span><span data-i18n="agents.detail.fs">FS</span>: {{ cap.filesystem }}</span>
             </div>
+            {% if cap.image_status == "missing" %}
+            <div class="pt-2 border-t border-edge/70 flex flex-wrap items-center justify-between gap-2">
+              <p class="text-[11px] text-amber-400" data-i18n="agents.detail.image.missing_hint">Selu will download these files automatically when this capability is used.</p>
+              {% if is_admin %}
+              <form method="post" action="{{ base_path }}/agents/{{ agent_id }}/capabilities/{{ cap.id }}/image/download">
+                <button type="submit"
+                        class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-xs px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-lg shadow-coral/20 whitespace-nowrap"
+                        data-i18n="agents.detail.image.download">Download now</button>
+              </form>
+              {% endif %}
+            </div>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
@@ -481,12 +514,12 @@
                 <input name="host"
                        data-i18n-placeholder="agents.detail.add_host_placeholder"
                        placeholder="pypi.org:443"
-                       class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-xs text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition"
+                       class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-xs text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition"
                        required />
                 <p class="text-[11px] text-txt-muted mt-1" data-i18n="agents.detail.add_host_hint">Use host or host:port (for example, pypi.org:443).</p>
               </div>
               <button type="submit"
-                      class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-xs px-3 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 whitespace-nowrap"
+                      class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-xs px-3 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 whitespace-nowrap"
                       data-i18n="agents.detail.add">Add</button>
             </form>
           </div>
@@ -603,10 +636,10 @@
                   <input name="value" type="password" required
                          placeholder="{% if cred.is_set %}&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;{% endif %}"
                          data-i18n-placeholder="agents.detail.secret_placeholder"
-                         class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                         class="w-full bg-surface-input border border-edge rounded-xl px-3 py-2 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
                 </div>
                 <button type="submit"
-                        class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-xs px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 whitespace-nowrap"
+                        class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-xs px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 whitespace-nowrap"
                         data-i18n="agents.detail.secret_save">Save</button>
                 {% if cred.is_set %}
                 <button type="button"

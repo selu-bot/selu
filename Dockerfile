@@ -9,6 +9,7 @@
 #   - SQLX_OFFLINE=true is set automatically below
 #
 # Runtime requirements:
+#   - Docker Engine 29.2+ (API 1.53+) for the Bollard client
 #   - Docker socket mounted (-v /var/run/docker.sock:/var/run/docker.sock)
 #   - .env file or environment variables for configuration
 #
@@ -16,7 +17,7 @@
 # if you want to use custom agents:  -v ./my-agents:/app/agents
 
 # ── Build stage ──────────────────────────────────────────────────────────────
-FROM rust:1-bookworm AS builder
+FROM rust:1-trixie AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         protobuf-compiler \
@@ -47,7 +48,7 @@ RUN mkdir -p crates/selu-core/src && echo "pub fn _stub() {}" > crates/selu-core
     && mkdir -p crates/selu-orchestrator/templates \
     && mkdir -p agents/default && touch agents/default/agent.yaml agents/default/agent.md
 
-RUN cargo build --release --bin selu-orchestrator 2>/dev/null || true
+RUN cargo build --release --locked --bin selu-orchestrator 2>/dev/null || true
 
 # ── Layer 2: compile actual source (only this re-runs on code changes) ───────
 
@@ -64,10 +65,10 @@ COPY crates/ crates/
 # The bundled default agent is embedded via include_str!() at compile time
 COPY agents/ agents/
 
-RUN cargo build --release --bin selu-orchestrator
+RUN cargo build --release --locked --bin selu-orchestrator
 
 # ── Runtime stage ────────────────────────────────────────────────────────────
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \

@@ -42,7 +42,7 @@
               <td class="px-5 py-3.5 text-txt-heading">{{ sub.username }}</td>
               <td class="px-5 py-3.5 font-mono text-xs text-txt-muted">{{ sub.event_type }}</td>
               <td class="px-5 py-3.5">
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-coral/15 text-coral">{{ sub.reaction_type }}</span>
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-coral/15 text-coral">{{ sub.reaction_type }}</span>
               </td>
               <td class="px-5 py-3.5 font-mono text-xs text-txt-muted max-w-[180px] truncate" title="{{ sub.reaction_config }}">{{ sub.reaction_config }}</td>
               <td class="px-5 py-3.5 font-mono text-xs text-txt-muted max-w-[160px] truncate" title="{{ sub.filter_expression }}">{{ sub.filter_expression }}</td>
@@ -96,7 +96,7 @@
             <div>
               <label class="block text-xs font-medium text-txt-muted mb-1.5">User</label>
               <select name="user_id" required {% if users.is_empty() %}disabled{% endif %}
-                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition disabled:opacity-50">
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition disabled:opacity-50">
                 <option value="">-- select user --</option>
                 {% for u in users %}
                 <option value="{{ u.id }}">{{ u.display }}</option>
@@ -106,13 +106,13 @@
             <div>
               <label class="block text-xs font-medium text-txt-muted mb-1.5">Event Type</label>
               <input name="event_type" type="text" placeholder="e.g. task.completed" required
-                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
               <p class="text-[11px] text-txt-faint mt-1">The event type emitted by the agent via the emit_event tool.</p>
             </div>
             <div>
               <label class="block text-xs font-medium text-txt-muted mb-1.5">Reaction Type</label>
               <select name="reaction_type" required
-                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
                 <option value="pipe_notification">pipe_notification</option>
                 <option value="agent_invocation">agent_invocation</option>
               </select>
@@ -120,27 +120,27 @@
             <div>
               <label class="block text-xs font-medium text-txt-muted mb-1.5">CEL Filter Expression</label>
               <input name="filter_expression" type="text" placeholder='e.g. event.payload.priority == "high"'
-                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
               <p class="text-[11px] text-txt-faint mt-1">Optional. Leave blank to match all events of this type.</p>
             </div>
             <div>
               <label class="block text-xs font-medium text-txt-muted mb-1.5">Filter Description</label>
               <input name="filter_description" type="text" placeholder="Human-readable description of the filter"
-                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             </div>
           </div>
           <div>
             <label class="block text-xs font-medium text-txt-muted mb-1.5">Reaction Config (JSON)</label>
             <textarea name="reaction_config" rows="4" required
-                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint font-mono focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition resize-y min-h-[80px]">{}</textarea>
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint font-mono focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition resize-y min-h-[80px]">{}</textarea>
             <p class="text-[11px] text-txt-faint mt-1">
-              <strong class="text-txt-muted">pipe_notification:</strong> <code class="font-mono bg-surface-alt px-1 py-0.5 rounded">{"pipe_id": "&lt;id&gt;", "message": "Event received"}</code><br/>
-              <strong class="text-txt-muted">agent_invocation:</strong> <code class="font-mono bg-surface-alt px-1 py-0.5 rounded">{"agent_id": "&lt;id&gt;", "pipe_id": "&lt;id&gt;"}</code>
+              <strong class="text-txt-muted">pipe_notification:</strong> <code class="font-mono bg-surface-alt px-1 py-0.5 rounded-sm">{"pipe_id": "&lt;id&gt;", "message": "Event received"}</code><br/>
+              <strong class="text-txt-muted">agent_invocation:</strong> <code class="font-mono bg-surface-alt px-1 py-0.5 rounded-sm">{"agent_id": "&lt;id&gt;", "pipe_id": "&lt;id&gt;"}</code>
             </p>
           </div>
           <div class="flex justify-end">
             <button type="submit" {% if users.is_empty() %}disabled{% endif %}
-                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                     data-i18n="subs.create">Create Subscription</button>
           </div>
         </div>

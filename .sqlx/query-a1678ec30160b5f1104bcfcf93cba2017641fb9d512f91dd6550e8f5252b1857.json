@@ -6,7 +6,13 @@
       {
         "name": "user_id",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_sender_refs",
+            "name": "user_id"
+          }
+        }
       }
     ],
     "parameters": {

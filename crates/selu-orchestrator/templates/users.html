@@ -52,7 +52,7 @@ function closePasswordModal() {
                 data-i18n="users.password.change.open">Change password</button>
         {% if is_admin %}
         <button onclick="openCreateUserModal()"
-                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                 data-i18n="users.create">Create User</button>
         {% endif %}
       </div>
@@ -110,7 +110,7 @@ function closePasswordModal() {
                         hx-post="{{ base_path }}/users/{{ user.id }}/language"
                         hx-target="closest td"
                         hx-swap="innerHTML"
-                        class="bg-surface-input border border-edge rounded-lg px-2 py-1 text-xs text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition cursor-pointer">
+                        class="bg-surface-input border border-edge rounded-lg px-2 py-1 text-xs text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition cursor-pointer">
                   <option value="de" {% if user.language == "de" %}selected{% endif %}>Deutsch</option>
                   <option value="en" {% if user.language == "en" %}selected{% endif %}>English</option>
                 </select>
@@ -167,7 +167,7 @@ function closePasswordModal() {
 </div>
 
 <div id="password-modal" class="hidden fixed inset-0 z-[120] flex items-center justify-center">
-  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closePasswordModal()"></div>
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-xs" onclick="closePasswordModal()"></div>
   <div class="relative bg-surface-raised border border-edge rounded-2xl shadow-2xl w-full max-w-2xl mx-4 animate-fadein">
     <div class="px-5 py-4 border-b border-edge flex items-center justify-between">
       <div>
@@ -189,7 +189,7 @@ function closePasswordModal() {
                  autocomplete="current-password"
                  data-i18n-placeholder="users.password.current.placeholder"
                  placeholder="Your current password"
-                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
         </div>
         <div>
           <label for="new-password" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.password.new">New password</label>
@@ -201,7 +201,7 @@ function closePasswordModal() {
                  autocomplete="new-password"
                  data-i18n-placeholder="users.password.new.placeholder"
                  placeholder="At least 8 characters"
-                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
         </div>
         <div>
           <label for="confirm-password" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.password.confirm">Confirm new password</label>
@@ -213,7 +213,7 @@ function closePasswordModal() {
                  autocomplete="new-password"
                  data-i18n-placeholder="users.password.confirm.placeholder"
                  placeholder="Type the new password again"
-                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                 class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
         </div>
         <div class="sm:col-span-3 flex items-center justify-between gap-3">
           <p class="text-[11px] text-txt-faint" data-i18n="users.password.change.hint">For security, other active sessions will be signed out after password change.</p>
@@ -223,7 +223,7 @@ function closePasswordModal() {
                     class="text-sm text-txt-muted hover:text-txt px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
                     data-i18n="users.cancel">Cancel</button>
             <button type="submit"
-                    class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                     data-i18n="users.password.change.submit">Update password</button>
           </div>
         </div>
@@ -234,7 +234,7 @@ function closePasswordModal() {
 
 {% if is_admin %}
 <div id="create-user-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center">
-  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeCreateUserModal()"></div>
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-xs" onclick="closeCreateUserModal()"></div>
   <div class="relative bg-surface-raised border border-edge rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-fadein">
     <div class="px-5 py-4 border-b border-edge flex items-center justify-between">
       <span class="text-sm font-semibold text-txt-heading" data-i18n="users.create">Create User</span>
@@ -248,24 +248,24 @@ function closePasswordModal() {
           <div>
             <label for="u-username" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.username">Username</label>
             <input id="u-username" name="username" type="text" placeholder="alice" required autocomplete="off"
-                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             <p class="text-[11px] text-txt-faint mt-1" data-i18n="users.create.hint.username">Unique, lowercase, no spaces.</p>
           </div>
           <div>
             <label for="u-display" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.displayname">Display Name</label>
             <input id="u-display" name="display_name" type="text" placeholder="Alice Smith" autocomplete="off"
-                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
             <p class="text-[11px] text-txt-faint mt-1" data-i18n="users.create.hint.displayname">Defaults to username if left blank.</p>
           </div>
           <div>
             <label for="u-password" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.password">Password</label>
             <input id="u-password" name="password" type="password" required autocomplete="new-password"
-                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           </div>
           <div>
             <label for="u-language" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="users.language">Language</label>
             <select id="u-language" name="language"
-                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               <option value="de">Deutsch</option>
               <option value="en">English</option>
             </select>
@@ -273,7 +273,7 @@ function closePasswordModal() {
           </div>
         </div>
         <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" name="is_admin" class="w-4 h-4 rounded border-edge text-coral focus:ring-coral/50" />
+          <input type="checkbox" name="is_admin" class="w-4 h-4 rounded-sm border-edge text-coral focus:ring-coral/50" />
           <span class="text-sm text-txt" data-i18n="users.makeadmin">Make this user an admin</span>
         </label>
         <div class="flex justify-end gap-3 pt-2">
@@ -281,7 +281,7 @@ function closePasswordModal() {
                   class="text-sm text-txt-muted hover:text-txt px-4 py-2.5 rounded-xl transition-colors cursor-pointer"
                   data-i18n="users.cancel">Cancel</button>
           <button type="submit"
-                  class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                  class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                   data-i18n="users.create">Create User</button>
         </div>
       </div>
@@ -293,7 +293,7 @@ function closePasswordModal() {
 {% if is_admin && !all_agents.is_empty() %}
 {% for user in users %}
 <div id="agent-modal-{{ user.id }}" class="hidden fixed inset-0 z-[110] flex items-center justify-center">
-  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeAgentsModal('{{ user.id }}')"></div>
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-xs" onclick="closeAgentsModal('{{ user.id }}')"></div>
   <div class="relative bg-surface-raised border border-edge rounded-2xl shadow-2xl w-full max-w-lg mx-4 animate-fadein">
     <div class="px-5 py-4 border-b border-edge flex items-center justify-between">
       <div class="text-sm font-semibold text-txt-heading">
@@ -313,7 +313,7 @@ function closePasswordModal() {
                  data-agent-option
                  value="{{ agent.id }}"
                  {% if user.allowed_agents.is_empty() || user.has_agent(agent.id) %}checked{% endif %}
-                 class="w-4 h-4 rounded border-edge text-coral focus:ring-coral/50" />
+                 class="w-4 h-4 rounded-sm border-edge text-coral focus:ring-coral/50" />
           <span class="text-sm text-txt">{{ agent.name }}</span>
         </label>
         {% endfor %}
@@ -324,7 +324,7 @@ function closePasswordModal() {
                 class="text-sm text-txt-muted hover:text-txt px-4 py-2 rounded-xl transition-colors cursor-pointer"
                 data-i18n="users.cancel">Cancel</button>
         <button type="submit"
-                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-5 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                 data-i18n="users.agents.save">Save</button>
       </div>
     </form>

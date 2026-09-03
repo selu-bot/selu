@@ -69,7 +69,7 @@
         <form id="updates-check-form" method="POST" action="{{ base_path }}/system-updates/check">
           <button type="submit" class="text-xs border px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-txt-muted border-edge hover:border-muted hover:text-txt" data-i18n="updates.check_now">Check now</button>
         </form>
-        <button id="updates-open-action-modal" type="button" class="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-coral to-amber text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-coral/20 hover:shadow-coral/30 transition-all" data-i18n="updates.summary.manage">
+        <button id="updates-open-action-modal" type="button" class="inline-flex items-center justify-center gap-2 bg-linear-to-r/srgb from-coral to-amber text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-coral/20 hover:shadow-coral/30 transition-all" data-i18n="updates.summary.manage">
           Manage update
         </button>
       </div>
@@ -152,7 +152,7 @@
 </div>
 
 <div id="updates-action-modal" class="fixed inset-0 z-40 hidden">
-  <div class="absolute inset-0 bg-ink/70 backdrop-blur-sm"></div>
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-xs"></div>
   <div class="relative min-h-full flex items-center justify-center px-4 py-8">
     <div class="w-full max-w-2xl rounded-2xl border border-edge bg-surface shadow-2xl shadow-ink/30 p-6 space-y-4">
       <div class="flex items-start justify-between gap-4">
@@ -226,10 +226,10 @@
 </div>
 
 <div id="updates-modal" class="fixed inset-0 z-50 hidden">
-  <div class="absolute inset-0 bg-ink/70 backdrop-blur-sm"></div>
+  <div class="absolute inset-0 bg-ink/70 backdrop-blur-xs"></div>
   <div class="relative min-h-full flex items-center justify-center px-4 py-8">
     <div class="w-full max-w-lg rounded-[28px] border border-edge bg-surface shadow-2xl shadow-ink/30 overflow-hidden">
-      <div class="bg-gradient-to-r from-coral/20 via-amber/10 to-emerald-500/10 px-6 py-5 border-b border-edge">
+      <div class="bg-linear-to-r/srgb from-coral/20 via-amber/10 to-emerald-500/10 px-6 py-5 border-b border-edge">
         <p class="text-[11px] uppercase tracking-[0.22em] text-txt-muted" data-i18n="updates.modal.eyebrow">System update</p>
         <h2 id="updates-modal-title" class="mt-2 text-xl font-black text-txt-heading font-heading" data-i18n="updates.modal.title.update">Updating Selu</h2>
         <p id="updates-modal-description" class="mt-2 text-sm text-txt-muted" data-i18n="updates.modal.description">Keep this page open. Selu will refresh this page when everything is ready.</p>
@@ -244,7 +244,7 @@
             <div id="updates-modal-percent" class="text-sm font-semibold text-coral">12%</div>
           </div>
           <div class="mt-4 h-3 rounded-full bg-edge/60 overflow-hidden">
-            <div id="updates-modal-bar" class="h-full rounded-full bg-gradient-to-r from-coral via-amber to-emerald-500 transition-all duration-500 ease-out" style="width: 12%"></div>
+            <div id="updates-modal-bar" class="h-full rounded-full bg-linear-to-r/srgb from-coral via-amber to-emerald-500 transition-all duration-500 ease-out" style="width: 12%"></div>
           </div>
         </div>
         <div id="updates-modal-error" class="hidden rounded-2xl border border-rosie/20 bg-rosie/10 px-4 py-3 text-sm text-rosie"></div>

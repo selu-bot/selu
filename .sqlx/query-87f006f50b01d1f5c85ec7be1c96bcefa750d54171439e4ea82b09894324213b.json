@@ -6,27 +6,47 @@
       {
         "name": "id!",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "pipe_id",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "pipe_id"
+          }
+        }
       },
       {
         "name": "title",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "title"
+          }
+        }
       },
       {
         "name": "snippet!: String",
         "ordinal": 3,
-        "type_info": "Null"
+        "type_info": "Null",
+        "origin": "Expression"
       },
       {
         "name": "last_activity_at?: String",
         "ordinal": 4,
-        "type_info": "Null"
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -36,8 +56,8 @@
       true,
       false,
       true,
-      null,
-      null
+      true,
+      true
     ]
   },
   "hash": "87f006f50b01d1f5c85ec7be1c96bcefa750d54171439e4ea82b09894324213b"

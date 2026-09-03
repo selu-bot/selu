@@ -1,11 +1,11 @@
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
 RUN apk add --no-cache git
 
-COPY package.json /app/package.json
-RUN npm install --omit=dev
+COPY package.json package-lock.json /app/
+RUN npm ci --omit=dev
 
 COPY src /app/src
 

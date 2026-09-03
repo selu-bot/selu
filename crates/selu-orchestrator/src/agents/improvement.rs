@@ -396,7 +396,8 @@ pub async fn update_insight_status(
         activated_clause
     );
 
-    let result = sqlx::query(&query)
+    // `activated_clause` is selected from fixed literals above; user input remains bound.
+    let result = sqlx::query(sqlx::AssertSqlSafe(query.as_str()))
         .bind(new_status)
         .bind(insight_id)
         .execute(db)

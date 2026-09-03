@@ -6,42 +6,90 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "user_id",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "user_id"
+          }
+        }
       },
       {
         "name": "agent_id",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "agent_id"
+          }
+        }
       },
       {
         "name": "name",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "name"
+          }
+        }
       },
       {
         "name": "prompt",
         "ordinal": 4,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "prompt"
+          }
+        }
       },
       {
         "name": "cron_expression",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "cron_expression"
+          }
+        }
       },
       {
         "name": "one_shot",
         "ordinal": 6,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "one_shot"
+          }
+        }
       },
       {
         "name": "timezone",
         "ordinal": 7,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "timezone"
+          }
+        }
       }
     ],
     "parameters": {
@@ -55,7 +103,7 @@
       false,
       false,
       false,
-      false
+      true
     ]
   },
   "hash": "7cbedb42b5c0c186f5defe679a2015bc65eaa77ebb90b95d57a0dbcceedad175"

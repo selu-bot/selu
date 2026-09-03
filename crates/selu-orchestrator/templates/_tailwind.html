@@ -1,0 +1,55 @@
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+<style type="text/tailwindcss">
+  @custom-variant dark (&:where(.dark, .dark *));
+
+  @theme {
+    --color-brand-50: #FFF5F3;
+    --color-brand-100: #FFE8E4;
+    --color-brand-200: #FFD0C9;
+    --color-brand-300: #FFB0A3;
+    --color-brand-400: #FF8D7D;
+    --color-brand-500: #FF6B5A;
+    --color-brand-600: #E85A4A;
+    --color-brand-700: #CC4A3C;
+    --color-brand-800: #A33B30;
+    --color-brand-900: #7A2C24;
+    --color-coral: #FF6B5A;
+    --color-amber: #FF9F67;
+    --color-blush: #FF7EB3;
+    --color-navy: #2D2B55;
+    --color-dark: #1E1B3A;
+    --color-muted: #8E8AA0;
+    --color-warm: #FFF8F5;
+    --color-sunny: #FFD93D;
+    --color-rosie: #FF4070;
+    --font-heading: 'Nunito', '-apple-system', 'BlinkMacSystemFont', sans-serif;
+    --font-sans: 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  }
+
+  /* Inline aliases resolve against the active light/dark theme at runtime. */
+  @theme inline {
+    --color-surface: var(--c-surface);
+    --color-surface-alt: var(--c-surface-alt);
+    --color-surface-raised: var(--c-surface-raised);
+    --color-surface-input: var(--c-surface-input);
+    --color-edge: var(--c-edge);
+    --color-edge-strong: var(--c-edge-strong);
+    --color-txt: var(--c-text);
+    --color-txt-heading: var(--c-text-heading);
+    --color-txt-muted: var(--c-text-muted);
+    --color-txt-faint: var(--c-text-faint);
+    --color-sidebar: var(--c-sidebar);
+    --color-sidebar-hover: var(--c-sidebar-hover);
+  }
+
+  /* Preserve the existing form and border defaults when upgrading from v3. */
+  @layer base {
+    *, ::before, ::after, ::backdrop, ::file-selector-button {
+      border-color: var(--color-gray-200, currentColor);
+    }
+    input::placeholder, textarea::placeholder { color: var(--color-gray-400); }
+    button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+    dialog { margin: auto; }
+  }
+</style>

@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout selu (full history for diff)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -74,7 +74,7 @@ jobs:
       - name: Generate GitHub App token
         if: steps.entries.outputs.has_entries == 'true'
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.DOCS_BOT_APP_ID }}
           private-key: ${{ secrets.DOCS_BOT_PRIVATE_KEY }}
@@ -82,7 +82,7 @@ jobs:
 
       - name: Checkout selu-site
         if: steps.entries.outputs.has_entries == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.SELU_SITE_REPO }}
           token: ${{ steps.app-token.outputs.token }}
@@ -179,9 +179,9 @@ jobs:
       # ── Generate docs via Bedrock ─────────────────────────────
       - name: Setup Node.js
         if: steps.entries.outputs.has_entries == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Generate docs via Bedrock
         if: steps.entries.outputs.has_entries == 'true'

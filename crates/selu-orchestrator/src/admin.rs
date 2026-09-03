@@ -1,8 +1,5 @@
 use anyhow::{Context, Result, bail};
-use argon2::{
-    Argon2,
-    password_hash::{PasswordHasher, SaltString},
-};
+use argon2::{Argon2, password_hash::PasswordHasher};
 use ring::rand::{SecureRandom, SystemRandom};
 use sqlx::SqlitePool;
 use std::io::{self, BufRead};
@@ -146,11 +143,7 @@ fn hash_password(password: &str) -> Result<String> {
     if sys_rng.fill(&mut salt_bytes).is_err() {
         bail!("Failed to generate random salt");
     }
-    let salt = match SaltString::encode_b64(&salt_bytes) {
-        Ok(s) => s,
-        Err(_) => bail!("Failed to encode salt"),
-    };
-    match Argon2::default().hash_password(password.as_bytes(), &salt) {
+    match Argon2::default().hash_password_with_salt(password.as_bytes(), &salt_bytes) {
         Ok(h) => Ok(h.to_string()),
         Err(_) => bail!("Argon2 password hashing failed"),
     }
@@ -158,7 +151,45 @@ fn hash_password(password: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_args;
+    use super::{hash_password, parse_args};
+    use argon2::{
+        Argon2,
+        password_hash::{PasswordVerifier, phc::PasswordHash},
+    };
+
+    #[test]
+    fn password_hashes_remain_verifiable_and_use_random_salts() {
+        let first = hash_password("dependency-regression-password").unwrap();
+        let second = hash_password("dependency-regression-password").unwrap();
+        assert_ne!(first, second);
+        assert!(first.starts_with("$argon2id$v=19$"));
+        let parsed = PasswordHash::new(&first).unwrap();
+        assert!(
+            Argon2::default()
+                .verify_password(b"dependency-regression-password", &parsed)
+                .is_ok()
+        );
+        assert!(
+            Argon2::default()
+                .verify_password(b"wrong-password", &parsed)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn verifies_legacy_argon2id_phc_hash() {
+        // Known-answer vector also supported by argon2 0.5; existing stored
+        // PHC strings must remain usable without forcing password resets.
+        let hash = PasswordHash::new(
+            "$argon2id$v=19$m=256,t=2,p=1$c29tZXNhbHQ$nf65EOgLrQMR/uIPnA4rEsF5h7TKyQwu9U1bMCHGi/4",
+        )
+        .unwrap();
+        assert!(
+            Argon2::default()
+                .verify_password(b"password", &hash)
+                .is_ok()
+        );
+    }
 
     #[test]
     fn parse_reset_password_args() {

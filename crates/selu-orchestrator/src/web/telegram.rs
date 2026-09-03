@@ -545,7 +545,7 @@ pub async fn telegram_check_webhook(
                 "<span class=\"text-amber-400\" data-i18n=\"tg.troubleshoot.nourl\">No webhook URL set</span>".to_string()
             } else {
                 format!(
-                    "<code class=\"font-mono text-xs bg-surface-alt px-2 py-1 rounded break-all\">{}</code>",
+                    "<code class=\"font-mono text-xs bg-surface-alt px-2 py-1 rounded-sm break-all\">{}</code>",
                     info.url
                 )
             };

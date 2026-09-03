@@ -18,27 +18,28 @@ tokio = { version = "1", features = ["full"] }
 
 # Web framework
 axum = { version = "0.8", features = ["ws", "multipart"] }
-axum-extra = { version = "0.10", features = ["cookie", "typed-header"] }
+axum-extra = { version = "0.12", features = ["cookie", "typed-header"] }
 tower = { version = "0.5" }
-tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
+tower-http = { version = "0.7", features = ["fs", "trace", "cors"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "chrono", "uuid"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "migrate", "chrono", "uuid"] }
 
 # gRPC
-tonic = { version = "0.13", features = ["transport"] }
-prost = "0.13"
+tonic = { version = "0.14", features = ["transport"] }
+tonic-prost = "0.14"
+prost = "0.14"
 
 # Docker API
-bollard = "0.18"
+bollard = "0.21"
 
 # Crypto / security
 ring = "0.17"
-base64 = "0.22"
+base64 = "0.23"
 
 # HTTP (low-level server, used by egress proxy)
 hyper = { version = "1", features = ["http1", "server"] }
@@ -46,13 +47,11 @@ hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 
 # HTTP client (for outbound webhook calls + LLM APIs)
-reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
-reqwest-eventsource = "0.6"
+reqwest = { version = "0.13", features = ["json", "query", "stream", "multipart"] }
 eventsource-stream = "0.2"
 
 # Templating
-askama = { version = "0.12", features = ["with-axum"] }
-askama_axum = "0.4"
+askama = "0.16"
 
 # Config
 config = "0.15"
@@ -76,10 +75,10 @@ serde_yaml = "0.9"
 urlencoding = "2"
 
 # Password hashing
-argon2 = "0.5"
+argon2 = "0.6"
 
 # CEL filter evaluation
-cel-interpreter = "0.8"
+cel-interpreter = "0.10"
 
 # Time (for cookie max_age)
 time = "0.3"
@@ -92,11 +91,11 @@ tar = "0.4"
 arc-swap = "1"
 
 # AWS Event Stream parsing (for Bedrock converse-stream)
-aws-smithy-eventstream = "0.60"
+aws-smithy-eventstream = "0.61"
 aws-smithy-types = "1.4"
 bytes = "1"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
 
 # Cron expression parsing and scheduling
-cron = "0.15"
+cron = "0.17"
 chrono-tz = "0.10"

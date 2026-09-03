@@ -1292,7 +1292,8 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     "UPDATE messages SET compacted = 1 WHERE id IN ({})",
                     placeholders
                 );
-                let mut q = sqlx::query(&sql);
+                // The SQL structure is fixed; only the number of bound placeholders varies.
+                let mut q = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()));
                 for id in &ids_to_delete {
                     q = q.bind(id);
                 }

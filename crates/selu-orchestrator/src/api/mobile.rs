@@ -258,7 +258,7 @@ async fn mobile_login(
 ) -> impl IntoResponse {
     use argon2::{
         Argon2,
-        password_hash::{PasswordHash, PasswordVerifier},
+        password_hash::{PasswordVerifier, phc::PasswordHash},
     };
 
     let username = req.username.trim().to_string();

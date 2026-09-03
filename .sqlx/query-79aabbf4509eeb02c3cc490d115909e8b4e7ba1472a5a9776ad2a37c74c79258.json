@@ -6,47 +6,101 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "bluebubbles_configs",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "name",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "bluebubbles_configs",
+            "name": "name"
+          }
+        }
       },
       {
         "name": "server_url",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "bluebubbles_configs",
+            "name": "server_url"
+          }
+        }
       },
       {
         "name": "server_password",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "bluebubbles_configs",
+            "name": "server_password"
+          }
+        }
       },
       {
         "name": "chat_guid",
         "ordinal": 4,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "bluebubbles_configs",
+            "name": "chat_guid"
+          }
+        }
       },
       {
         "name": "pipe_id",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "bluebubbles_configs",
+            "name": "pipe_id"
+          }
+        }
       },
       {
         "name": "bb_webhook_id",
         "ordinal": 6,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "bluebubbles_configs",
+            "name": "bb_webhook_id"
+          }
+        }
       },
       {
         "name": "callback_base_url",
         "ordinal": 7,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "bluebubbles_configs",
+            "name": "callback_base_url"
+          }
+        }
       },
       {
         "name": "inbound_token",
         "ordinal": 8,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "inbound_token"
+          }
+        }
       }
     ],
     "parameters": {

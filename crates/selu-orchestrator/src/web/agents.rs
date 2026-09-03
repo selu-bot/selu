@@ -172,6 +172,8 @@ pub struct CredentialView {
 #[derive(Debug, Clone)]
 pub struct CapabilityView {
     pub id: String,
+    /// `available`, `missing`, or `unknown` when Docker could not be checked.
+    pub image_status: String,
     pub effective_network_mode: String,
     pub network_access_policy: String,
     pub host_policies: Vec<NetworkHostPolicyView>,
@@ -1323,6 +1325,43 @@ pub async fn agent_detail_secrets(
     render_agent_detail_page(user, agent_id, q, state, base_path, "secrets").await
 }
 
+/// Download a capability image that is missing from Docker's local image store.
+pub async fn download_capability_image(
+    user: AuthUser,
+    Path((agent_id, capability_id)): Path<(String, String)>,
+    State(state): State<AppState>,
+    BasePath(base_path): BasePath,
+) -> Response {
+    let return_to = format!("{}/agents/{}", base_path, agent_id);
+    if !user.is_admin {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let image = {
+        let agents = state.agents.load();
+        let Some(agent) = agents.get(&agent_id) else {
+            return StatusCode::NOT_FOUND.into_response();
+        };
+        let Some(manifest) = agent.capability_manifests.get(&capability_id) else {
+            return StatusCode::NOT_FOUND.into_response();
+        };
+        manifest.image.clone()
+    };
+
+    match state.capabilities.ensure_image_available(&image).await {
+        Ok(true) => {
+            Redirect::to(&format!("{}?success=image_downloaded", return_to)).into_response()
+        }
+        Ok(false) => {
+            Redirect::to(&format!("{}?success=image_already_available", return_to)).into_response()
+        }
+        Err(e) => {
+            error!(agent = %agent_id, capability = %capability_id, "Failed to download capability image: {e:#}");
+            Redirect::to(&format!("{}?error=image_download_failed", return_to)).into_response()
+        }
+    }
+}
+
 pub async fn set_runtime_settings_handler(
     user: AuthUser,
     Path(agent_id): Path<String>,
@@ -1806,6 +1845,14 @@ async fn render_agent_detail_page(
     }
 
     for (cap_id, manifest) in &agent.capability_manifests {
+        let image_status = match state.capabilities.is_image_available(&manifest.image).await {
+            Ok(true) => "available",
+            Ok(false) => "missing",
+            Err(e) => {
+                tracing::warn!(agent = %agent_id, capability = %cap_id, "Could not check capability image: {e:#}");
+                "unknown"
+            }
+        };
         let access_override = network_access_overrides.get(cap_id).copied();
         let host_overrides = network_host_overrides
             .get(cap_id)
@@ -2007,6 +2054,7 @@ async fn render_agent_detail_page(
 
         capabilities.push(CapabilityView {
             id: cap_id.clone(),
+            image_status: image_status.to_string(),
             effective_network_mode: effective_network_mode.to_string(),
             network_access_policy: network_access_policy.to_string(),
             host_policies,

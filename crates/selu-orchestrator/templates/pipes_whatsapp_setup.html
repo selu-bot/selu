@@ -20,7 +20,7 @@
         <span class="w-5 h-5 rounded-full gradient-coral text-white text-[10px] font-bold flex items-center justify-center">1</span>
         <span data-i18n="wa.step1">Create WhatsApp Pipe</span>
       </div>
-      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <svg class="w-4 h-4 text-[#3D3A5C] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
         <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">2</span>
         <span data-i18n="wa.step2">Pair and Pick Chats</span>
@@ -52,13 +52,13 @@
           <div>
             <label for="wa-name" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="wa.pipename">Pipe Name</label>
             <input id="wa-name" name="name" type="text" data-i18n-placeholder="wa.pipename.placeholder" placeholder="e.g. Team WhatsApp" required
-                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           </div>
 
           <div>
             <label for="wa-auth" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="wa.auth">Authorization Header</label>
             <input id="wa-auth" name="outbound_auth" type="text" data-i18n-placeholder="wa.auth.placeholder" placeholder="Bearer your-bridge-secret"
-                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
             <p class="text-[11px] text-txt-faint mt-1" data-i18n="wa.auth.hint">Optional. If your bridge requires auth, include the full header value (for example: Bearer ...).</p>
           </div>
         </div>
@@ -68,7 +68,7 @@
         <a href="{{ base_path }}/pipes/new" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
         <button type="submit"
                 {% if already_configured %}disabled{% endif %}
-                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                 data-i18n="wa.setup">
           Set Up WhatsApp
         </button>

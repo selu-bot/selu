@@ -6,37 +6,79 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "transport",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "transport"
+          }
+        }
       },
       {
         "name": "inbound_token",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "inbound_token"
+          }
+        }
       },
       {
         "name": "outbound_url",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "outbound_url"
+          }
+        }
       },
       {
         "name": "outbound_auth",
         "ordinal": 4,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "outbound_auth"
+          }
+        }
       },
       {
         "name": "default_agent_id",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "default_agent_id"
+          }
+        }
       },
       {
         "name": "active",
         "ordinal": 6,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "active"
+          }
+        }
       }
     ],
     "parameters": {

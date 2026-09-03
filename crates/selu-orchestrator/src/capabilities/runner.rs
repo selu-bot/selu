@@ -12,17 +12,20 @@
 ///   - HTTP_PROXY / HTTPS_PROXY pointing at the orchestrator's egress proxy
 use anyhow::{Context, Result, anyhow};
 use bollard::Docker;
-use bollard::container::{
-    Config, CreateContainerOptions, ListContainersOptions, LogsOptions, RemoveContainerOptions,
-    StartContainerOptions,
+use bollard::errors::Error as DockerError;
+use bollard::models::{
+    ContainerCreateBody, ContainerInspectResponse, HostConfig, NetworkConnectRequest,
+    NetworkCreateRequest, PortBinding, ResourcesUlimits,
 };
-use bollard::models::{ContainerInspectResponse, HostConfig, PortBinding, ResourcesUlimits};
-use bollard::network::CreateNetworkOptions;
+use bollard::query_parameters::{
+    CreateContainerOptions, CreateImageOptions, ListContainersOptions, LogsOptions,
+    RemoveContainerOptions,
+};
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::sleep;
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -63,6 +66,8 @@ pub struct CapabilityRunner {
     /// so we can join the capability bridge networks and connect via container IP.
     /// Populated during `ensure_networks()` at startup.
     self_container_id: Arc<RwLock<Option<String>>>,
+    /// Prevent concurrent requests from downloading the same missing image.
+    image_pull_locks: Arc<RwLock<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 impl CapabilityRunner {
@@ -83,7 +88,66 @@ impl CapabilityRunner {
             egress_registry,
             egress_proxy_port: port,
             self_container_id: Arc::new(RwLock::new(None)),
+            image_pull_locks: Arc::new(RwLock::new(HashMap::new())),
         })
+    }
+
+    /// Return whether an image is available in the local Docker image store.
+    /// A Docker 404 means the image is missing; connection and permission
+    /// failures are returned to the caller instead of being misreported.
+    pub async fn is_image_available(&self, image: &str) -> Result<bool> {
+        match self.docker.inspect_image(image).await {
+            Ok(_) => Ok(true),
+            Err(error) if is_missing_image_error(&error) => Ok(false),
+            Err(error) => Err(error)
+                .with_context(|| format!("Failed to inspect capability image '{}'", image)),
+        }
+    }
+
+    /// Ensure an image exists locally, downloading it on demand when missing.
+    /// Returns `true` when this call downloaded the image and `false` when it
+    /// was already present (or another concurrent request restored it).
+    pub async fn ensure_image_available(&self, image: &str) -> Result<bool> {
+        if self.is_image_available(image).await? {
+            return Ok(false);
+        }
+
+        let image_lock = {
+            let mut locks = self.image_pull_locks.write().await;
+            locks
+                .entry(image.to_string())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        let _guard = image_lock.lock().await;
+
+        // Another request may have completed the download while we waited.
+        if self.is_image_available(image).await? {
+            return Ok(false);
+        }
+
+        info!(
+            image,
+            "Capability image is missing; downloading it on demand"
+        );
+        let options = CreateImageOptions {
+            from_image: Some(image.to_string()),
+            ..Default::default()
+        };
+        let mut stream = self.docker.create_image(Some(options), None, None);
+        while let Some(result) = stream.next().await {
+            result.with_context(|| format!("Failed to download capability image '{}'", image))?;
+        }
+
+        if !self.is_image_available(image).await? {
+            return Err(anyhow!(
+                "Docker finished downloading capability image '{}' but it is still unavailable",
+                image
+            ));
+        }
+
+        info!(image, "Capability image restored");
+        Ok(true)
     }
 
     /// Remove any orphaned `selu-cap-*` containers left over from a previous
@@ -96,7 +160,7 @@ impl CapabilityRunner {
             .docker
             .list_containers(Some(ListContainersOptions {
                 all: true, // include stopped containers too
-                filters,
+                filters: Some(filters),
                 ..Default::default()
             }))
             .await
@@ -175,7 +239,7 @@ impl CapabilityRunner {
 
     async fn ensure_network(&self, name: &str) -> Result<()> {
         // Check if the network already exists
-        match self.docker.inspect_network::<&str>(name, None).await {
+        match self.docker.inspect_network(name, None).await {
             Ok(_) => {
                 debug!(network = name, "Docker network already exists");
                 return Ok(());
@@ -190,11 +254,11 @@ impl CapabilityRunner {
         );
 
         self.docker
-            .create_network(CreateNetworkOptions {
+            .create_network(NetworkCreateRequest {
                 name: name.to_string(),
-                internal: false, // containers need to reach the host-bound egress proxy
-                driver: "bridge".to_string(),
-                options,
+                internal: Some(false), // containers need to reach the host-bound egress proxy
+                driver: Some("bridge".to_string()),
+                options: Some(options),
                 ..Default::default()
             })
             .await
@@ -207,8 +271,6 @@ impl CapabilityRunner {
     /// Connect the Selu container to a capability bridge network (idempotent).
     async fn join_network_if_needed(&self, container_id: &str, network: &str) -> Result<()> {
         use bollard::models::EndpointSettings;
-        use bollard::network::ConnectNetworkOptions;
-
         // Check if already connected by inspecting our container
         if let Ok(inspect) = self.docker.inspect_container(container_id, None).await {
             if let Some(nets) = inspect
@@ -229,9 +291,9 @@ impl CapabilityRunner {
         self.docker
             .connect_network(
                 network,
-                ConnectNetworkOptions {
+                NetworkConnectRequest {
                     container: container_id.to_string(),
-                    endpoint_config: EndpointSettings::default(),
+                    endpoint_config: Some(EndpointSettings::default()),
                 },
             )
             .await
@@ -291,6 +353,15 @@ impl CapabilityRunner {
         user_id: Option<&str>,
         egress_policy: &ContainerEgressPolicy,
     ) -> Result<RunningCapability> {
+        self.ensure_image_available(&manifest.image)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to restore the image for capability '{}'",
+                    manifest.id
+                )
+            })?;
+
         let is_shared = session_id.is_none();
         let container_name = if is_shared {
             format!(
@@ -362,8 +433,7 @@ impl CapabilityRunner {
         }
 
         // ── Exposed ports ─────────────────────────────────────────────────────
-        let mut exposed_ports: HashMap<String, HashMap<(), ()>> = HashMap::new();
-        exposed_ports.insert(format!("{}/tcp", CAPABILITY_GRPC_PORT), HashMap::new());
+        let exposed_ports = vec![format!("{}/tcp", CAPABILITY_GRPC_PORT)];
 
         // ── Resource limits ───────────────────────────────────────────────────
         let res = &manifest.resources;
@@ -423,7 +493,7 @@ impl CapabilityRunner {
             ..Default::default()
         };
 
-        let config = Config {
+        let config = ContainerCreateBody {
             image: Some(manifest.image.clone()),
             env: Some(env_vars),
             exposed_ports: Some(exposed_ports),
@@ -434,8 +504,8 @@ impl CapabilityRunner {
 
         // ── Create + start container ──────────────────────────────────────────
         let create_opts = CreateContainerOptions {
-            name: container_name.clone(),
-            platform: None,
+            name: Some(container_name.clone()),
+            ..Default::default()
         };
 
         let container = self
@@ -452,7 +522,7 @@ impl CapabilityRunner {
         let container_id = container.id.clone();
 
         self.docker
-            .start_container(&container_id, None::<StartContainerOptions<&str>>)
+            .start_container(&container_id, None)
             .await
             .with_context(|| format!("Failed to start container '{}'", container_id))?;
 
@@ -548,6 +618,16 @@ impl CapabilityRunner {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn is_missing_image_error(error: &DockerError) -> bool {
+    matches!(
+        error,
+        DockerError::DockerResponseServerError {
+            status_code: 404,
+            ..
+        }
+    )
+}
 
 fn extract_host_port(inspect: &ContainerInspectResponse, container_port: u16) -> Option<u16> {
     let ports = inspect.network_settings.as_ref()?.ports.as_ref()?;
@@ -773,7 +853,7 @@ async fn wait_for_grpc_ready(
 /// Fetch the last N lines of a container's stdout/stderr logs.
 /// Returns an empty string if the container is already gone or logs are unavailable.
 async fn fetch_container_logs(docker: &Docker, container_id: &str) -> String {
-    let options = LogsOptions::<String> {
+    let options = LogsOptions {
         stdout: true,
         stderr: true,
         tail: "50".to_string(),
@@ -820,6 +900,22 @@ async fn fetch_container_state(docker: &Docker, container_id: &str) -> String {
 mod tests {
     use super::*;
     use bollard::models::{EndpointSettings, NetworkSettings};
+
+    #[test]
+    fn classifies_only_docker_not_found_as_missing_image() {
+        let missing = DockerError::DockerResponseServerError {
+            status_code: 404,
+            message: "No such image".to_string(),
+        };
+        let unavailable = DockerError::DockerResponseServerError {
+            status_code: 500,
+            message: "Docker unavailable".to_string(),
+        };
+
+        assert!(is_missing_image_error(&missing));
+        assert!(!is_missing_image_error(&unavailable));
+        assert!(!is_missing_image_error(&DockerError::RequestTimeoutError));
+    }
 
     fn make_inspect(
         networks: HashMap<String, EndpointSettings>,

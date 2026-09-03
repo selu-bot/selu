@@ -6,47 +6,96 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "pipe_id",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "pipe_id"
+          }
+        }
       },
       {
         "name": "title",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "title"
+          }
+        }
       },
       {
         "name": "status",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "status"
+          }
+        }
       },
       {
         "name": "thread_kind",
         "ordinal": 4,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "thread_kind"
+          }
+        }
       },
       {
         "name": "schedule_id",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "schedule_id"
+          }
+        }
       },
       {
         "name": "created_at",
         "ordinal": 6,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "threads",
+            "name": "created_at"
+          }
+        }
       },
       {
         "name": "first_msg",
         "ordinal": 7,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "messages",
+            "name": "content"
+          }
+        }
       },
       {
         "name": "last_activity_at?: String",
         "ordinal": 8,
-        "type_info": "Null"
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -60,8 +109,8 @@
       false,
       true,
       false,
-      false,
-      null
+      true,
+      true
     ]
   },
   "hash": "7c2964c472a0841532a0026701a21cdfc5963d6cb9e8204e20f37fd3182c5fd2"

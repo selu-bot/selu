@@ -25,12 +25,12 @@
         <span class="w-5 h-5 rounded-full gradient-coral text-white text-[10px] font-bold flex items-center justify-center">1</span>
         <span data-i18n="tg.step1">Connect Bot</span>
       </div>
-      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <svg class="w-4 h-4 text-[#3D3A5C] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       <div id="ws-2" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
         <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">2</span>
         <span data-i18n="tg.step2">Pick Chat</span>
       </div>
-      <svg class="w-4 h-4 text-[#3D3A5C] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <svg class="w-4 h-4 text-[#3D3A5C] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       <div id="ws-3" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface-raised text-txt-muted border border-edge">
         <span class="w-5 h-5 rounded-full bg-surface-alt text-txt-muted text-[10px] font-bold flex items-center justify-center">3</span>
         <span data-i18n="tg.step3">Add People</span>
@@ -57,12 +57,12 @@
           <div>
             <label for="tg-token" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.bottoken">Bot Token</label>
             <input id="tg-token" name="bot_token" type="password" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" required
-                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
             <p class="text-[11px] text-txt-faint mt-1" data-i18n="tg.bottoken.hint">You can find this in the BotFather chat in Telegram.</p>
           </div>
           <div class="flex items-center gap-3">
             <button type="button" id="btn-connect" onclick="testConnection()"
-                    class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                    class="bg-linear-to-r/srgb from-coral to-amber text-white text-sm font-medium px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                     data-i18n="tg.connect">
               Connect to Telegram
             </button>
@@ -94,7 +94,7 @@
             <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.chatid.manual">Or enter a Chat ID manually</label>
             <div class="flex gap-2">
               <input id="manual-chatid-input" type="text" placeholder="-1001234567890"
-                     class="flex-1 bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
+                     class="flex-1 bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
               <button type="button" onclick="useManualChatId()" class="text-sm font-medium text-txt border border-edge hover:border-muted px-3 py-2.5 rounded-xl transition-colors cursor-pointer" data-i18n="tg.use">Use</button>
             </div>
             <p class="text-[11px] text-txt-faint mt-1" data-i18n="tg.chatid.hint">You can get the chat ID by forwarding a message from the chat to @userinfobot.</p>
@@ -116,7 +116,7 @@
           <div>
             <label for="tg-name" class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.pipename">Pipe Name</label>
             <input id="tg-name" name="name" type="text" data-i18n-placeholder="tg.pipename.placeholder" placeholder="e.g. Family Bot" required
-                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           </div>
         </div>
       </div>
@@ -125,7 +125,7 @@
       <div id="step-3" class="bg-surface-raised border border-edge rounded-2xl overflow-hidden hidden">
         <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
           <span class="text-sm font-semibold text-txt-heading" data-i18n="tg.whocan">Who Can Talk to Selu?</span>
-          <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-surface-alt text-txt-muted" data-i18n="common.optional">Optional</span>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded-sm bg-surface-alt text-txt-muted" data-i18n="common.optional">Optional</span>
         </div>
         <div class="p-5 space-y-4">
           <p class="text-xs text-txt-muted leading-relaxed" data-i18n="tg.whocan.desc">
@@ -138,13 +138,13 @@
             <div class="flex-1">
               <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.tguser">Telegram User ID</label>
               <input id="add-tgid" type="text" placeholder="123456789"
-                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
+                     class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition font-mono" />
               <p class="text-[11px] text-txt-faint mt-1" data-i18n="tg.tguser.hint">Send /start to @userinfobot to find your Telegram user ID.</p>
             </div>
             <div class="flex-1">
               <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="tg.seluuser">Selu User</label>
               <select id="add-user"
-                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                      class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
                 {% for u in users %}
                 <option value="{{ u.id }}">{{ u.display }}</option>
                 {% endfor %}
@@ -164,7 +164,7 @@
       <div id="submit-row" class="flex items-center justify-between pt-2 hidden">
         <a href="{{ base_path }}/pipes/new" class="text-sm text-txt-muted hover:text-txt-heading transition-colors" data-i18n="common.cancel">Cancel</a>
         <button type="submit" id="btn-submit" disabled
-                class="bg-gradient-to-r from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
+                class="bg-linear-to-r/srgb from-coral to-amber hover:from-coral/90 hover:to-amber/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium text-sm px-6 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20"
                 data-i18n="tg.setup">
           Set Up Telegram Bot
         </button>
@@ -240,7 +240,7 @@ function renderChatList() {
       : '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
     return '<div onclick="selectChat(\'' + escapeAttr(c.chat_id) + '\')" class="px-4 py-3 cursor-pointer border-b border-edge last:border-0 hover:bg-coral/8 transition-colors">'
       + '<div class="flex items-center gap-3">'
-      + '<div class="w-8 h-8 rounded-full bg-surface-alt flex items-center justify-center flex-shrink-0">'
+      + '<div class="w-8 h-8 rounded-full bg-surface-alt flex items-center justify-center shrink-0">'
       + '<svg class="w-4 h-4 text-txt-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + icon + '</svg>'
       + '</div>'
       + '<div class="min-w-0 flex-1">'
@@ -330,14 +330,14 @@ function renderPeople() {
   if (people.length === 0) { list.innerHTML = ''; input.value = ''; return; }
   list.innerHTML = people.map(function(p, i) {
     return '<div class="flex items-center gap-3 bg-surface-input border border-edge rounded-xl px-4 py-3">'
-      + '<div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white flex-shrink-0">'
+      + '<div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white shrink-0">'
       + p.userLabel.substring(0, 2).toUpperCase()
       + '</div>'
       + '<div class="flex-1 min-w-0">'
       + '<div class="text-sm font-medium text-txt-heading">' + escapeHtml(p.userLabel) + '</div>'
       + '<div class="text-xs text-txt-muted font-mono">Telegram ID: ' + escapeHtml(p.tgid) + '</div>'
       + '</div>'
-      + '<button type="button" onclick="removePerson(' + i + ')" class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2 py-1 rounded transition-colors cursor-pointer">' + t('pipes.remove') + '</button>'
+      + '<button type="button" onclick="removePerson(' + i + ')" class="text-xs text-rosie hover:text-rosie/80 border border-rosie/20 hover:border-rosie/40 px-2 py-1 rounded-sm transition-colors cursor-pointer">' + t('pipes.remove') + '</button>'
       + '</div>';
   }).join('');
   input.value = people.map(function(p) { return p.tgid + ':' + p.userId; }).join(',');

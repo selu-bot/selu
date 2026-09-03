@@ -112,11 +112,9 @@ pub async fn list_pipe_threads(
     rows.into_iter()
         .map(|r| {
             let title = r.title.or_else(|| {
-                if r.first_msg.is_empty() {
-                    None
-                } else {
-                    Some(r.first_msg.chars().take(40).collect::<String>())
-                }
+                r.first_msg
+                    .filter(|message| !message.is_empty())
+                    .map(|message| message.chars().take(40).collect::<String>())
             });
             ThreadRow {
                 id: r.id.unwrap_or_default(),

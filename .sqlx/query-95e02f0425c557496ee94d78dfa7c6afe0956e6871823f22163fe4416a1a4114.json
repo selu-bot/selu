@@ -6,7 +6,13 @@
       {
         "name": "credential_name",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_credentials",
+            "name": "credential_name"
+          }
+        }
       }
     ],
     "parameters": {

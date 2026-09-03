@@ -28,6 +28,51 @@
 #     the user or developer experience.
 
 entries:
+  - id: 2026-09-03-stable-dependency-refresh
+    date: "2026-09-03"
+    pr:
+    area: self-hosting
+    type: changed
+    audience: both
+    summary: "Stable dependency refresh updates container and browser requirements"
+    affected_files:
+      - Cargo.toml
+      - Cargo.lock
+      - Dockerfile
+      - Dockerfile.updater
+      - sidecars/whatsapp-bridge/Dockerfile
+      - sidecars/whatsapp-bridge/package.json
+      - sidecars/whatsapp-bridge/package-lock.json
+      - crates/selu-orchestrator/templates/_tailwind.html
+      - crates/selu-orchestrator/templates/layout.html
+      - .github/workflows/docker.yml
+    docs_sections:
+      - user-guide/self-hosting/docker
+      - user-guide/self-hosting/updating
+      - user-guide/channels/web-chat
+      - developer-guide/capabilities/container-guidelines
+    details: |
+      The orchestrator and updater images now use Debian 13 (Trixie). The
+      Bollard Docker client targets Engine API 1.53, requiring Docker Engine
+      29.2 or newer on the host. Update Docker before rolling out these images.
+      The WhatsApp bridge now uses Node.js 24 LTS, Express 5, and reproducible
+      npm ci installs from its new lockfile. Baileys remains on stable 6.7.24;
+      version 7 is still a release candidate.
+
+      The web UI now uses Tailwind CSS 4.3.3, with a shared CSS theme replacing
+      the previous JavaScript configuration. Supported browsers are Safari
+      16.4+, Chrome 111+, and Firefox 128+. HTMX, SSE, Markdown, and QR scripts
+      are pinned to stable releases. The existing colors and dark/light theme
+      behavior are preserved.
+
+      Rust dependencies and the SQLx offline metadata have been refreshed.
+      Rust 1.94.1+ is required to build locally. Developers should use
+      sqlx-cli 0.9.0 for cargo sqlx prepare --workspace.
+      CI actions now use Node 24; self-hosted runners need version 2.327.1 or
+      newer (2.329.0+ for authenticated git in Docker container actions).
+      Image signing uses Cosign 3.1.3 via cosign-installer 4.1.2.
+      No API routes, environment variables, or database migrations were added.
+
   - id: 2026-04-09-shared-multimodal-image-normalization
     date: "2026-04-09"
     pr:
@@ -2302,3 +2347,29 @@ entries:
 
     The mobile thread list response includes two new fields:
     `thread_kind` and `schedule_id`. Existing clients can ignore them.
+- id: 2026-09-02-capability-image-self-healing
+  date: "2026-09-02"
+  pr:
+  area: capabilities
+  type: changed
+  audience: users
+  summary: "Missing capability container images are restored automatically and shown in agent settings"
+  affected_files:
+    - crates/selu-orchestrator/src/capabilities/runner.rs
+    - crates/selu-orchestrator/src/capabilities/mod.rs
+    - crates/selu-orchestrator/src/web/agents.rs
+    - crates/selu-orchestrator/src/web/mod.rs
+    - crates/selu-orchestrator/templates/agents_detail.html
+    - crates/selu-orchestrator/templates/layout.html
+  docs_sections:
+    - user-guide/agents/*
+    - user-guide/self-hosting/docker
+  details: |
+    When Docker no longer has the image required by an installed agent's
+    capability, Selu now downloads the image automatically on the next use and
+    continues starting the capability. Concurrent requests for the same missing
+    image share one download.
+
+    Each capability's image status is also shown on the agent Overview page as
+    Files ready, Download needed, or Status unavailable. Administrators can use the
+    Download now action to restore a missing image before the capability is used.

@@ -1,6 +1,6 @@
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 use askama::Template;
 use axum::{
@@ -234,15 +234,8 @@ pub async fn users_create(
         error!("Failed to generate random salt");
         return Redirect::to(&format!("{}/users?error=hash_failed", base_path)).into_response();
     }
-    let salt = match SaltString::encode_b64(&salt_bytes) {
-        Ok(s) => s,
-        Err(e) => {
-            error!("Failed to encode SaltString: {e}");
-            return Redirect::to(&format!("{}/users?error=hash_failed", base_path)).into_response();
-        }
-    };
     let argon2 = Argon2::default();
-    let hash = match argon2.hash_password(form.password.as_bytes(), &salt) {
+    let hash = match argon2.hash_password_with_salt(form.password.as_bytes(), &salt_bytes) {
         Ok(h) => h.to_string(),
         Err(e) => {
             error!("Argon2 hashing failed: {e}");
@@ -361,14 +354,9 @@ pub async fn users_change_password(
         error!("Failed to generate random salt");
         return Redirect::to(&format!("{}/users?error=hash_failed", base_path)).into_response();
     }
-    let salt = match SaltString::encode_b64(&salt_bytes) {
-        Ok(s) => s,
-        Err(e) => {
-            error!("Failed to encode SaltString: {e}");
-            return Redirect::to(&format!("{}/users?error=hash_failed", base_path)).into_response();
-        }
-    };
-    let hash = match Argon2::default().hash_password(form.new_password.as_bytes(), &salt) {
+    let hash = match Argon2::default()
+        .hash_password_with_salt(form.new_password.as_bytes(), &salt_bytes)
+    {
         Ok(h) => h.to_string(),
         Err(e) => {
             error!("Argon2 hashing failed: {e}");
@@ -567,7 +555,7 @@ pub async fn users_set_language(
                 hx-post="{bp}/users/{id}/language"
                 hx-target="closest td"
                 hx-swap="innerHTML"
-                class="bg-surface-input border border-edge rounded-lg px-2 py-1 text-xs text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition cursor-pointer">
+                class="bg-surface-input border border-edge rounded-lg px-2 py-1 text-xs text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition cursor-pointer">
             <option value="de" {de_sel}>Deutsch</option>
             <option value="en" {en_sel}>English</option>
         </select>"#,

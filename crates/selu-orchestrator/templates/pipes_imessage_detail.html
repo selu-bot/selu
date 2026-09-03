@@ -13,7 +13,7 @@
       </a>
       <div class="flex items-center justify-between gap-4">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+          <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
             <svg class="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </div>
           <div>
@@ -50,11 +50,11 @@
       <div class="p-5 space-y-3">
         <div class="flex items-center gap-3 text-sm">
           <span class="text-txt-muted w-36" data-i18n="imsg.detail.server">BlueBubbles server</span>
-          <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading break-all">{{ config.server_url }}</code>
+          <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded-sm text-txt-heading break-all">{{ config.server_url }}</code>
         </div>
         <div class="flex items-center gap-3 text-sm">
           <span class="text-txt-muted w-36" data-i18n="imsg.detail.chat">Selected chat</span>
-          <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded text-txt-heading break-all">{{ config.chat_guid }}</code>
+          <code class="font-mono text-xs bg-surface-alt px-2 py-1 rounded-sm text-txt-heading break-all">{{ config.chat_guid }}</code>
         </div>
         <div class="flex items-center gap-3 text-sm">
           <span class="text-txt-muted w-36" data-i18n="imsg.detail.agent">Agent</span>
@@ -76,7 +76,7 @@
         <div class="space-y-2">
           {% for person in people %}
           <div class="flex items-center gap-3 bg-surface-input border border-edge rounded-xl px-4 py-3">
-            <div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+            <div class="w-8 h-8 rounded-full gradient-coral flex items-center justify-center text-xs font-bold text-white shrink-0">
               {{ person.initials }}
             </div>
             <div class="flex-1 min-w-0">
@@ -98,12 +98,12 @@
           <div class="flex-1 w-full">
             <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.detail.sender">Phone number or Apple ID</label>
             <input name="sender_ref" type="text" required data-i18n-placeholder="imsg.detail.sender.placeholder" placeholder="+14155551234 or name@icloud.com"
-                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
+                   class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading placeholder-txt-faint focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition" />
           </div>
           <div class="flex-1 w-full">
             <label class="block text-xs font-medium text-txt-muted mb-1.5" data-i18n="imsg.detail.seluuser">Selu User</label>
             <select name="user_id" required
-                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-none focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
+                    class="w-full bg-surface-input border border-edge rounded-xl px-3.5 py-2.5 text-sm text-txt-heading focus:outline-hidden focus:border-coral focus:ring-1 focus:ring-coral/50 transition">
               {% for u in users %}
               <option value="{{ u.id }}">{{ u.display }}</option>
               {% endfor %}

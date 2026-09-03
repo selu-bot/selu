@@ -6,17 +6,35 @@
       {
         "name": "capability_id",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "system_credentials",
+            "name": "capability_id"
+          }
+        }
       },
       {
         "name": "credential_name",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "system_credentials",
+            "name": "credential_name"
+          }
+        }
       },
       {
         "name": "created_at",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "system_credentials",
+            "name": "created_at"
+          }
+        }
       }
     ],
     "parameters": {

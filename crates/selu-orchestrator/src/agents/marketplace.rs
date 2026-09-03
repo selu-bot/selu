@@ -1007,14 +1007,14 @@ async fn pull_image(
     image_count: usize,
     progress_tx: Option<&tokio::sync::mpsc::UnboundedSender<PullProgress>>,
 ) -> Result<()> {
-    use bollard::image::CreateImageOptions;
+    use bollard::query_parameters::CreateImageOptions;
     use futures::StreamExt;
     use std::collections::{HashMap, HashSet};
 
     info!(image, "Pulling capability Docker image");
 
     let opts = CreateImageOptions {
-        from_image: image,
+        from_image: Some(image.to_string()),
         ..Default::default()
     };
 

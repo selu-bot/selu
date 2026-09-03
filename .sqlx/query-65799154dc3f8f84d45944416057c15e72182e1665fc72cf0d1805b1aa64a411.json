@@ -6,12 +6,24 @@
       {
         "name": "pipe_id",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedule_pipes",
+            "name": "pipe_id"
+          }
+        }
       },
       {
         "name": "name",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "name"
+          }
+        }
       }
     ],
     "parameters": {
@@ -19,7 +31,7 @@
     },
     "nullable": [
       false,
-      false
+      true
     ]
   },
   "hash": "65799154dc3f8f84d45944416057c15e72182e1665fc72cf0d1805b1aa64a411"

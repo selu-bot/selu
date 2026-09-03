@@ -3,7 +3,7 @@
 {% block title %}Mobile App{% endblock %}
 
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/dist/qrcode.js"></script>
 {% endblock %}
 
 {% block body %}
@@ -25,7 +25,7 @@
 
         <!-- Step 1 -->
         <div class="flex gap-4">
-          <div class="flex-shrink-0 w-8 h-8 rounded-full bg-coral/20 text-coral flex items-center justify-center text-sm font-bold">1</div>
+          <div class="shrink-0 w-8 h-8 rounded-full bg-coral/20 text-coral flex items-center justify-center text-sm font-bold">1</div>
           <div>
             <p class="text-sm font-medium text-txt-heading" data-i18n="mobile.step1_title">Install the selu app</p>
             <p class="text-xs text-txt-muted mt-0.5" data-i18n="mobile.step1_desc">Download selu from the App Store on your iPhone or iPad.</p>
@@ -34,7 +34,7 @@
 
         <!-- Step 2: Generate QR -->
         <div class="flex gap-4">
-          <div class="flex-shrink-0 w-8 h-8 rounded-full bg-coral/20 text-coral flex items-center justify-center text-sm font-bold">2</div>
+          <div class="shrink-0 w-8 h-8 rounded-full bg-coral/20 text-coral flex items-center justify-center text-sm font-bold">2</div>
           <div class="flex-1">
             <p class="text-sm font-medium text-txt-heading" data-i18n="mobile.step2_title">Scan this QR code</p>
             <p class="text-xs text-txt-muted mt-0.5 mb-4" data-i18n="mobile.step2_desc">Open the selu app, tap "Scan QR Code", and point your camera at the code below.</p>
@@ -50,7 +50,7 @@
             </div>
 
             <button id="btn-generate" onclick="generateSetupCode()"
-                    class="bg-gradient-to-r from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 hover:from-coral/90 hover:to-amber/90">
+                    class="bg-linear-to-r/srgb from-coral to-amber text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-lg shadow-coral/20 hover:from-coral/90 hover:to-amber/90">
               <span data-i18n="mobile.generate_qr">Generate QR Code</span>
             </button>
 
@@ -62,7 +62,7 @@
 
         <!-- Step 3 -->
         <div class="flex gap-4">
-          <div class="flex-shrink-0 w-8 h-8 rounded-full bg-coral/20 text-coral flex items-center justify-center text-sm font-bold">3</div>
+          <div class="shrink-0 w-8 h-8 rounded-full bg-coral/20 text-coral flex items-center justify-center text-sm font-bold">3</div>
           <div>
             <p class="text-sm font-medium text-txt-heading" data-i18n="mobile.step3_title">Start chatting</p>
             <p class="text-xs text-txt-muted mt-0.5" data-i18n="mobile.step3_desc">Once connected, you can chat with your agents, share photos, attach your location, and approve tool calls — all from your phone.</p>

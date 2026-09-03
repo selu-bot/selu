@@ -6,37 +6,74 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "whatsapp_configs",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "name",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "whatsapp_configs",
+            "name": "name"
+          }
+        }
       },
       {
         "name": "bridge_url",
         "ordinal": 2,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "whatsapp_configs",
+            "name": "bridge_url"
+          }
+        }
       },
       {
         "name": "active",
         "ordinal": 3,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "whatsapp_configs",
+            "name": "active"
+          }
+        }
       },
       {
         "name": "pipe_id",
         "ordinal": 4,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "whatsapp_configs",
+            "name": "pipe_id"
+          }
+        }
       },
       {
         "name": "inbound_token",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "inbound_token"
+          }
+        }
       },
       {
         "name": "agent_name!: String",
         "ordinal": 6,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {

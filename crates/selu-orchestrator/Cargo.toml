@@ -37,7 +37,6 @@ http-body-util = { workspace = true }
 
 # Templating
 askama = { workspace = true }
-askama_axum = { workspace = true }
 
 # Config
 config = { workspace = true }
@@ -65,6 +64,7 @@ argon2 = { workspace = true }
 
 # gRPC
 tonic = { workspace = true }
+tonic-prost = { workspace = true }
 prost = { workspace = true }
 
 # CEL filter evaluation
@@ -94,5 +94,5 @@ cron = { workspace = true }
 chrono-tz = { workspace = true }
 
 [build-dependencies]
-tonic-build = { version = "0.13", features = ["prost"] }
-protox = "0.7"
+tonic-prost-build = "0.14"
+protox = "0.9"

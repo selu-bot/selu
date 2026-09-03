@@ -6,12 +6,24 @@
       {
         "name": "outbound_url",
         "ordinal": 0,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "outbound_url"
+          }
+        }
       },
       {
         "name": "outbound_auth",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "outbound_auth"
+          }
+        }
       }
     ],
     "parameters": {

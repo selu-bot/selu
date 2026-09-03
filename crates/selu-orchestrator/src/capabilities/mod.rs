@@ -75,6 +75,16 @@ impl CapabilityEngine {
         }
     }
 
+    /// Return whether a capability image is present in Docker's local image store.
+    pub async fn is_image_available(&self, image: &str) -> Result<bool> {
+        self.runner.is_image_available(image).await
+    }
+
+    /// Download a missing capability image. Returns whether a download was needed.
+    pub async fn ensure_image_available(&self, image: &str) -> Result<bool> {
+        self.runner.ensure_image_available(image).await
+    }
+
     /// Invoke a tool by name. Starts the capability container if not already running.
     ///
     /// `manifests`    — capability manifests available to the current agent  
@@ -823,7 +833,13 @@ pub async fn purge_cache_volume(
 
     match bollard::Docker::connect_with_local_defaults() {
         Ok(docker) => {
-            if let Err(e) = docker.remove_volume(&volume_name, None).await {
+            if let Err(e) = docker
+                .remove_volume(
+                    &volume_name,
+                    None::<bollard::query_parameters::RemoveVolumeOptions>,
+                )
+                .await
+            {
                 warn!(volume = %volume_name, "Failed to remove cache volume: {e}");
             } else {
                 info!(volume = %volume_name, "Purged cache volume");
@@ -874,7 +890,13 @@ pub async fn cleanup_expired_workspaces(state: &AppState) -> Result<()> {
         let volume_name = format!("selu-workspace-{}", session_id);
         match bollard::Docker::connect_with_local_defaults() {
             Ok(docker) => {
-                if let Err(e) = docker.remove_volume(&volume_name, None).await {
+                if let Err(e) = docker
+                    .remove_volume(
+                        &volume_name,
+                        None::<bollard::query_parameters::RemoveVolumeOptions>,
+                    )
+                    .await
+                {
                     warn!(volume = %volume_name, "Failed to remove workspace volume: {e}");
                 } else {
                     info!(volume = %volume_name, "Removed expired workspace volume");

@@ -2,6 +2,12 @@
 
 This sidecar connects WhatsApp to Selu using [Baileys](https://github.com/WhiskeySockets/Baileys).
 
+## Local development
+
+Use Node.js 24 LTS and run `npm ci` followed by `npm start`. The Docker image
+uses the same LTS series and installs from `package-lock.json`. Baileys stays
+on the latest stable 6.x release until 7.x leaves release-candidate status.
+
 ## What it does
 
 - Connects to WhatsApp Web (QR login).
