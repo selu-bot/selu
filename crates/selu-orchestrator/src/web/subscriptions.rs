@@ -76,7 +76,7 @@ pub async fn subscriptions_index(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
     let rows = sqlx::query!(
         r#"SELECT es.id, es.user_id, u.username,

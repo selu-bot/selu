@@ -1280,6 +1280,7 @@ async fn dispatch_message(
             thread_id: thread_id.clone(),
         },
         skip_user_persist: false,
+        client_message_id: None,
         enable_streaming: true,
         inbound_attachments: inbound_attachment_inputs,
         delegation_trace: Vec::new(),

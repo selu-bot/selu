@@ -331,7 +331,7 @@ pub async fn imessage_setup_page(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
     let users = load_users(&state.db).await;
 
@@ -487,7 +487,7 @@ pub async fn imessage_detail(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
     let config = match load_imessage_config(&state.db, &config_id).await {
         Some(c) => c,

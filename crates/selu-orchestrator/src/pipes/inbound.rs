@@ -299,6 +299,7 @@ async fn handle_inbound(
             chain_depth: 0,
             channel_kind,
             skip_user_persist: false,
+            client_message_id: None,
             enable_streaming: true,
             inbound_attachments,
             delegation_trace: Vec::new(),

@@ -69,6 +69,10 @@ pub struct ConfirmationRequest {
 pub enum LoopEvent {
     /// A text token (streamed)
     Token(String),
+    /// The model completed one visible text segment before beginning tool work.
+    /// A client must close the current assistant part instead of concatenating
+    /// this text with the model's post-tool answer.
+    AssistantPartFinished,
     /// The LLM is invoking a capability
     CapabilityStatus(String), // e.g. "Using google-calendar..."
     /// A tool call requires explicit user confirmation before dispatch.

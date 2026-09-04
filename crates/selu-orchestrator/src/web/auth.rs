@@ -189,7 +189,7 @@ pub async fn login_submit(
         .max_age(time::Duration::days(SESSION_TTL_DAYS))
         .build();
 
-    (jar.add(cookie), prefixed_redirect(&base_path, "/chat")).into_response()
+    (jar.add(cookie), prefixed_redirect(&base_path, "/app/")).into_response()
 }
 
 pub async fn logout(
@@ -411,5 +411,5 @@ pub async fn setup_submit(
         .max_age(time::Duration::days(SESSION_TTL_DAYS))
         .build();
 
-    (jar.add(cookie), prefixed_redirect(&base_path, "/chat")).into_response()
+    (jar.add(cookie), prefixed_redirect(&base_path, "/app/")).into_response()
 }

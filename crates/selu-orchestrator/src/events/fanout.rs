@@ -221,6 +221,7 @@ async fn dispatch_agent_invocation(
         chain_depth: event.chain_depth + 1,
         channel_kind: ChannelKind::NonInteractive,
         skip_user_persist: false,
+        client_message_id: None,
         enable_streaming: true,
         inbound_attachments: Vec::new(),
         delegation_trace: Vec::new(),

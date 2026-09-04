@@ -28,6 +28,45 @@
 #     the user or developer experience.
 
 entries:
+  - id: 2026-09-03-unified-conversation-api-foundation
+    date: "2026-09-03"
+    pr:
+    area: api
+    type: added
+    audience: both
+    summary: "Makes the v1 API the shared web and mobile conversation contract"
+    affected_files:
+      - crates/selu-orchestrator/src/api/conversations.rs
+      - crates/selu-orchestrator/src/services/conversations.rs
+      - crates/selu-orchestrator/migrations/0060_conversation_api_foundation.sql
+      - ui/
+    docs_sections:
+      - reference/api
+      - user-guide/channels/web-chat
+      - user-guide/channels/imessage
+    details: |
+      The /api/v1 conversation API provides conversation listing and creation,
+      snapshots, idempotent text sends, durable run records, and a replayable
+      authenticated SSE event feed. The React SPA is served at /app/ from the
+      orchestrator image and iOS chat uses this contract directly. Its new
+      responsive navigation links to the remaining server-rendered settings
+      pages while they are migrated. The SPA includes reusable chat, composer,
+      conversation-list, brand, and navigation components; English and German
+      copy; light and dark themes; reduced-motion support; expandable run and
+      tool details; and reconnect-safe progress rendering. The authenticated
+      shell is delivered with a restrictive Content Security Policy and other
+      browser hardening headers. The
+      server-rendered /chat routes and former mobile chat endpoints are no
+      longer registered. Clients use an event cursor to recover after
+      reconnecting. This release is text-only; later chat features must be
+      added as v1 operations rather than restored through the retired API.
+      GET /api/v1/session exposes only the signed-in user's display name,
+      administrator flag, and language so the SPA can render role-appropriate
+      navigation without putting session credentials in browser storage.
+      Ask-policy tool calls appear as accessible approval cards. Approval IDs
+      are scoped to their authenticated owner; unauthorized decisions return
+      404 without consuming the owner's pending approval.
+
   - id: 2026-09-03-stable-dependency-refresh
     date: "2026-09-03"
     pr:
@@ -2373,3 +2412,34 @@ entries:
     Each capability's image status is also shown on the agent Overview page as
     Files ready, Download needed, or Status unavailable. Administrators can use the
     Download now action to restore a missing image before the capability is used.
+
+  - id: 2026-09-04-conversation-manage-and-paginate
+    date: "2026-09-04"
+    pr:
+    area: api
+    type: added
+    audience: both
+    summary: "Rename, delete and page through conversations in the v1 API and chat UI"
+    affected_files:
+      - crates/selu-orchestrator/src/api/conversations.rs
+      - crates/selu-orchestrator/src/services/conversations.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+      - ui/src/App.tsx
+      - ui/src/components/ConversationActions.tsx
+      - ui/src/components/ConversationList.tsx
+    docs_sections:
+      - reference/api
+      - user-guide/channels/web-chat
+    details: |
+      GET /api/v1/conversations now pages with keyset cursors: the response
+      includes next_cursor when older conversations exist and clients pass it
+      back as ?before=. PATCH /api/v1/conversations/{id} renames a
+      conversation; DELETE removes it together with messages, runs, events and
+      artifacts and refuses (409 conversation.run_in_progress) while Selu is
+      still working. The chat UI gained a conversation menu with Rename and
+      Delete, a "Show older conversations" control, and a separate "Scheduled
+      runs" group for schedule threads with a schedule badge in the header.
+      Scheduled runs publish conversation.changed so open chat clients update
+      live. The run pipeline now delivers the final run.output_finished event,
+      which fixes assistant answers being joined into one bubble and the
+      streaming indicator staying visible after a reply completed.

@@ -1,7 +1,6 @@
 pub mod agents;
 pub mod auth;
 pub mod cache;
-pub mod chat;
 pub mod credentials;
 pub mod feedback;
 pub mod integrations;
@@ -10,6 +9,7 @@ pub mod personality;
 pub mod pipes;
 pub mod providers;
 pub mod schedules;
+pub mod spa;
 pub mod system_updates;
 pub mod telegram;
 pub mod users;
@@ -18,7 +18,7 @@ pub mod whatsapp;
 use crate::state::AppState;
 use axum::{
     Router,
-    extract::{DefaultBodyLimit, FromRequestParts},
+    extract::FromRequestParts,
     http::{Uri, request::Parts},
     response::Redirect,
     routing::{delete, get, post},
@@ -26,6 +26,7 @@ use axum::{
 use std::convert::Infallible;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
+use tower_http::services::ServeDir;
 
 // ── BasePath extractor ───────────────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ impl<S> Layer<S> for StripPrefixLayer {
 /// Tower service that intercepts every inbound request and:
 ///
 ///   1. Reads the `X-Forwarded-Prefix` header (e.g. `/selu`)
-///   2. Strips that prefix from the request URI (`/selu/chat` → `/chat`)
+///   2. Strips that prefix from the request URI (`/selu/app/` → `/app/`)
 ///      so Axum's router can match the bare path
 ///   3. Injects [`BasePath`] and [`ExternalOrigin`] into request extensions
 ///      for handlers / templates / redirects
@@ -210,7 +211,7 @@ impl FromRequestParts<AppState> for ExternalOrigin {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /// Build a redirect target that respects the resolved base path.
-/// Example: `prefixed_redirect("/selu", "/chat")` → `Redirect::to("/selu/chat")`
+/// Example: `prefixed_redirect("/selu", "/app/")` → `Redirect::to("/selu/app/")`
 pub fn prefixed_redirect(base_path: &str, path: &str) -> Redirect {
     Redirect::to(&format!("{}{}", base_path, path))
 }
@@ -224,12 +225,17 @@ pub fn prefixed(base_path: &str, path: &str) -> String {
 // ── Root redirect handler ────────────────────────────────────────────────────
 
 async fn root_redirect(BasePath(base_path): BasePath) -> Redirect {
-    Redirect::to(&format!("{}/chat", base_path))
+    Redirect::to(&format!("{}/app/", base_path))
+}
+
+async fn app_redirect(BasePath(base_path): BasePath) -> Redirect {
+    Redirect::to(&format!("{}/app/", base_path))
 }
 
 // ── Router ───────────────────────────────────────────────────────────────────
 
 pub fn router(state: AppState) -> Router<AppState> {
+    let ui_dir = spa::ui_dir();
     Router::new()
         // Public routes (no auth required)
         .route("/login", get(auth::login_page).post(auth::login_submit))
@@ -238,29 +244,11 @@ pub fn router(state: AppState) -> Router<AppState> {
         // Root redirect
         .route("/", get(root_redirect))
         // All routes below require AuthUser extractor (session cookie)
-        // Chat
-        .route("/chat", get(chat::chat_index))
-        .route("/chat/{pipe_id}", get(chat::chat_pipe))
-        .route("/chat/{pipe_id}/t/new", post(chat::chat_new_thread))
-        .route("/chat/{pipe_id}/t/{thread_id}", get(chat::chat_thread))
-        .route(
-            "/chat/{pipe_id}/t/{thread_id}/older",
-            get(chat::chat_older_messages),
-        )
-        .route(
-            "/chat/{pipe_id}/t/{thread_id}/delete",
-            post(chat::chat_delete_thread),
-        )
-        .route(
-            "/chat/{pipe_id}/t/{thread_id}/send",
-            post(chat::chat_send).layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
-        )
-        .route("/chat/{pipe_id}/stream/{stream_id}", get(chat::chat_stream))
-        .route("/chat/confirm/{confirmation_id}", post(chat::chat_confirm))
-        .route(
-            "/chat/{pipe_id}/t/{thread_id}/feedback",
-            post(chat::chat_feedback),
-        )
+        // Conversation SPA. The shell is authenticated; static assets contain
+        // no user data and can be cached independently.
+        .route("/app", get(app_redirect))
+        .route("/app/", get(spa::app_index))
+        .nest_service("/app/assets", ServeDir::new(format!("{ui_dir}/assets")))
         // Pipes (unified: all pipe types including iMessage, webhook, web, etc.)
         .route("/pipes", get(pipes::pipes_index))
         .route("/pipes/new", get(pipes::pipes_new))

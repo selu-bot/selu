@@ -307,7 +307,7 @@
          -translate-x-full md:translate-x-0">
     <!-- Logo -->
     <div class="px-5 h-16 flex items-center border-b border-edge">
-      <a href="{{ base_path }}/chat" class="flex items-center gap-3 group">
+      <a href="{{ base_path }}/app/" class="flex items-center gap-3 group">
         <svg class="w-9 h-9 shrink-0 animate-float" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
           <defs><linearGradient id="selu-g" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0%" stop-color="#FF7EB3"/><stop offset="100%" stop-color="#FF6B5A"/></linearGradient></defs>
           <circle cx="165" cy="90" r="50" fill="url(#selu-g)"/>
@@ -331,7 +331,7 @@
     <nav class="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
       <div class="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-txt-faint" data-i18n="nav.main">Main</div>
 
-      <a href="{{ base_path }}/chat" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "chat" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
+      <a href="{{ base_path }}/app/" onclick="closeSidebar()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all {% if active_nav == "chat" %}nav-active text-txt-heading font-medium{% else %}text-(--c-nav-text) hover:text-txt-heading hover:bg-sidebar-hover{% endif %}">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span data-i18n="nav.chat">Chat</span>
       </a>

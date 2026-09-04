@@ -230,7 +230,7 @@ pub async fn pipes_index(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     // Build lookup maps: user_id -> display_name, pipe_id -> user_id
@@ -379,7 +379,7 @@ pub async fn pipes_new(
     ExternalOrigin(external_origin): ExternalOrigin,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     let https_available = external_origin.starts_with("https://");
@@ -499,7 +499,7 @@ pub async fn pipes_new_redirect(
     ExternalOrigin(external_origin): ExternalOrigin,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     let target = match pipe_type.as_str() {
@@ -550,7 +550,7 @@ pub async fn pipes_webhook_new(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     let users = db_users(&state.db).await;
@@ -580,7 +580,7 @@ pub async fn pipes_webhook_create(
     Form(form): Form<WebhookCreateForm>,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
     if form.name.trim().is_empty() || form.user_id.is_empty() || form.outbound_url.trim().is_empty()
     {
@@ -639,7 +639,7 @@ pub async fn pipes_web_new(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     let users = db_users(&state.db).await;
@@ -669,7 +669,7 @@ pub async fn pipes_web_create(
     Form(form): Form<WebCreateForm>,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
     if form.name.trim().is_empty() || form.user_id.is_empty() {
         return Redirect::to(&format!(

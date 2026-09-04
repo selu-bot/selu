@@ -80,6 +80,10 @@ pub struct TurnParams {
     /// Used by the schedule executor: the prompt is still sent to the LLM
     /// but should not appear as a user bubble in chat.
     pub skip_user_persist: bool,
+    /// Stable client-generated ID for the persisted user message. This lets
+    /// every client reconcile an optimistic message without guessing by text
+    /// or timestamp. Legacy callers leave it unset.
+    pub client_message_id: Option<String>,
     /// Enable token streaming for this turn.
     /// Selu keeps streaming enabled for all turns to minimize tool-call latency.
     /// Non-interactive callers can pass `noop_sender()` to ignore stream events.
@@ -130,6 +134,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         chain_depth,
         channel_kind,
         skip_user_persist,
+        client_message_id,
         enable_streaming,
         inbound_attachments,
         delegation_trace,
@@ -281,7 +286,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     // user bubble; the executor persists a "status" note instead.
     let user_persist_start = Instant::now();
     if !skip_user_persist {
-        let msg_id = Uuid::new_v4().to_string();
+        let msg_id = client_message_id.unwrap_or_else(|| Uuid::new_v4().to_string());
         let user_role = Role::User.to_string();
         let now_ms = chrono::Utc::now()
             .format("%Y-%m-%dT%H:%M:%S%.3f")
@@ -521,8 +526,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
 
     // ── Interceptor channel for incremental persistence ──────────────────────
     // For top-level turns (chain_depth == 0), intercept ToolMessage events to
-    // persist them to the DB as they happen, and accumulate Token text for
-    // reconnection. Delegated turns skip this entirely.
+    // persist them to the DB as they happen. Delegated turns skip this entirely.
     let incremental_msg_ids: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let (loop_tx, interceptor_handle) = if chain_depth == 0 && thread_id.is_some() {
         let (intercept_tx, mut intercept_rx) = mpsc::channel::<LoopEvent>(64);
@@ -535,15 +539,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         let handle = tokio::spawn(async move {
             while let Some(event) = intercept_rx.recv().await {
                 match &event {
-                    LoopEvent::Token(t) => {
-                        int_state
-                            .thread_accumulated_text
-                            .lock()
-                            .await
-                            .entry(int_thread_id.clone())
-                            .or_default()
-                            .push_str(t);
-                        // Forward to original tx
+                    LoopEvent::Token(_) => {
                         let _ = fwd_tx.send(event).await;
                     }
                     LoopEvent::ToolMessage(msg) => {
@@ -559,6 +555,10 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                         {
                             int_msg_ids.lock().await.push(id);
                         }
+                        // A tool message closes the preceding model response.
+                        // Forward a structural boundary to v1 consumers while
+                        // legacy stream adapters continue to ignore it.
+                        let _ = fwd_tx.send(LoopEvent::AssistantPartFinished).await;
                     }
                     _ => {
                         // Forward everything else as-is
@@ -2322,6 +2322,7 @@ fn dispatch_delegation(
             chain_depth: chain_depth + 1,
             channel_kind,
             skip_user_persist: true,
+            client_message_id: None,
             enable_streaming: true,
             inbound_attachments: Vec::new(),
             delegation_trace: next_delegation_trace,
@@ -2394,6 +2395,7 @@ fn confirmation_only_sender(parent_tx: LoopSender) -> LoopSender {
                 }
                 // Discard tokens, artifacts, and Done to prevent duplicate streaming.
                 LoopEvent::Token(_)
+                | LoopEvent::AssistantPartFinished
                 | LoopEvent::Artifacts(_)
                 | LoopEvent::Done
                 | LoopEvent::ToolMessage(_) => {}

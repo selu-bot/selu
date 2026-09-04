@@ -47,12 +47,6 @@ pub struct PersistedArtifact {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug, Clone)]
-pub struct ThreadArtifactFile {
-    pub artifact_id: String,
-    pub file_path: String,
-}
-
 pub fn new_store() -> ArtifactStore {
     Arc::new(RwLock::new(HashMap::new()))
 }
@@ -121,16 +115,6 @@ pub async fn get_by_id(store: &ArtifactStore, artifact_id: &str) -> Option<Store
     lock.get(artifact_id).cloned()
 }
 
-pub async fn remove_ids(store: &ArtifactStore, artifact_ids: &[String]) {
-    if artifact_ids.is_empty() {
-        return;
-    }
-    let mut lock = store.write().await;
-    for id in artifact_ids {
-        lock.remove(id);
-    }
-}
-
 pub async fn get_persisted_by_id(
     db: &sqlx::SqlitePool,
     artifact_id: &str,
@@ -164,31 +148,6 @@ pub async fn get_persisted_by_id(
         mime_type: row.mime_type,
         data,
     }))
-}
-
-pub async fn persisted_exists_for_user(
-    db: &sqlx::SqlitePool,
-    artifact_id: &str,
-    user_id: &str,
-) -> bool {
-    let Ok(row) = sqlx::query!(
-        "SELECT file_path
-         FROM thread_artifacts
-         WHERE id = ? AND user_id = ?
-         LIMIT 1",
-        artifact_id,
-        user_id
-    )
-    .fetch_optional(db)
-    .await
-    else {
-        return false;
-    };
-
-    let Some(row) = row else {
-        return false;
-    };
-    tokio::fs::metadata(&row.file_path).await.is_ok()
 }
 
 pub async fn persist_refs_for_thread(
@@ -252,54 +211,6 @@ async fn persist_one_for_thread(
     .await?;
 
     Ok(())
-}
-
-pub async fn list_thread_artifact_files(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    thread_id: &str,
-) -> Result<Vec<ThreadArtifactFile>> {
-    let rows = sqlx::query!(
-        "SELECT id, file_path FROM thread_artifacts WHERE thread_id = ?",
-        thread_id
-    )
-    .fetch_all(&mut **tx)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .filter_map(|r| {
-            r.id.map(|artifact_id| ThreadArtifactFile {
-                artifact_id,
-                file_path: r.file_path,
-            })
-        })
-        .collect())
-}
-
-pub async fn delete_thread_artifacts_rows(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    thread_id: &str,
-) -> Result<()> {
-    sqlx::query!(
-        "DELETE FROM thread_artifacts WHERE thread_id = ?",
-        thread_id
-    )
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
-}
-
-pub async fn delete_artifact_files(files: &[ThreadArtifactFile]) {
-    for file in files {
-        match tokio::fs::remove_file(&file.file_path).await {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => warn!(
-                artifact_id = %file.artifact_id,
-                file_path = %file.file_path,
-                "Failed to delete persisted artifact file: {e}"
-            ),
-        }
-    }
 }
 
 fn artifacts_root_from_db_url(database_url: &str) -> PathBuf {

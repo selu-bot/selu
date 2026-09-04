@@ -111,7 +111,7 @@ pub async fn feedback_submit(
     .await
     {
         Ok(resp) => {
-            let url = crate::web::chat::html_escape(&resp.issue_url);
+            let url = html_escape(&resp.issue_url);
             Html(format!(
                 r#"<div class="p-4 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm space-y-2">
                     <p class="font-medium" data-i18n="feedback.success.title">Thank you for your feedback!</p>
@@ -130,6 +130,14 @@ pub async fn feedback_submit(
             .into_response()
         }
     }
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
 }
 
 // ── Gateway client ──────────────────────────────────────────────────────────

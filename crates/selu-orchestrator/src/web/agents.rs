@@ -505,7 +505,7 @@ pub async fn agents_index(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
     // Installed agents from in-memory map + DB metadata
     let agents_map = state.agents.load();
@@ -849,7 +849,7 @@ pub async fn setup_wizard(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
     let installed_dir = &state.config.installed_agents_dir;
     let agent_dir = std::path::Path::new(installed_dir).join(&agent_id);

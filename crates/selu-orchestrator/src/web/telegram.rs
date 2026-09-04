@@ -184,7 +184,7 @@ pub async fn telegram_setup_page(
     ExternalOrigin(external_origin): ExternalOrigin,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     // Telegram requires HTTPS for webhooks
@@ -364,7 +364,7 @@ pub async fn telegram_detail(
     ExternalOrigin(external_origin): ExternalOrigin,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
     let config = match load_telegram_config(&state.db, &config_id).await {
         Some(c) => c,

@@ -5,6 +5,7 @@ use axum::{
 };
 
 pub mod artifacts;
+pub mod conversations;
 pub mod credentials;
 pub mod mobile;
 pub mod pipes;
@@ -14,6 +15,7 @@ pub mod tool_policies;
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/api/health", get(health))
+        .merge(conversations::router())
         .route(
             "/api/artifacts/{artifact_id}/download",
             get(artifacts::download_artifact),

@@ -83,7 +83,7 @@ pub async fn credentials_index(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
     let sys_creds = sqlx::query!(
         "SELECT capability_id, credential_name, created_at

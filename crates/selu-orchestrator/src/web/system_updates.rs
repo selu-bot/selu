@@ -214,12 +214,12 @@ pub async fn updates_index(
     ExternalOrigin(external_origin): ExternalOrigin,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     if let Err(e) = ensure_defaults(&state).await {
         error!("Failed to load update settings: {e}");
-        return prefixed_redirect(&base_path, "/chat?error=Couldn%27t+load+Settings.")
+        return prefixed_redirect(&base_path, "/app/?error=Couldn%27t+load+Settings.")
             .into_response();
     }
 
@@ -227,7 +227,7 @@ pub async fn updates_index(
         Ok(v) => v,
         Err(e) => {
             error!("Failed to fetch update settings: {e}");
-            return prefixed_redirect(&base_path, "/chat?error=Couldn%27t+load+Settings.")
+            return prefixed_redirect(&base_path, "/app/?error=Couldn%27t+load+Settings.")
                 .into_response();
         }
     };
@@ -235,7 +235,7 @@ pub async fn updates_index(
         Ok(v) => v,
         Err(e) => {
             error!("Failed to fetch update state: {e}");
-            return prefixed_redirect(&base_path, "/chat?error=Couldn%27t+load+Settings+status.")
+            return prefixed_redirect(&base_path, "/app/?error=Couldn%27t+load+Settings+status.")
                 .into_response();
         }
     };
@@ -318,7 +318,7 @@ pub async fn updates_set_channel(
     Form(form): Form<ChannelForm>,
 ) -> Redirect {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat");
+        return prefixed_redirect(&base_path, "/app/");
     }
 
     let channel = form.release_channel.trim().to_string();
@@ -349,7 +349,7 @@ pub async fn updates_set_public_origin(
     Form(form): Form<PublicOriginForm>,
 ) -> Redirect {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat");
+        return prefixed_redirect(&base_path, "/app/");
     }
 
     let normalized = match normalize_public_origin(&form.external_url) {
@@ -372,7 +372,7 @@ pub async fn updates_apply_current_host(
     ExternalOrigin(external_origin): ExternalOrigin,
 ) -> Redirect {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat");
+        return prefixed_redirect(&base_path, "/app/");
     }
 
     let current_origin = request_origin_without_base_path(&external_origin, &base_path);
@@ -396,7 +396,7 @@ pub async fn updates_toggle_auto_update(
     Form(form): Form<ToggleForm>,
 ) -> Redirect {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat");
+        return prefixed_redirect(&base_path, "/app/");
     }
 
     let auto_update = if form.auto_update.as_deref() == Some("1") {
@@ -428,7 +428,7 @@ pub async fn updates_toggle_installation_telemetry(
     Form(form): Form<InstallationTelemetryForm>,
 ) -> Redirect {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat");
+        return prefixed_redirect(&base_path, "/app/");
     }
 
     let installation_telemetry_opt_out =
@@ -464,7 +464,7 @@ pub async fn updates_toggle_push_notifications(
     Form(form): Form<PushNotificationsForm>,
 ) -> Redirect {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat");
+        return prefixed_redirect(&base_path, "/app/");
     }
 
     let enabled = if form.push_notifications_enabled.as_deref() == Some("1") {
@@ -495,7 +495,7 @@ pub async fn updates_check_now(
     BasePath(base_path): BasePath,
 ) -> Redirect {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat");
+        return prefixed_redirect(&base_path, "/app/");
     }
 
     match check_for_updates(&state).await {
@@ -704,7 +704,7 @@ pub async fn updates_apply_now(
     BasePath(base_path): BasePath,
 ) -> Redirect {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat");
+        return prefixed_redirect(&base_path, "/app/");
     }
 
     match apply_update(&state).await {
@@ -749,7 +749,7 @@ pub async fn updates_rollback_now(
     BasePath(base_path): BasePath,
 ) -> Redirect {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat");
+        return prefixed_redirect(&base_path, "/app/");
     }
 
     match rollback_update(&state).await {

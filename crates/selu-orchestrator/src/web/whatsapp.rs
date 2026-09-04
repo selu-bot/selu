@@ -137,7 +137,7 @@ pub async fn whatsapp_setup_page(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     let already_configured = has_active_whatsapp_pipe(&state.db).await;
@@ -379,7 +379,7 @@ pub async fn whatsapp_detail(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     let config = match load_whatsapp_config(&state.db, &config_id).await {

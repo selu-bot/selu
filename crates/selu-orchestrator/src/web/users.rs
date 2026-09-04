@@ -207,7 +207,7 @@ pub async fn users_create(
     Form(form): Form<CreateUserForm>,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     if form.username.trim().is_empty() || form.password.is_empty() {
@@ -583,7 +583,7 @@ pub async fn users_set_agents(
     Form(form): Form<SetAgentsForm>,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     ensure_user_agent_access_table(&state.db).await;

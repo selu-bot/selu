@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{Mutex, Notify, oneshot};
+use tokio::sync::{Mutex, oneshot};
 
 use crate::agents::loader::AgentDefinition;
 use crate::capabilities::CapabilityEngine;
@@ -11,8 +11,8 @@ use crate::channels::ChannelRegistry;
 use crate::config::AppConfig;
 use crate::events::EventBus;
 use crate::llm::registry::ProviderCache;
-use crate::llm::tool_loop::LoopSender;
 use crate::permissions::CredentialStore;
+use crate::services::conversations::ConversationEventBus;
 
 /// Agent map type alias: values are `Arc<AgentDefinition>` so that cloning
 /// the map (or individual entries) only copies cheap `Arc` pointers.
@@ -51,24 +51,13 @@ pub struct AppState {
     /// mutex, no allocation, no `.await`. Writers (rare: marketplace
     /// install/uninstall) use `agents.store()` or `rcu()`.
     pub agents: Arc<ArcSwap<AgentMap>>,
-    /// Active SSE streams keyed by stream_id
-    pub active_streams: Arc<Mutex<HashMap<String, LoopSender>>>,
-    /// Notify signals for SSE stream readiness (keyed by stream_id)
-    pub stream_notifies: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
-    /// Maps thread_id → stream_id for active mobile agent runs.
-    /// Used by the mobile active-stream endpoint so clients can reconnect.
-    pub thread_active_streams: Arc<Mutex<HashMap<String, String>>>,
-    /// Maps thread_id → last tool-status text for active agent runs.
-    /// Allows clients reconnecting mid-stream to immediately show what the
-    /// agent is doing before the next SSE event arrives.
-    pub thread_last_status: Arc<Mutex<HashMap<String, String>>>,
-    /// Maps thread_id → accumulated streaming text for active agent runs.
-    /// Allows clients reconnecting mid-stream to immediately show partial
-    /// reply text before the next SSE token arrives.
-    pub thread_accumulated_text: Arc<Mutex<HashMap<String, String>>>,
     /// Pending tool-call confirmations keyed by confirmation_id.
     /// The oneshot sender is resolved when the user approves or denies.
     pub pending_confirmations: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
+    /// Owner for interactive confirmations created by the v1 conversation API.
+    /// Kept alongside the one-shot sender so another signed-in user cannot
+    /// resolve an approval merely by knowing its UUID.
+    pub conversation_confirmation_owners: Arc<Mutex<HashMap<String, (String, String, String)>>>,
     /// Pending asynchronous tool-call approvals keyed by approval_id.
     /// Used for non-interactive channels (iMessage, webhooks) where the
     /// user approves by replying to a thread rather than clicking a button.
@@ -85,6 +74,9 @@ pub struct AppState {
     /// Event bus: persists + broadcasts agent events for fanout
     #[allow(dead_code)]
     pub events: EventBus,
+    /// Durable UI conversation events are replayed from SQLite and fanned out
+    /// in-process to every connected web or mobile client.
+    pub conversation_events: ConversationEventBus,
     /// LLM provider cache: avoids repeated DB lookups and key decryption
     pub provider_cache: ProviderCache,
     /// Session-scoped artifact payloads (e.g. generated PDFs) referenced by ID
@@ -110,18 +102,15 @@ impl AppState {
             public_origin_override: Arc::new(ArcSwapOption::from(None)),
             base_path,
             agents: Arc::new(ArcSwap::from_pointee(arc_agents)),
-            active_streams: Arc::new(Mutex::new(HashMap::new())),
-            stream_notifies: Arc::new(Mutex::new(HashMap::new())),
-            thread_active_streams: Arc::new(Mutex::new(HashMap::new())),
-            thread_last_status: Arc::new(Mutex::new(HashMap::new())),
-            thread_accumulated_text: Arc::new(Mutex::new(HashMap::new())),
             pending_confirmations: Arc::new(Mutex::new(HashMap::new())),
+            conversation_confirmation_owners: Arc::new(Mutex::new(HashMap::new())),
             pending_approvals: Arc::new(Mutex::new(HashMap::new())),
             agent_update_jobs: Arc::new(Mutex::new(HashMap::new())),
             capabilities,
             channel_registry,
             credentials,
             events,
+            conversation_events: ConversationEventBus::new(),
             provider_cache: ProviderCache::new(),
             artifacts: crate::agents::artifacts::new_store(),
         }

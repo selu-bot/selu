@@ -17,6 +17,14 @@
 # if you want to use custom agents:  -v ./my-agents:/app/agents
 
 # ── Build stage ──────────────────────────────────────────────────────────────
+FROM node:22-trixie AS ui-builder
+
+WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+COPY ui/ ./
+RUN npm run build
+
 FROM rust:1-trixie AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -80,6 +88,7 @@ RUN groupadd -g 1000 selu && useradd -u 1000 -g 1000 -m selu
 WORKDIR /app
 
 COPY --from=builder /build/target/release/selu-orchestrator /app/selu-orchestrator
+COPY --from=ui-builder /ui/dist/ /app/ui/
 
 # Bake in the default agent definitions (YAML, system prompts, capability containers).
 # Override at runtime with: -v ./my-agents:/app/agents

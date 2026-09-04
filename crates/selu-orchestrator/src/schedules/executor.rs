@@ -219,13 +219,32 @@ async fn execute_on_pipe(
         chain_depth: 0,
         channel_kind,
         skip_user_persist: true,
+        client_message_id: None,
         enable_streaming: true,
         inbound_attachments: Vec::new(),
         delegation_trace: Vec::new(),
         location_context: None,
     };
 
-    let output = match run_turn(state, params, noop_sender()).await {
+    let turn_result = run_turn(state, params, noop_sender()).await;
+    // Scheduled turns bypass the v1 run pipeline, so tell connected chat
+    // clients that the schedule thread changed and they should refetch it.
+    if let Err(e) = state
+        .conversation_events
+        .publish(
+            &state.db,
+            user_id,
+            &thread_id,
+            None,
+            "conversation.changed",
+            Some(&thread_id),
+            serde_json::json!({ "source": "schedule", "schedule_id": schedule_id }),
+        )
+        .await
+    {
+        warn!(pipe_id = %pipe_id, "Could not publish schedule thread change: {e:#}");
+    }
+    let output = match turn_result {
         Ok(t) if !t.reply_text.is_empty() || !t.attachments.is_empty() => t,
         Ok(_) => {
             warn!(pipe_id = %pipe_id, "Schedule agent turn returned empty reply");

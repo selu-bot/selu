@@ -210,7 +210,7 @@ pub async fn providers_index(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     let providers = sqlx::query!(
@@ -267,7 +267,7 @@ pub async fn providers_new(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     let active_ids: std::collections::HashSet<String> = sqlx::query!(
@@ -325,7 +325,7 @@ pub async fn providers_setup_page(
     BasePath(base_path): BasePath,
 ) -> Response {
     if !user.is_admin {
-        return prefixed_redirect(&base_path, "/chat").into_response();
+        return prefixed_redirect(&base_path, "/app/").into_response();
     }
 
     let Some(meta) = provider_meta(&provider_id) else {
