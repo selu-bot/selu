@@ -2487,3 +2487,54 @@ entries:
       approval in v1 chat, with Allow / Not now posting to
       POST /api/v1/approvals/{id}/decision. Before this, an "Ask" tool left the
       run waiting when the conversation was opened on the phone.
+  - id: 2026-09-04-slash-commands-all-channels
+    date: "2026-09-04"
+    pr:
+    area: channels
+    type: changed
+    audience: both
+    summary: "Slash commands work on every channel, with a /help command and a command picker in web and iOS chat"
+    affected_files:
+      - crates/selu-orchestrator/src/commands/mod.rs
+      - crates/selu-orchestrator/src/api/conversations.rs
+      - crates/selu-orchestrator/src/telegram/adapter.rs
+      - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+      - crates/selu-orchestrator/src/i18n.rs
+      - ui/src/components/Composer.tsx
+    docs_sections:
+      - user-guide/channels/web-chat
+      - user-guide/channels/telegram
+      - user-guide/channels/imessage
+      - reference/api
+    details: |
+      Slash commands were previously handled only by the old server-rendered
+      web chat and silently stopped working when chat moved to the v1
+      conversation API. They now run on every channel through one shared
+      handler: the v1 API (web SPA and iOS), Telegram, iMessage (BlueBubbles)
+      and webhook pipes such as the WhatsApp bridge. A message starting with a
+      slash and a letter is answered directly, without an agent turn, and both
+      the command and the reply are kept in the conversation history.
+
+      Commands: /remind <what to do + when>, /schedule add <what to do + when>,
+      /schedule list (alias /schedules), /schedule delete <name> (alias
+      remove), and the new /help (aliases /start and /commands), which lists
+      the commands in the user's language. /schedule on its own also shows
+      help. An unknown command replies with a short apology plus the help
+      text. Telegram bot suffixes such as /schedule@selubot are accepted.
+
+      Discoverability: the web composer shows a command picker as soon as the
+      user types "/" (arrow keys, Enter or Tab to pick, Escape to close) and a
+      hint with the expected argument once a command is complete. A "/" button
+      in the composer opens the picker, and the composer footer says "Type /
+      for commands". iOS chat has the same picker above the keyboard, the same
+      hint bar and a "/" button. Telegram gets Selu's commands published to
+      its "/" menu (setMyCommands, English and German) whenever a bot is
+      registered.
+
+      New endpoint: GET /api/v1/commands?lang=en|de returns
+      {"commands": [{command, label, description, argument_hint}]} so clients
+      render pickers from the server catalog and new commands need no client
+      release. In the v1 API a command creates a normal run that completes
+      immediately; clients receive run.created, message.created for the reply
+      and run.updated (completed).

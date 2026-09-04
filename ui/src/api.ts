@@ -27,6 +27,7 @@ export type Run = { id: string; client_message_id: string; status: string }
 export type Session = { display_name: string; is_admin: boolean; language: string }
 export type Approval = { approval_id: string; tool_name: string; message?: string; arguments?: unknown }
 export type TurnRating = 1 | -1
+export type SlashCommand = { command: string; label: string; description: string; argument_hint: string | null }
 export type Snapshot = { conversation: Conversation; messages: Message[]; runs: Run[]; pending_approval: Approval | null; latest_turn_rating: number | null; event_cursor: number }
 export type ConversationEvent = {
   id: number
@@ -83,6 +84,7 @@ export const api = {
   decideApproval: (id: string, approved: boolean) => request<void>(`/api/v1/approvals/${id}/decision`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approved }),
   }),
+  commands: (lang: string) => request<{ commands: SlashCommand[] }>(`/api/v1/commands?lang=${encodeURIComponent(lang)}`),
   rateLatestTurn: (id: string, rating: TurnRating) => request<void>(`/api/v1/conversations/${id}/feedback`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating }),
   }),

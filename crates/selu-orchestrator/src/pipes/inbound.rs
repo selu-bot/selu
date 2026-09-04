@@ -275,6 +275,50 @@ async fn handle_inbound(
             return;
         }
 
+        // ── Slash commands ────────────────────────────────────────────────────
+        // Answered directly, without an agent turn. Delivered like a reply
+        // when the pipe has an outbound URL (WhatsApp bridge, custom adapters).
+        if let Some(reply) = crate::commands::try_handle_message(
+            &state,
+            &resolved_user_id,
+            &thread_id,
+            &envelope.text,
+            None,
+        )
+        .await
+        {
+            if outbound_url.is_empty() {
+                let _ = thread_mgr::complete_thread(&state.db, &thread_id).await;
+                return;
+            }
+            let sender = crate::pipes::outbound::OutboundSender::new();
+            let outbound = selu_core::types::OutboundEnvelope {
+                recipient_ref: recipient_ref.clone(),
+                text: reply.text,
+                thread_id: Some(thread_id.clone()),
+                reply_to_message_ref: if whole_chat_reply_mode {
+                    None
+                } else {
+                    thread.origin_message_ref.clone()
+                },
+                attachments: None,
+                metadata: None,
+            };
+            match sender
+                .send(&outbound_url, outbound_auth.as_deref(), &outbound)
+                .await
+            {
+                Ok(Some(guid)) => {
+                    let _ =
+                        thread_mgr::update_reply_guid(&state.db, &thread_id, &pipe_id_str, &guid)
+                            .await;
+                }
+                Ok(None) => {}
+                Err(e) => error!("Outbound send of command reply failed: {e}"),
+            }
+            return;
+        }
+
         // Determine channel kind based on whether outbound is configured.
         // Any pipe with an outbound URL can receive async tool-approval
         // prompts, so it qualifies as ThreadedNonInteractive even on the

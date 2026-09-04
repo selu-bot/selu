@@ -926,6 +926,39 @@ async fn dispatch_message(
         return;
     }
 
+    // Slash commands are answered directly, without an agent turn.
+    if let Some(reply) = crate::commands::try_handle_message(
+        &state,
+        &user_id,
+        &thread_id,
+        &inbound_envelope.text,
+        None,
+    )
+    .await
+    {
+        mark_as_read(&http, &server_url, &server_password, &chat_guid).await;
+        match send_bb_reply(
+            &http,
+            &server_url,
+            &server_password,
+            &chat_guid,
+            &strip_markdown(&reply.text),
+            message_guid.as_deref(),
+            &sent_guids,
+        )
+        .await
+        {
+            Ok(Some(guid)) => {
+                let _ = thread_mgr::update_reply_guid(&state.db, &thread_id, &pipe_id, &guid).await;
+            }
+            Ok(None) => {}
+            Err(e) => {
+                error!(thread_id = %thread_id, "Failed to send BlueBubbles command reply: {e}")
+            }
+        }
+        return;
+    }
+
     // Show typing indicator while the agent is working.
     // Stops automatically when we send the reply message.
     // Also mark the conversation as read so it doesn't stay "unread" in

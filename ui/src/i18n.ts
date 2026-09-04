@@ -29,6 +29,7 @@ export const translations = {
     conversationRenamed: 'Conversation renamed', errorInvalidTitle: 'Please enter a name for the conversation.', errorOffline: 'Selu couldn’t be reached. Check your connection and try again.',
     messageNotSent: 'Your message wasn’t sent', notifications: 'Notifications',
     helpful: 'Helpful', notHelpful: 'Not helpful', feedbackNotSaved: 'Your feedback wasn’t saved',
+    commands: 'Commands', commandsHint: 'Type / for commands',
     errorFeedbackUnavailable: 'This reply can’t be rated yet. Give Selu a moment and try again.',
   },
   de: {
@@ -61,6 +62,7 @@ export const translations = {
     conversationRenamed: 'Unterhaltung umbenannt', errorInvalidTitle: 'Bitte gib der Unterhaltung einen Namen.', errorOffline: 'Selu ist gerade nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.',
     messageNotSent: 'Deine Nachricht wurde nicht gesendet', notifications: 'Benachrichtigungen',
     helpful: 'Hilfreich', notHelpful: 'Nicht hilfreich', feedbackNotSaved: 'Dein Feedback wurde nicht gespeichert',
+    commands: 'Befehle', commandsHint: 'Tippe / für Befehle',
     errorFeedbackUnavailable: 'Diese Antwort kann noch nicht bewertet werden. Gib Selu einen Moment und versuche es erneut.',
   },
 } as const

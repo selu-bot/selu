@@ -283,6 +283,46 @@ async fn register_adapter_and_webhook(state: &AppState, cfg: &TgConfig, base_url
             warn!(config_id = %cfg.id, "Failed to register webhook with Telegram: {e}");
         }
     }
+
+    if let Err(e) = set_my_commands(&cfg.bot_token).await {
+        warn!(config_id = %cfg.id, "Failed to publish the command menu to Telegram: {e}");
+    }
+}
+
+/// Publish Selu's slash commands to Telegram's "/" menu, in English by
+/// default and in German for clients using German.
+async fn set_my_commands(bot_token: &str) -> Result<()> {
+    let http = Client::new();
+    let token = bot_token.trim();
+    let url = format!("https://api.telegram.org/bot{}/setMyCommands", token);
+    for (lang, language_code) in [("en", None), ("de", Some("de"))] {
+        let commands: Vec<serde_json::Value> = crate::commands::channel_menu(lang)
+            .into_iter()
+            .map(|(command, description)| {
+                serde_json::json!({ "command": command, "description": description })
+            })
+            .collect();
+        let mut body = serde_json::json!({ "commands": commands });
+        if let Some(code) = language_code {
+            body["language_code"] = serde_json::Value::String(code.to_string());
+        }
+        let resp = http
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to reach Telegram API for setMyCommands")?;
+        let resp_body = resp.text().await.unwrap_or_default();
+        let tg_resp: TgGenericResponse = serde_json::from_str(&resp_body)
+            .context("Failed to parse Telegram setMyCommands response")?;
+        if !tg_resp.ok {
+            anyhow::bail!(
+                "Telegram rejected setMyCommands: {}",
+                tg_resp.description.unwrap_or_default()
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Register a single adapter by config ID.
@@ -1262,6 +1302,31 @@ async fn dispatch_message(
         let ack_text = crate::i18n::t(&lang, "approval.approved_processing");
         let _ = send_telegram_message(&http, &bot_token, &chat_id, ack_text, Some(message_id_ref))
             .await;
+        return;
+    }
+
+    // Slash commands are answered directly, without an agent turn.
+    if let Some(reply) = crate::commands::try_handle_message(
+        &state,
+        &user_id,
+        &thread_id,
+        &inbound_envelope.text,
+        None,
+    )
+    .await
+    {
+        if let Some(id) = send_telegram_message(
+            &http,
+            &bot_token,
+            &chat_id,
+            &reply.text,
+            Some(message_id_ref),
+        )
+        .await
+        {
+            let _ = thread_mgr::update_reply_guid(&state.db, &thread_id, &pipe_id, &id.to_string())
+                .await;
+        }
         return;
     }
 

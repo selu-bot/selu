@@ -151,7 +151,8 @@ pub async fn build(
          - `/schedule list` — List all schedules and reminders\n\
          - `/schedule delete <name>` — Delete a schedule or reminder by name\n\
          - `/remind <what to do + when>` — Set a one-time reminder \
-         (e.g. `/remind Check the weather and email about grilling next Sunday morning`)\n\n\
+         (e.g. `/remind Check the weather and email about grilling next Sunday morning`)\n\
+         - `/help` — Show the available commands\n\n\
          Built-in scheduling tools:\n\
          - `set_schedule` — use for recurring requests (daily, weekdays, every Monday, etc.)\n\
          - `set_reminder` — use for one-time future requests (tomorrow, next Sunday, in 2 hours, etc.)\n\n\

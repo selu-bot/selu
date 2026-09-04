@@ -10,6 +10,10 @@ migrated. Navigation links in both applications make this boundary seamless.
 - `src/components/` contains focused, reusable interface pieces. Keep data
   loading and event reconciliation in `App.tsx`; keep rendering and interaction
   details in components.
+- `src/components/Composer.tsx` owns the slash command picker. It is driven
+  by `GET /api/v1/commands`, so commands are added on the server, never in
+  the client. The picker opens on "/", supports arrow keys, Enter/Tab and
+  Escape, and shows the expected argument once a command is complete.
 - `src/api.ts` is the only place that talks to the server. Requests are
   same-origin, include the session cookie, and detect redirects to sign-in.
 - `src/i18n.ts` contains every user-visible English and German string.

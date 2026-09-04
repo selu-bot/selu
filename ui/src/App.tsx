@@ -55,6 +55,8 @@ function ChatApp() {
     [conversations.data],
   )
   const session = useQuery({ queryKey: ['session'], queryFn: api.session, staleTime: Infinity })
+  // The command picker is data-driven so a new server command needs no release.
+  const commands = useQuery({ queryKey: ['commands', language], queryFn: () => api.commands(language), staleTime: Infinity })
   const selected = selectedId ?? conversationItems[0]?.id ?? null
   const snapshot = useQuery({
     queryKey: ['conversation', selected],
@@ -274,7 +276,7 @@ function ChatApp() {
           messageViewport.current?.scrollTo({ top: messageViewport.current.scrollHeight, behavior: 'smooth' })
           setShowJump(false)
         }}><ArrowDown />{t('jumpToLatest')}</button>}
-        <Composer value={draft} onChange={setDraft} onSend={submit} disabled={send.isPending || active} busy={active} />
+        <Composer value={draft} onChange={setDraft} onSend={submit} disabled={send.isPending || active} busy={active} commands={commands.data?.commands ?? []} />
       </>}
 
       {dialog?.kind === 'rename' && selected && <RenameConversationDialog

@@ -71,9 +71,35 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
         en.insert("image.edited_ready", "Done. I edited your image.");
 
         // ── Schedule commands ────────────────────────────────────────
+        en.insert("cmd.unknown", "I don't know the command `{cmd}`.");
+        en.insert("cmd.help.title", "Here is what you can do with commands:");
         en.insert(
-            "cmd.unknown",
-            "Unknown command: `{cmd}`\n\nAvailable commands:\n- `/schedule add <what to do + when>` — Create a recurring schedule\n- `/schedule list` — List your schedules and reminders\n- `/schedule delete <name>` — Delete a schedule or reminder\n- `/remind <what to do + when>` — Set a one-time reminder",
+            "cmd.help.footer",
+            "You can also just ask me in your own words.",
+        );
+        en.insert("cmd.catalog.remind.description", "Set a one-time reminder");
+        en.insert("cmd.catalog.remind.hint", "what to do + when");
+        en.insert(
+            "cmd.catalog.schedule.description",
+            "Manage schedules and reminders (add, list, delete)",
+        );
+        en.insert(
+            "cmd.catalog.schedule_add.description",
+            "Create a recurring schedule",
+        );
+        en.insert("cmd.catalog.schedule_add.hint", "what to do + when");
+        en.insert(
+            "cmd.catalog.schedule_list.description",
+            "Show your schedules and reminders",
+        );
+        en.insert(
+            "cmd.catalog.schedule_delete.description",
+            "Delete a schedule or reminder",
+        );
+        en.insert("cmd.catalog.schedule_delete.hint", "name");
+        en.insert(
+            "cmd.catalog.help.description",
+            "Show the available commands",
         );
         en.insert(
             "cmd.schedule.created",
@@ -211,9 +237,38 @@ static TRANSLATIONS: LazyLock<HashMap<&'static str, HashMap<&'static str, &'stat
         );
 
         // ── Schedule commands ────────────────────────────────────────
+        de.insert("cmd.unknown", "Den Befehl `{cmd}` kenne ich nicht.");
+        de.insert("cmd.help.title", "Das kannst du mit Befehlen machen:");
         de.insert(
-            "cmd.unknown",
-            "Unbekannter Befehl: `{cmd}`\n\nVerf\u{00fc}gbare Befehle:\n- `/schedule add <was + wann>` — Wiederkehrenden Zeitplan erstellen\n- `/schedule list` — Zeitpl\u{00e4}ne und Erinnerungen anzeigen\n- `/schedule delete <Name>` — Zeitplan oder Erinnerung l\u{00f6}schen\n- `/remind <was + wann>` — Einmalige Erinnerung setzen",
+            "cmd.help.footer",
+            "Du kannst mich auch einfach in deinen eigenen Worten fragen.",
+        );
+        de.insert(
+            "cmd.catalog.remind.description",
+            "Einmalige Erinnerung setzen",
+        );
+        de.insert("cmd.catalog.remind.hint", "was + wann");
+        de.insert(
+            "cmd.catalog.schedule.description",
+            "Zeitpl\u{00e4}ne und Erinnerungen verwalten (add, list, delete)",
+        );
+        de.insert(
+            "cmd.catalog.schedule_add.description",
+            "Wiederkehrenden Zeitplan erstellen",
+        );
+        de.insert("cmd.catalog.schedule_add.hint", "was + wann");
+        de.insert(
+            "cmd.catalog.schedule_list.description",
+            "Zeitpl\u{00e4}ne und Erinnerungen anzeigen",
+        );
+        de.insert(
+            "cmd.catalog.schedule_delete.description",
+            "Zeitplan oder Erinnerung l\u{00f6}schen",
+        );
+        de.insert("cmd.catalog.schedule_delete.hint", "Name");
+        de.insert(
+            "cmd.catalog.help.description",
+            "Verf\u{00fc}gbare Befehle anzeigen",
         );
         de.insert(
             "cmd.schedule.created",

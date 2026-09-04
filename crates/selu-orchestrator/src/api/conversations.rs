@@ -20,6 +20,7 @@ use crate::{
         engine::{ChannelKind, TurnParams, run_turn},
         improvement, router as agent_router,
     },
+    commands,
     llm::tool_loop::LoopEvent,
     services::conversations::{self, ConversationRun},
     state::AppState,
@@ -43,6 +44,7 @@ pub fn router() -> Router<AppState> {
             "/api/v1/conversations/{conversation_id}/feedback",
             post(rate_latest_turn),
         )
+        .route("/api/v1/commands", get(list_commands))
         .route("/api/v1/events", get(events))
         .route(
             "/api/v1/approvals/{approval_id}/decision",
@@ -387,6 +389,33 @@ async fn snapshot(
 }
 
 #[derive(Deserialize)]
+struct CommandsQuery {
+    /// Client UI language; defaults to the user's profile language.
+    lang: Option<String>,
+}
+
+#[derive(Serialize)]
+struct CommandsResponse {
+    commands: Vec<commands::CommandInfo>,
+}
+
+/// The slash commands a client may offer in its composer. Descriptions are
+/// localized so the picker needs no client-side strings per command.
+async fn list_commands(
+    user: AuthUser,
+    Query(query): Query<CommandsQuery>,
+) -> Json<CommandsResponse> {
+    let lang = query
+        .lang
+        .as_deref()
+        .filter(|lang| matches!(*lang, "en" | "de"))
+        .unwrap_or(&user.language);
+    Json(CommandsResponse {
+        commands: commands::catalog(lang),
+    })
+}
+
+#[derive(Deserialize)]
 struct SendMessageRequest {
     text: String,
     client_message_id: String,
@@ -513,16 +542,97 @@ async fn send_message(
         return internal_error(error);
     }
 
-    tokio::spawn(execute_run(
-        state,
-        user.user_id,
-        pipe_id,
-        conversation_id,
-        run_id,
-        request.client_message_id,
-        text,
-    ));
+    if commands::is_command(&text) {
+        tokio::spawn(execute_command_run(
+            state,
+            user.user_id,
+            conversation_id,
+            run_id,
+            request.client_message_id,
+            text,
+        ));
+    } else {
+        tokio::spawn(execute_run(
+            state,
+            user.user_id,
+            pipe_id,
+            conversation_id,
+            run_id,
+            request.client_message_id,
+            text,
+        ));
+    }
     Json(SendMessageResponse { run }).into_response()
+}
+
+/// A slash command is a run like any other, so clients see the reply through
+/// the same events, but it completes without the agent engine and without
+/// Live Activity notifications.
+async fn execute_command_run(
+    state: AppState,
+    user_id: String,
+    conversation_id: String,
+    run_id: String,
+    client_message_id: String,
+    text: String,
+) {
+    if let Err(error) =
+        set_run_status(&state, &user_id, &conversation_id, &run_id, "running", None).await
+    {
+        tracing::error!(run_id, "Could not start command run: {error:#}");
+        return;
+    }
+    let reply = commands::try_handle_message(
+        &state,
+        &user_id,
+        &conversation_id,
+        &text,
+        Some(&client_message_id),
+    )
+    .await;
+    let Some(reply) = reply else {
+        tracing::error!(run_id, "Slash command could not be handled for this conversation");
+        let _ = set_run_status(
+            &state,
+            &user_id,
+            &conversation_id,
+            &run_id,
+            "failed",
+            Some("conversation.agent_failed"),
+        )
+        .await;
+        return;
+    };
+    let message = conversations::ConversationMessage {
+        id: reply.reply_message_id.clone(),
+        role: "assistant".to_owned(),
+        content: reply.text,
+        created_at: reply.created_at,
+        tool_calls: None,
+        tool_call_id: None,
+        attachments: None,
+        compacted: false,
+    };
+    if let Err(error) = state
+        .conversation_events
+        .publish(
+            &state.db,
+            &user_id,
+            &conversation_id,
+            Some(&run_id),
+            "message.created",
+            Some(&reply.reply_message_id),
+            serde_json::json!({ "message": message }),
+        )
+        .await
+    {
+        tracing::warn!(run_id, "Could not publish command reply: {error:#}");
+    }
+    if let Err(error) =
+        set_run_status(&state, &user_id, &conversation_id, &run_id, "completed", None).await
+    {
+        tracing::error!(run_id, "Could not finish command run: {error:#}");
+    }
 }
 
 #[derive(Deserialize)]
