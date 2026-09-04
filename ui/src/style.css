@@ -244,9 +244,12 @@
   .message-surface img { max-width: 100%; border-radius: 12px; }
   .message-surface.is-streaming { display: inline; }
   .stream-caret { display: inline-block; width: 7px; height: 14px; margin-left: 3px; border-radius: 3px; vertical-align: -2px; background: var(--coral); animation: caret-blink .9s steps(2, end) infinite; }
-  .message-action { display: flex; align-items: center; gap: 5px; margin: 5px 0 0 -7px; padding: 5px 7px; border: 0; border-radius: 8px; color: var(--muted); background: transparent; font-size: 10px; cursor: pointer; opacity: 0; transition: opacity .18s, background .18s; }
-  .message-row:hover .message-action, .message-action:focus-visible { opacity: 1; }
-  .message-action:hover { background: var(--hover); }
+  .message-actions { display: flex; align-items: center; gap: 2px; margin: 5px 0 0 -7px; }
+  .message-action { display: flex; align-items: center; gap: 5px; padding: 5px 7px; border: 0; border-radius: 8px; color: var(--muted); background: transparent; font-size: 10px; cursor: pointer; opacity: 0; transition: opacity .18s, background .18s, color .18s; }
+  .message-row:hover .message-action, .message-action:focus-visible, .message-action.is-selected { opacity: 1; }
+  .message-action:hover:not(:disabled) { background: var(--hover); }
+  .message-action:disabled { cursor: default; }
+  .message-action.is-selected { color: var(--coral-deep); }
   .message-action svg { width: 12px; height: 12px; }
 
   .activity-trail, .tool-message { width: min(640px, calc(100% - 46px)); margin-left: 46px; border: 1px solid var(--line); border-radius: 15px; background: var(--panel); box-shadow: var(--shadow-soft); overflow: clip; }

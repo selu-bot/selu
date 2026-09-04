@@ -109,7 +109,8 @@ Run these in CI and again against the deployed staging instance:
 
 ## Before enabling production v1 chat
 
-- Add v1 upload/attachment, server-side search and feedback endpoints.
+- Add v1 upload/attachment and server-side search endpoints. (Thumbs feedback on
+  the latest reply exists: `POST /api/v1/conversations/{id}/feedback`.)
 - Persist resumable approval commands (not just their audit event) if agent
   runs must survive an orchestrator restart while waiting for a decision.
 - Make tool steps and final assistant messages durable typed parts rather than

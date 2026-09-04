@@ -1,17 +1,26 @@
-import { Check, ChevronDown, Copy, ShieldCheck, Sparkles, Wrench } from 'lucide-react'
+import { Check, ChevronDown, Copy, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Approval, Message } from '../api'
+import type { Approval, Message, TurnRating } from '../api'
 import { t } from '../i18n'
 import { BrandMark } from './BrandMark'
+
+/// Thumbs feedback is offered on the latest reply only, because the rating is
+/// stored on the most recent turn and feeds the agent's behavioral lessons.
+export type TurnFeedback = {
+  rating: number | null
+  busy: boolean
+  onRate: (rating: TurnRating) => void
+}
 
 type ConversationMessageProps = {
   message: Message
   entering?: boolean
+  feedback?: TurnFeedback
 }
 
-export function ConversationMessage({ message, entering = false }: ConversationMessageProps) {
+export function ConversationMessage({ message, entering = false, feedback }: ConversationMessageProps) {
   if (message.role === 'tool') return <ToolMessage message={message} />
   if (message.role === 'system') return null
   if (message.role === 'assistant' && isToolCallPlaceholder(message)) return null
@@ -25,7 +34,10 @@ export function ConversationMessage({ message, entering = false }: ConversationM
       <div className="message-surface">
         <Markdown>{message.content}</Markdown>
       </div>
-      {message.role === 'assistant' && <CopyButton text={message.content} />}
+      {message.role === 'assistant' && <div className="message-actions">
+        <CopyButton text={message.content} />
+        {feedback && <FeedbackButtons feedback={feedback} />}
+      </div>}
     </div>
   </article>
 }
@@ -108,6 +120,26 @@ function CopyButton({ text }: { text: string }) {
   }} aria-label={copied ? t('copied') : t('copy')}>
     {copied ? <Check /> : <Copy />}{copied ? t('copied') : t('copy')}
   </button>
+}
+
+function FeedbackButtons({ feedback }: { feedback: TurnFeedback }) {
+  const options: { rating: TurnRating; label: string; Icon: typeof ThumbsUp }[] = [
+    { rating: 1, label: t('helpful'), Icon: ThumbsUp },
+    { rating: -1, label: t('notHelpful'), Icon: ThumbsDown },
+  ]
+  return <>
+    {options.map(({ rating, label, Icon }) => {
+      const selected = feedback.rating === rating
+      return <button
+        key={rating}
+        className={`message-action${selected ? ' is-selected' : ''}`}
+        aria-pressed={selected}
+        aria-label={label}
+        disabled={feedback.busy || selected}
+        onClick={() => feedback.onRate(rating)}
+      ><Icon />{label}</button>
+    })}
+  </>
 }
 
 /// The engine stores a "[calling <tool>]" stand-in for assistant turns that

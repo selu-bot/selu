@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, CalendarClock, Menu, Sparkles } from 'lucide-react'
 import { QueryClient, QueryClientProvider, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type Conversation, type ConversationEvent, type ConversationPage, type Message, type Run, type Snapshot } from './api'
+import { api, type Conversation, type ConversationEvent, type ConversationPage, type Message, type Run, type Snapshot, type TurnRating } from './api'
 import { getLanguage, setLanguage, t, type Language } from './i18n'
 import { NoticeProvider, describeError, useNotices, useQueryErrorNotice } from './notices'
 import { ActivityTrail, ApprovalCard, ConversationMessage, StreamingMessage } from './components/ConversationMessage'
@@ -165,7 +165,23 @@ function ChatApp() {
     onError: (error) => notices.error(error),
   })
 
+  // The selected thumb is the visible result, so success needs no notice.
+  const rateTurn = useMutation({
+    mutationFn: ({ id, rating }: { id: string, rating: TurnRating }) => api.rateLatestTurn(id, rating),
+    onMutate: ({ id, rating }) => {
+      const previous = cache.getQueryData<Snapshot>(['conversation', id])?.latest_turn_rating ?? null
+      cache.setQueryData<Snapshot>(['conversation', id], (old) => old ? { ...old, latest_turn_rating: rating } : old)
+      return { previous }
+    },
+    onError: (error, { id }, context) => {
+      cache.setQueryData<Snapshot>(['conversation', id], (old) => old ? { ...old, latest_turn_rating: context?.previous ?? null } : old)
+      notices.error(error, t('feedbackNotSaved'))
+    },
+  })
+
   const active = snapshot.data?.runs.some((run) => ACTIVE_RUN_STATUSES.includes(run.status)) ?? false
+  const visibleMessages = useMemo(() => snapshot.data?.messages.filter((message) => !message.compacted) ?? [], [snapshot.data?.messages])
+  const latestReplyId = active ? null : [...visibleMessages].reverse().find((message) => message.role === 'assistant')?.id ?? null
   const conversation = snapshot.data?.conversation ?? conversationItems.find((item) => item.id === selected)
   const isSchedule = conversation?.kind === 'schedule'
   const title = useMemo(() => conversation?.title ?? t('newConversation'), [conversation])
@@ -240,7 +256,11 @@ function ChatApp() {
           <div className="message-column">
             {isSchedule && <div className="conversation-intro"><CalendarClock aria-hidden="true" /><span>{t('scheduleHint')}</span></div>}
             {snapshot.isLoading && <MessageSkeleton />}
-            {snapshot.data?.messages.filter((message) => !message.compacted).map((message) => <ConversationMessage key={message.id} message={message} />)}
+            {visibleMessages.map((message) => <ConversationMessage key={message.id} message={message} feedback={message.id === latestReplyId ? {
+              rating: snapshot.data?.latest_turn_rating ?? null,
+              busy: rateTurn.isPending,
+              onRate: (rating) => rateTurn.mutate({ id: selected, rating }),
+            } : undefined} />)}
             <ActivityTrail items={selectedProgress} active={active} />
             {snapshot.data?.pending_approval && <ApprovalCard
               approval={snapshot.data.pending_approval}

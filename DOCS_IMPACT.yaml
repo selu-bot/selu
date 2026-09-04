@@ -2443,3 +2443,47 @@ entries:
       live. The run pipeline now delivers the final run.output_finished event,
       which fixes assistant answers being joined into one bubble and the
       streaming indicator staying visible after a reply completed.
+  - id: 2026-09-04-conversation-turn-feedback
+    date: "2026-09-04"
+    pr:
+    area: api
+    type: added
+    audience: both
+    summary: "Thumbs up/down on the latest reply returns to chat via the v1 conversation API"
+    affected_files:
+      - crates/selu-orchestrator/src/api/conversations.rs
+      - crates/selu-orchestrator/src/agents/improvement.rs
+      - ui/src/App.tsx
+      - ui/src/components/ConversationMessage.tsx
+    docs_sections:
+      - reference/api
+      - user-guide/channels/web-chat
+      - user-guide/agents/sessions
+    details: |
+      The thumbs up/down control that the server-rendered chat offered on the
+      latest reply is back in the React chat. Hovering or focusing the latest
+      reply shows "Helpful" and "Not helpful" next to "Copy"; the chosen thumb
+      stays highlighted and survives a reload. The control is hidden while Selu
+      is still working on the conversation.
+
+      New endpoint: POST /api/v1/conversations/{id}/feedback with body
+      {"rating": 1} or {"rating": -1}. It stores the rating on the most recent
+      turn signal of the conversation, which is the explicit signal the agent
+      self-improvement ("behavioral lessons") pipeline uses next to implicit
+      tool metrics. Responses: 204 on success, 400 conversation.invalid_feedback
+      for other values, 404 conversation.feedback_unavailable when the
+      conversation has no completed reply to rate yet, 409
+      conversation.run_in_progress while a run is active. The conversation
+      snapshot (GET /api/v1/conversations/{id}) gained latest_turn_rating
+      (1, -1 or null).
+
+      The approval.queued event now carries the agent's approval message in a
+      "message" field, matching approval.requested, so clients can show why a
+      queued tool needs an okay. Engine error messages are now logged on the
+      server; clients still receive only the stable run.error code.
+
+      The iOS app (selu-ios) gained the same thumbs control under the latest
+      reply and now shows the "Your okay is needed" card for a pending tool
+      approval in v1 chat, with Allow / Not now posting to
+      POST /api/v1/approvals/{id}/decision. Before this, an "Ask" tool left the
+      run waiting when the conversation was opened on the phone.

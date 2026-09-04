@@ -120,6 +120,7 @@ const KNOWN_CODES: Record<string, TranslationKey> = {
   'conversation.run_in_progress': 'errorRunInProgress',
   'conversation.approval_expired': 'errorApprovalExpired',
   'conversation.invalid_title': 'errorInvalidTitle',
+  'conversation.feedback_unavailable': 'errorFeedbackUnavailable',
   'session.expired': 'errorSessionExpired',
 }
 

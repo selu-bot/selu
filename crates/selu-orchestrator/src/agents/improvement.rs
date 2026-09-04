@@ -127,9 +127,12 @@ pub async fn record_turn_signal(db: &SqlitePool, data: &TurnSignalData) -> Resul
 }
 
 /// Update the user rating on the most recent turn signal for a thread.
+///
+/// The signal is matched by user and thread only: a delegated turn may have
+/// been recorded under a different agent than the one the thread started
+/// with, and the user is rating the reply they see, whichever agent wrote it.
 pub async fn rate_turn(
     db: &SqlitePool,
-    agent_id: &str,
     user_id: &str,
     thread_id: &str,
     rating: i64,
@@ -139,12 +142,11 @@ pub async fn rate_turn(
         "UPDATE turn_signals SET user_rating = ? \
          WHERE id = (
              SELECT id FROM turn_signals \
-             WHERE agent_id = ? AND user_id = ? AND thread_id = ? \
+             WHERE user_id = ? AND thread_id = ? \
              ORDER BY created_at DESC LIMIT 1
          )",
     )
     .bind(clamped)
-    .bind(agent_id)
     .bind(user_id)
     .bind(thread_id)
     .execute(db)
@@ -152,6 +154,26 @@ pub async fn rate_turn(
     .context("Failed to rate turn")?;
 
     Ok(result.rows_affected() > 0)
+}
+
+/// The user rating stored on the most recent turn signal for a thread, if any.
+pub async fn latest_turn_rating(
+    db: &SqlitePool,
+    user_id: &str,
+    thread_id: &str,
+) -> Result<Option<i64>> {
+    let rating: Option<Option<i64>> = sqlx::query_scalar(
+        "SELECT user_rating FROM turn_signals \
+         WHERE user_id = ? AND thread_id = ? \
+         ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(user_id)
+    .bind(thread_id)
+    .fetch_optional(db)
+    .await
+    .context("Failed to load latest turn rating")?;
+
+    Ok(rating.flatten())
 }
 
 /// Count total turn signals for an (agent, user) pair.
@@ -1188,6 +1210,47 @@ mod tests {
 
         let count = count_signals(&db, "agent-1", "user-1").await.unwrap();
         assert_eq!(count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_rate_turn_targets_latest_signal_in_thread() {
+        let db = test_db().await;
+        let data = sample_signal_data();
+
+        // Nothing to rate yet.
+        assert!(!rate_turn(&db, "user-1", "thread-1", 1).await.unwrap());
+        assert_eq!(
+            latest_turn_rating(&db, "user-1", "thread-1").await.unwrap(),
+            None
+        );
+
+        let first = record_turn_signal(&db, &data).await.unwrap();
+        // Make the second signal strictly newer than the first.
+        sqlx::query("UPDATE turn_signals SET created_at = '2000-01-01T00:00:00.000' WHERE id = ?")
+            .bind(&first)
+            .execute(&db)
+            .await
+            .unwrap();
+        // A delegated turn may be recorded under another agent; rating is per thread.
+        let mut delegated = data.clone();
+        delegated.agent_id = "agent-2".into();
+        let second = record_turn_signal(&db, &delegated).await.unwrap();
+
+        assert!(rate_turn(&db, "user-1", "thread-1", 5).await.unwrap());
+        assert_eq!(
+            latest_turn_rating(&db, "user-1", "thread-1").await.unwrap(),
+            Some(1)
+        );
+
+        let rated: Vec<(String, Option<i64>)> =
+            sqlx::query_as("SELECT id, user_rating FROM turn_signals ORDER BY created_at")
+                .fetch_all(&db)
+                .await
+                .unwrap();
+        assert_eq!(rated, vec![(first, None), (second, Some(1))]);
+
+        // Another user's thread with the same id is untouched.
+        assert!(!rate_turn(&db, "user-2", "thread-1", -1).await.unwrap());
     }
 
     #[tokio::test]

@@ -18,7 +18,7 @@ use crate::{
     agents::{
         access,
         engine::{ChannelKind, TurnParams, run_turn},
-        router as agent_router,
+        improvement, router as agent_router,
     },
     llm::tool_loop::LoopEvent,
     services::conversations::{self, ConversationRun},
@@ -38,6 +38,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/v1/conversations/{conversation_id}/messages",
             post(send_message),
+        )
+        .route(
+            "/api/v1/conversations/{conversation_id}/feedback",
+            post(rate_latest_turn),
         )
         .route("/api/v1/events", get(events))
         .route(
@@ -291,6 +295,8 @@ struct SnapshotResponse {
     messages: Vec<conversations::ConversationMessage>,
     runs: Vec<ConversationRun>,
     pending_approval: Option<serde_json::Value>,
+    /// Thumbs rating (1 or -1) the user gave the most recent reply, if any.
+    latest_turn_rating: Option<i64>,
     /// Last durable user-scoped event the client may use as an SSE cursor.
     event_cursor: i64,
 }
@@ -313,7 +319,7 @@ async fn snapshot(
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    let (messages, runs, latest) = tokio::join!(
+    let (messages, runs, latest, latest_turn_rating) = tokio::join!(
         conversations::list_messages(&state.db, &conversation_id, 200),
         conversations::list_runs(&state.db, &conversation_id),
         sqlx::query_scalar::<_, Option<i64>>(
@@ -321,7 +327,13 @@ async fn snapshot(
         )
         .bind(&user.user_id)
         .fetch_one(&state.db),
+        improvement::latest_turn_rating(&state.db, &user.user_id, &conversation_id),
     );
+    // A missing rating must never block the conversation from loading.
+    let latest_turn_rating = latest_turn_rating.unwrap_or_else(|error| {
+        tracing::warn!(conversation_id, "Could not load turn rating: {error:#}");
+        None
+    });
     match (messages, runs, latest) {
         (Ok(messages), Ok(runs), Ok(event_cursor)) => {
             let pending_approval = if let Some(run) =
@@ -364,6 +376,7 @@ async fn snapshot(
                 messages,
                 runs,
                 pending_approval,
+                latest_turn_rating,
                 event_cursor: event_cursor.unwrap_or(0),
             })
             .into_response()
@@ -512,6 +525,59 @@ async fn send_message(
     Json(SendMessageResponse { run }).into_response()
 }
 
+#[derive(Deserialize)]
+struct TurnFeedbackRequest {
+    /// `1` for a helpful reply, `-1` for an unhelpful one.
+    rating: i64,
+}
+
+/// Record thumbs up/down for the most recent reply in a conversation. The
+/// rating lands on the latest turn signal, which feeds the agent's behavioral
+/// lessons. Rating while Selu is still working is refused so the rating cannot
+/// attach to a reply the user has not seen yet.
+async fn rate_latest_turn(
+    user: AuthUser,
+    State(state): State<AppState>,
+    Path(conversation_id): Path<String>,
+    Json(request): Json<TurnFeedbackRequest>,
+) -> Response {
+    if !matches!(request.rating, 1 | -1) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "code": "conversation.invalid_feedback" })),
+        )
+            .into_response();
+    }
+    if !owns_conversation(&state, &user, &conversation_id).await {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let active: i64 = match sqlx::query_scalar(
+        "SELECT COUNT(*) FROM conversation_runs WHERE thread_id = ? AND status IN ('queued','running','waiting_for_approval','cancelling')",
+    ).bind(&conversation_id).fetch_one(&state.db).await {
+        Ok(value) => value,
+        Err(error) => return internal_error(error.into()),
+    };
+    if active > 0 {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "code": "conversation.run_in_progress" })),
+        )
+            .into_response();
+    }
+    match improvement::rate_turn(&state.db, &user.user_id, &conversation_id, request.rating).await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        // The turn signal is written shortly after a reply completes; a
+        // conversation without one has nothing the rating could apply to.
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "code": "conversation.feedback_unavailable" })),
+        )
+            .into_response(),
+        Err(error) => internal_error(error),
+    }
+}
+
 async fn execute_run(
     state: AppState,
     user_id: String,
@@ -568,7 +634,10 @@ async fn execute_run(
     loop {
         tokio::select! {
             result = &mut turn, if !turn_finished => {
-                if let Err(error) = result { terminal_error = Some(error.to_string()); }
+                if let Err(error) = result {
+                    tracing::error!(run_id, "Conversation run failed: {error:#}");
+                    terminal_error = Some(error.to_string());
+                }
                 turn_finished = true;
             }
             event = receiver.recv() => match event {
@@ -712,10 +781,14 @@ async fn handle_engine_event(
             serde_json::json!({ "artifacts": artifacts }),
         ),
         LoopEvent::Done => ("run.output_finished", serde_json::json!({})),
-        LoopEvent::Error(_) => (
-            "run.error",
-            serde_json::json!({ "code": "conversation.agent_failed" }),
-        ),
+        // Clients only get a stable code; the engine's message is for the log.
+        LoopEvent::Error(message) => {
+            tracing::warn!(run_id, "Agent reported an error during the run: {message}");
+            (
+                "run.error",
+                serde_json::json!({ "code": "conversation.agent_failed" }),
+            )
+        }
         LoopEvent::ConfirmationRequired(request) => {
             let approval_id = Uuid::new_v4().to_string();
             state
@@ -752,11 +825,15 @@ async fn handle_engine_event(
         }
         LoopEvent::ApprovalQueued {
             tool_display_name,
+            approval_message,
             approval_id,
-            ..
         } => (
             "approval.queued",
-            serde_json::json!({ "approval_id": approval_id, "tool_name": tool_display_name }),
+            serde_json::json!({
+                "approval_id": approval_id,
+                "tool_name": tool_display_name,
+                "message": approval_message,
+            }),
         ),
         LoopEvent::ToolMessage(_) => ("conversation.changed", serde_json::json!({})),
     };
