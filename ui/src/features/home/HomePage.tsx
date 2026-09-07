@@ -6,6 +6,7 @@ import { api, type Conversation, type Message, type Snapshot } from '../../api'
 import { BrandMark } from '../../components/BrandMark'
 import { t } from '../../i18n'
 import { useNotices } from '../../notices'
+import { createClientId } from '../../shared/clientId'
 import { dedupeConversations, prependConversation, type ConversationPages } from '../../shared/conversations'
 import { navigateWithTransition } from '../../shared/transitions'
 import { useAppChrome } from '../shell/useAppChrome'
@@ -20,9 +21,10 @@ type StartConversationDependencies = {
 }
 
 export async function startHomeConversation(input: StartConversationDependencies) {
+  const messageId = input.messageId?.() ?? createClientId()
   const conversation = await input.create()
   const message: Message = {
-    id: (input.messageId ?? crypto.randomUUID)(),
+    id: messageId,
     role: 'user',
     content: input.text,
     created_at: new Date().toISOString(),

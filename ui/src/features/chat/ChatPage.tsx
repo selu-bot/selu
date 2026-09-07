@@ -11,6 +11,7 @@ import { BrandMark } from '../../components/BrandMark'
 import { Composer } from '../../components/Composer'
 import { ConversationList } from '../../components/ConversationList'
 import { ConversationMenu, DeleteConversationDialog, RenameConversationDialog } from '../../components/ConversationActions'
+import { createClientId } from '../../shared/clientId'
 import { dedupeConversations, prependConversation, removeConversation, replaceConversation, type ConversationPages } from '../../shared/conversations'
 import { useAppChrome } from '../shell/useAppChrome'
 
@@ -148,7 +149,7 @@ export function ChatPage({ conversationId }: { conversationId: string | null }) 
   const submit = () => {
     const text = draft.trim()
     if (!selected || !text || active || send.isPending) return
-    send.mutate({ text, messageId: crypto.randomUUID() })
+    send.mutate({ text, messageId: createClientId() })
   }
 
   return <main className={`selu-shell${navCollapsed ? ' nav-collapsed' : ''}${mobileConversation ? ' mobile-chat-open' : ''}`}>
