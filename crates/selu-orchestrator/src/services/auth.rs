@@ -2,6 +2,7 @@ use sqlx::SqlitePool;
 
 /// User information resolved from a valid session.
 /// Shared between web (AuthUser extractor) and mobile (extract_mobile_user).
+#[cfg_attr(test, allow(dead_code))]
 pub struct SessionUser {
     pub user_id: String,
     pub username: String,

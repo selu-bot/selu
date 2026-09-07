@@ -130,7 +130,7 @@ Respond ONLY with the JSON array, nothing else."#,
         return Ok(());
     }
 
-    // Validate categories and store into unified memory.
+    // Validate categories and store them in the always-available user profile.
     let valid_categories = ["personal", "preferences", "location", "work", "other"];
     let mut stored = 0;
     for fact in facts {

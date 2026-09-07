@@ -99,17 +99,25 @@ pub async fn add_fact(
     Ok(id)
 }
 
-pub async fn update_fact(db: &SqlitePool, fact_id: &str, fact: &str, category: &str) -> Result<()> {
-    sqlx::query(
-        "UPDATE user_profile SET fact_text = ?, category = ?, updated_at = datetime('now') WHERE id = ?",
+pub async fn update_fact(
+    db: &SqlitePool,
+    user_id: &str,
+    fact_id: &str,
+    fact: &str,
+    category: &str,
+) -> Result<bool> {
+    let result = sqlx::query(
+        "UPDATE user_profile SET fact_text = ?, category = ?, updated_at = datetime('now')          WHERE id = ? AND user_id = ?",
     )
     .bind(fact)
     .bind(category)
     .bind(fact_id)
+    .bind(user_id)
     .execute(db)
     .await
     .context("Failed to update profile fact")?;
-    Ok(())
+
+    Ok(result.rows_affected() > 0)
 }
 
 pub async fn delete_fact(db: &SqlitePool, user_id: &str, fact_id: &str) -> Result<bool> {
@@ -350,4 +358,57 @@ Respond ONLY with the JSON array, nothing else."#,
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn test_db() -> SqlitePool {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE user_profile (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                fact_text TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'other',
+                source TEXT NOT NULL DEFAULT 'manual',
+                agent_id TEXT NOT NULL DEFAULT 'system',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn update_fact_requires_matching_user() {
+        let db = test_db().await;
+        let id = add_fact(
+            &db,
+            "user-1",
+            "Lives in Berlin",
+            "location",
+            "manual",
+            "system",
+        )
+        .await
+        .unwrap();
+
+        assert!(
+            !update_fact(&db, "user-2", &id, "Lives in Bonn", "location")
+                .await
+                .unwrap()
+        );
+        assert!(
+            update_fact(&db, "user-1", &id, "Lives in Bonn", "location")
+                .await
+                .unwrap()
+        );
+        let facts = list_facts(&db, "user-1", 10).await.unwrap();
+        assert_eq!(facts[0].fact, "Lives in Bonn");
+    }
 }

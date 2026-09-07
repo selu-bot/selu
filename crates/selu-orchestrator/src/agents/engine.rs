@@ -1437,7 +1437,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                     agent_tools_used: tools_used,
                 };
                 if let Err(e) =
-                    crate::agents::improvement::process_turn_signal(&db, &creds, data, false).await
+                    crate::agents::improvement::process_turn_signal(&db, &creds, data).await
                 {
                     debug!("Turn signal recording failed (non-fatal): {e}");
                 }

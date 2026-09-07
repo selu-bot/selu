@@ -131,7 +131,7 @@ fn group_facts(facts: Vec<profile::ProfileFact>) -> Vec<FactGroup> {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-/// GET /personality — list all memory entries grouped by category
+/// GET /personality — list all profile facts grouped by category
 pub async fn personality_index(
     user: AuthUser,
     Query(q): Query<PersonalityQuery>,
@@ -212,15 +212,16 @@ pub async fn personality_delete(
 
 /// GET /personality/{id}/edit — return the edit form fragment (HTMX)
 pub async fn personality_edit_form(
-    _user: AuthUser,
+    user: AuthUser,
     Path(memory_id): Path<String>,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
 ) -> Response {
     let row = sqlx::query_as::<_, (String, String, String, String, String)>(
-        "SELECT id, category, fact_text, source, created_at FROM user_profile WHERE id = ?",
+        "SELECT id, category, fact_text, source, created_at          FROM user_profile WHERE id = ? AND user_id = ?",
     )
     .bind(&memory_id)
+    .bind(&user.user_id)
     .fetch_optional(&state.db)
     .await;
 
@@ -256,7 +257,7 @@ pub async fn personality_edit_form(
 
 /// PUT /personality/{id} — update a profile fact (HTMX)
 pub async fn personality_update(
-    _user: AuthUser,
+    user: AuthUser,
     Path(memory_id): Path<String>,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
@@ -269,20 +270,35 @@ pub async fn personality_update(
         "other"
     };
 
-    if let Err(e) = profile::update_fact(&state.db, &memory_id, form.fact.trim(), category).await {
-        error!("Failed to update profile fact {memory_id}: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    match profile::update_fact(
+        &state.db,
+        &user.user_id,
+        &memory_id,
+        form.fact.trim(),
+        category,
+    )
+    .await
+    {
+        Ok(true) => {}
+        Ok(false) => return StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("Failed to update profile fact {memory_id}: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     }
 
     // Return the updated row fragment
-    let source = sqlx::query_as::<_, (String,)>("SELECT source FROM user_profile WHERE id = ?")
-        .bind(&memory_id)
-        .fetch_optional(&state.db)
-        .await
-        .ok()
-        .flatten()
-        .map(|(s,)| s)
-        .unwrap_or_else(|| "manual".to_string());
+    let source = sqlx::query_as::<_, (String,)>(
+        "SELECT source FROM user_profile WHERE id = ? AND user_id = ?",
+    )
+    .bind(&memory_id)
+    .bind(&user.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .map(|(s,)| s)
+    .unwrap_or_else(|| "manual".to_string());
 
     let row = FactRow {
         id: memory_id,
@@ -307,15 +323,16 @@ pub async fn personality_update(
 
 /// GET /personality/{id}/row — return the read-only row fragment (HTMX, for cancel)
 pub async fn personality_row(
-    _user: AuthUser,
+    user: AuthUser,
     Path(memory_id): Path<String>,
     State(state): State<AppState>,
     BasePath(base_path): BasePath,
 ) -> Response {
     let row = sqlx::query_as::<_, (String, String, String, String, String)>(
-        "SELECT id, category, fact_text, source, created_at FROM user_profile WHERE id = ?",
+        "SELECT id, category, fact_text, source, created_at          FROM user_profile WHERE id = ? AND user_id = ?",
     )
     .bind(&memory_id)
+    .bind(&user.user_id)
     .fetch_optional(&state.db)
     .await;
 

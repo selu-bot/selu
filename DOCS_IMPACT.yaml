@@ -2538,3 +2538,40 @@ entries:
       release. In the v1 API a command creates a normal run that completes
       immediately; clients receive run.created, message.created for the reply
       and run.updated (completed).
+
+- id: 2026-09-07-streamlined-memory-model
+  date: "2026-09-07"
+  pr:
+  area: agents
+  type: changed
+  audience: both
+  summary: "Memory now has three explicit boundaries: user profile, shared notes, and per-agent lessons"
+  affected_files:
+    - crates/selu-core/src/types.rs
+    - crates/selu-orchestrator/src/agents/profile.rs
+    - crates/selu-orchestrator/src/agents/personality.rs
+    - crates/selu-orchestrator/src/agents/memory.rs
+    - crates/selu-orchestrator/src/agents/improvement.rs
+    - crates/selu-orchestrator/templates/personality.html
+    - crates/selu-orchestrator/templates/agents_detail.html
+    - ui/src/i18n.ts
+  docs_sections:
+    - user-guide/personality
+    - user-guide/agents/sessions
+    - developer-guide/built-in-tools/memory
+  details: |
+    Selu now presents and documents three deliberately separate concepts.
+    "About you" contains stable user facts and is always injected for every
+    agent. "Shared notes" contains user-scoped, searchable context saved by agents and shared with all
+    agents; the saving agent is provenance only. "Lessons" contains behavioral
+    guidance scoped to one agent and user.
+
+    Agent lessons now use one five-turn reflection path. Lessons with at least
+    two supporting observations and confidence of 0.85 or higher activate
+    immediately (up to ten active lessons); uncertain lessons remain explicit
+    suggestions the user can activate, pause, or remove. The unused daily
+    metrics table, unpopulated signal flags, promotion scheduler, and second
+    daily LLM optimization pass were removed. Existing profile, note, feedback,
+    and lesson-management capabilities remain available. Mobile memory responses
+    retain the existing category field for compatibility, returning an empty
+    string for shared notes as before.

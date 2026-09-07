@@ -334,39 +334,16 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Self-improvement periodic aggregation: every 6 hours
-    // Promotes candidate insights, prunes old signals, aggregates daily metrics.
+    // Behavioral lesson maintenance: prune expired raw signals and suggestions daily.
+    // Reflection and activation happen directly after each five-turn batch.
     let improvement_db = state.db.clone();
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(6 * 60 * 60));
-        loop {
-            interval.tick().await;
-            if let Err(e) =
-                crate::agents::improvement::run_periodic_aggregation(&improvement_db).await
-            {
-                tracing::debug!("Improvement aggregation failed (non-fatal): {e}");
-            }
-        }
-    });
-
-    // Insight optimization: runs at startup and then every 24 hours.
-    // Deduplicates and merges semantically similar candidate insights via LLM,
-    // summing their supporting_signals so the promotion threshold can be reached.
-    let insight_opt_state = state.clone();
-    tokio::spawn(async move {
-        // Wait 3 minutes after startup before first run.
-        tokio::time::sleep(std::time::Duration::from_secs(180)).await;
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60 * 24));
         loop {
-            if let Err(e) = crate::agents::improvement::run_optimization(
-                &insight_opt_state.db,
-                &insight_opt_state.credentials,
-            )
-            .await
-            {
-                tracing::debug!("Insight optimization failed (non-fatal): {e}");
-            }
             interval.tick().await;
+            if let Err(e) = crate::agents::improvement::run_maintenance(&improvement_db).await {
+                tracing::debug!("Behavioral lesson maintenance failed (non-fatal): {e}");
+            }
         }
     });
 

@@ -49,8 +49,9 @@ fn current_time_context_block(
 
 /// Builds the LLM context window for a turn:
 ///   [system prompt + capability prompts (own + inlined) + agent registry (delegated only)]
-///   [unified BM25 memory (user-scoped, shared across all agents)]
-///   [behavioral lessons (agent-scoped, from self-improvement)]
+///   [user profile (always available, shared across all agents)]
+///   [shared searchable notes (user-scoped, retrieved with memory tools)]
+///   [behavioral lessons (agent-scoped)]
 ///   [recent N messages from this thread (or session/pipe if no thread)]
 pub async fn build(
     db: &SqlitePool,
@@ -167,7 +168,7 @@ pub async fn build(
     );
 
     system.push_str(
-        "\n\n## Long-term memory tools\n\
+        "\n\n## Shared notes and persistent state\n\
          Use `store_*` for keyed, mutable state you'll look up by exact key \
          (e.g. task checkpoints, sync timestamps, workflow state). \
          Use `memory_*` for prose notes about the user or project that should surface contextually in future conversations.\n\n\

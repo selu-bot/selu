@@ -1,7 +1,9 @@
-/// Agent memory: persistent per-agent, per-user notes that are useful for
-/// future interactions but are not personality facts.
+/// Shared searchable notes for a user.
 ///
-/// Memories are indexed with SQLite FTS5 and retrieved with BM25 ranking.
+/// Notes are available to every agent working for that user. `agent_id` records
+/// which agent saved a note; it is provenance, not an ownership boundary. User
+/// profile facts remain separate because they are injected on every turn, while
+/// these notes are retrieved explicitly with SQLite FTS5/BM25.
 use anyhow::{Context, Result};
 use sqlx::SqlitePool;
 use tracing::debug;
@@ -18,7 +20,6 @@ pub struct AgentMemory {
     pub memory: String,
     pub tags: String,
     pub source: String,
-    pub category: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -41,11 +42,10 @@ pub async fn add_memory(
     memory: &str,
     tags: &str,
     source: &str,
-    category: &str,
 ) -> Result<String> {
     let id = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO agent_memories (id, agent_id, user_id, memory_text, tags, source, category) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO agent_memories (id, agent_id, user_id, memory_text, tags, source) VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(agent_id)
@@ -53,7 +53,6 @@ pub async fn add_memory(
     .bind(memory)
     .bind(tags)
     .bind(source)
-    .bind(category)
     .execute(db)
     .await
     .context("Failed to add agent memory")?;
@@ -85,10 +84,9 @@ pub async fn list_memories(db: &SqlitePool, user_id: &str, limit: i64) -> Result
             String,
             String,
             String,
-            String,
         ),
     >(
-        r#"SELECT id, agent_id, user_id, memory_text, tags, source, category, created_at, updated_at
+        r#"SELECT id, agent_id, user_id, memory_text, tags, source, created_at, updated_at
            FROM agent_memories
            WHERE user_id = ?
            ORDER BY updated_at DESC, created_at DESC
@@ -103,18 +101,15 @@ pub async fn list_memories(db: &SqlitePool, user_id: &str, limit: i64) -> Result
     Ok(rows
         .into_iter()
         .map(
-            |(id, agent_id, user_id, memory, tags, source, category, created_at, updated_at)| {
-                AgentMemory {
-                    id,
-                    agent_id,
-                    user_id,
-                    memory,
-                    tags,
-                    source,
-                    category,
-                    created_at,
-                    updated_at,
-                }
+            |(id, agent_id, user_id, memory, tags, source, created_at, updated_at)| AgentMemory {
+                id,
+                agent_id,
+                user_id,
+                memory,
+                tags,
+                source,
+                created_at,
+                updated_at,
             },
         )
         .collect())
@@ -291,7 +286,7 @@ pub async fn dispatch_remember(
     }
 
     let tags = args["tags"].as_str().unwrap_or("").trim();
-    let id = add_memory(db, agent_id, user_id, memory, tags, "agent", "").await?;
+    let id = add_memory(db, agent_id, user_id, memory, tags, "agent").await?;
 
     Ok(serde_json::json!({"ok": true, "memory_id": id}).to_string())
 }
@@ -376,7 +371,6 @@ mod tests {
                 memory_text TEXT NOT NULL,
                 tags TEXT NOT NULL DEFAULT '',
                 source TEXT NOT NULL DEFAULT 'agent',
-                category TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             )",
@@ -438,7 +432,6 @@ mod tests {
             "User runs backups every Friday",
             "backup,ops",
             "manual",
-            "",
         )
         .await
         .unwrap();
@@ -449,7 +442,6 @@ mod tests {
             "User prefers concise weekly reports",
             "reports",
             "manual",
-            "",
         )
         .await
         .unwrap();
@@ -472,7 +464,6 @@ mod tests {
             "User lives in Berlin",
             "location",
             "agent",
-            "location",
         )
         .await
         .unwrap();
@@ -484,7 +475,6 @@ mod tests {
             "User prefers dark mode",
             "preferences",
             "agent",
-            "preferences",
         )
         .await
         .unwrap();
