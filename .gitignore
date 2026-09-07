@@ -35,3 +35,6 @@ __pycache__/
 
 installed_agents
 artifacts
+
+# Local Kiro configuration
+/.kiro/
