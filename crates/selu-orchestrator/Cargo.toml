@@ -36,7 +36,6 @@ hyper-util = { workspace = true }
 http-body-util = { workspace = true }
 
 # Templating
-askama = { workspace = true }
 
 # Config
 config = { workspace = true }

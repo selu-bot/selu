@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs\n               SET status = 'interrupted', message_code = 'job.interrupted.restart',\n                   completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),\n                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')\n               WHERE status IN ('running', 'cancelling')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "7a8988f32fd78ea6f9536e018d19f5a9a0535e159bec5ef25a8f2e1aec98edea"
+}

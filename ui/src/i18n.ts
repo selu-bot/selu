@@ -1,15 +1,17 @@
+import { useSyncExternalStore } from 'react'
+
 export const translations = {
   en: {
     agents: 'Agents', backToConversations: 'Back to conversations', chat: 'Chat', closeNavigation: 'Close navigation',
-    collapseNavigation: 'Collapse navigation', connections: 'Connections', conversationOptions: 'Conversation options',
+    collapseNavigation: 'Collapse navigation', connectors: 'Messaging', connections: 'Connections', conversationOptions: 'Conversation options',
     conversations: 'Conversations', copied: 'Copied', copy: 'Copy',
     darkMode: 'Dark mode', expandNavigation: 'Expand navigation', feedback: 'Feedback', followingAlong: 'You can follow along',
     gettingReady: 'Getting everything ready', jumpToLatest: 'Jump to latest', lightMode: 'Light mode', live: 'Live',
     loading: 'Loading', mainNavigation: 'Main navigation', manage: 'Manage', memory: 'About you', mobileApp: 'Mobile app',
     newConversation: 'New conversation', noConversations: 'A fresh start', nothingFound: 'Nothing found',
     openNavigation: 'Open navigation', people: 'People', personalAgent: 'Personal agent', placeholder: 'What can Selu handle for you?',
-    privateByDesign: 'Private by design', providers: 'Providers', ready: 'Ready', schedules: 'Schedules', searchConversations: 'Find a conversation',
-    send: 'Send', sendHint: 'Enter to send · Shift + Enter for a new line', settings: 'Settings', somethingWentWrong: 'That didn’t work',
+    privateByDesign: 'Private by design', providers: 'AI services', ready: 'Ready', schedules: 'Automations', searchConversations: 'Find a conversation',
+    send: 'Send', sendHint: 'Enter to send · Shift + Enter for a new line', settings: 'Settings', updates: 'System updates', somethingWentWrong: 'That didn’t work',
     startConversation: 'Start a conversation', startConversationHint: 'Start one whenever you’re ready.', stepsAvailable: 'Open to see what happened',
     technicalDetails: 'Technical details', theme: 'Theme', tryAgain: 'Please try again.', tryAnotherSearch: 'Try a different word or phrase.',
     waitForReply: 'Selu is still working…', welcomeBody: 'Ask naturally. Selu can think, use your connected tools, and keep you in the loop without getting in your way.',
@@ -31,18 +33,28 @@ export const translations = {
     helpful: 'Helpful', notHelpful: 'Not helpful', feedbackNotSaved: 'Your feedback wasn’t saved',
     commands: 'Commands', commandsHint: 'Type / for commands',
     errorFeedbackUnavailable: 'This reply can’t be rated yet. Give Selu a moment and try again.',
+    home: 'Home', allConversations: 'All conversations', homeGreeting: 'What can I take care of, {name}?', homeGreetingFallback: 'What can I take care of?',
+    homeSubtitle: 'Start with whatever is on your mind. Selu will help you move it forward.', homePlaceholder: 'Ask Selu anything…',
+    homeComposerHint: 'Press Enter to send · Shift + Enter for a new line', needsAttention: 'In progress',
+    needsAttentionHint: 'Things Selu is working on', nothingNeedsAttention: 'Nothing is running right now.', upcoming: 'Coming up',
+    upcomingHint: 'Scheduled work', nothingUpcoming: 'Nothing scheduled right now.', recent: 'Recent', recentHint: 'Pick up where you left off',
+    noRecentConversations: 'Your recent conversations will appear here.', welcomeBack: 'Welcome back', loginTitle: 'Sign in to Selu',
+    loginBody: 'Continue where you left off.', firstRun: 'A fresh start', setupTitle: 'Make Selu yours',
+    setupBody: 'Create the first account for this Selu.', displayName: 'Your name', username: 'Username', password: 'Password',
+    showPassword: 'Show password', hidePassword: 'Hide password', signingIn: 'One moment…', signIn: 'Sign in', finishSetup: 'Finish setup',
+    authPrivate: 'Your sign-in stays on this Selu.', loadingPage: 'Selu is getting this page ready.', pageNotFound: 'This page could not be found.', tryAgainAction: 'Try again',
   },
   de: {
     agents: 'Agenten', backToConversations: 'Zurück zu Unterhaltungen', chat: 'Chat', closeNavigation: 'Navigation schließen',
-    collapseNavigation: 'Navigation einklappen', connections: 'Verbindungen', conversationOptions: 'Optionen der Unterhaltung',
+    collapseNavigation: 'Navigation einklappen', connectors: 'Nachrichten', connections: 'Verbindungen', conversationOptions: 'Optionen der Unterhaltung',
     conversations: 'Unterhaltungen', copied: 'Kopiert', copy: 'Kopieren',
     darkMode: 'Dunkler Modus', expandNavigation: 'Navigation ausklappen', feedback: 'Feedback', followingAlong: 'Du kannst dabei zusehen',
     gettingReady: 'Ich bereite alles vor', jumpToLatest: 'Zum neuesten Beitrag', lightMode: 'Heller Modus', live: 'Live',
     loading: 'Wird geladen', mainNavigation: 'Hauptnavigation', manage: 'Verwalten', memory: 'Über dich', mobileApp: 'Mobile App',
     newConversation: 'Neue Unterhaltung', noConversations: 'Ein frischer Anfang', nothingFound: 'Nichts gefunden',
     openNavigation: 'Navigation öffnen', people: 'Personen', personalAgent: 'Persönlicher Agent', placeholder: 'Was kann Selu für dich erledigen?',
-    privateByDesign: 'Von Grund auf privat', providers: 'Anbieter', ready: 'Bereit', schedules: 'Zeitpläne', searchConversations: 'Unterhaltung finden',
-    send: 'Senden', sendHint: 'Enter zum Senden · Umschalt + Enter für eine neue Zeile', settings: 'Einstellungen', somethingWentWrong: 'Das hat nicht geklappt',
+    privateByDesign: 'Von Grund auf privat', providers: 'KI-Dienste', ready: 'Bereit', schedules: 'Automatisierungen', searchConversations: 'Unterhaltung finden',
+    send: 'Senden', sendHint: 'Enter zum Senden · Umschalt + Enter für eine neue Zeile', settings: 'Einstellungen', updates: 'Systemaktualisierungen', somethingWentWrong: 'Das hat nicht geklappt',
     startConversation: 'Unterhaltung beginnen', startConversationHint: 'Beginne, sobald du bereit bist.', stepsAvailable: 'Öffnen, um den Ablauf zu sehen',
     technicalDetails: 'Technische Details', theme: 'Darstellung', tryAgain: 'Versuche es bitte noch einmal.', tryAnotherSearch: 'Versuche ein anderes Wort oder eine andere Formulierung.',
     waitForReply: 'Selu arbeitet noch…', welcomeBody: 'Frag einfach natürlich. Selu kann nachdenken, deine verbundenen Werkzeuge nutzen und dich auf dem Laufenden halten.',
@@ -64,17 +76,56 @@ export const translations = {
     helpful: 'Hilfreich', notHelpful: 'Nicht hilfreich', feedbackNotSaved: 'Dein Feedback wurde nicht gespeichert',
     commands: 'Befehle', commandsHint: 'Tippe / für Befehle',
     errorFeedbackUnavailable: 'Diese Antwort kann noch nicht bewertet werden. Gib Selu einen Moment und versuche es erneut.',
+    home: 'Start', allConversations: 'Alle Unterhaltungen', homeGreeting: 'Worum kann ich mich kümmern, {name}?', homeGreetingFallback: 'Worum kann ich mich kümmern?',
+    homeSubtitle: 'Beginne mit dem, was dich gerade beschäftigt. Selu hilft dir, es voranzubringen.', homePlaceholder: 'Frag Selu einfach…',
+    homeComposerHint: 'Enter zum Senden · Umschalt + Enter für eine neue Zeile', needsAttention: 'In Arbeit',
+    needsAttentionHint: 'Aufgaben, an denen Selu gerade arbeitet', nothingNeedsAttention: 'Im Moment läuft nichts.', upcoming: 'Demnächst',
+    upcomingHint: 'Geplante Aufgaben', nothingUpcoming: 'Im Moment ist nichts geplant.', recent: 'Zuletzt', recentHint: 'Mach dort weiter, wo du aufgehört hast',
+    noRecentConversations: 'Deine letzten Unterhaltungen erscheinen hier.', welcomeBack: 'Willkommen zurück', loginTitle: 'Bei Selu anmelden',
+    loginBody: 'Mach dort weiter, wo du aufgehört hast.', firstRun: 'Ein frischer Anfang', setupTitle: 'Mach Selu zu deinem',
+    setupBody: 'Erstelle das erste Konto für dieses Selu.', displayName: 'Dein Name', username: 'Benutzername', password: 'Passwort',
+    showPassword: 'Passwort anzeigen', hidePassword: 'Passwort ausblenden', signingIn: 'Einen Moment…', signIn: 'Anmelden', finishSetup: 'Einrichtung abschließen',
+    authPrivate: 'Deine Anmeldung bleibt auf diesem Selu.', loadingPage: 'Selu bereitet diese Seite vor.', pageNotFound: 'Diese Seite wurde nicht gefunden.', tryAgainAction: 'Erneut versuchen',
   },
 } as const
 
 export type TranslationKey = keyof typeof translations.en
 export type Language = keyof typeof translations
-let language: Language = localStorage.getItem('selu.language') === 'de' || (!localStorage.getItem('selu.language') && navigator.language.toLowerCase().startsWith('de')) ? 'de' : 'en'
-document.documentElement.lang = language
+const storage = typeof localStorage === 'undefined' ? null : localStorage
+const browserLanguage = typeof navigator === 'undefined' ? 'en' : navigator.language
+let language: Language = storage?.getItem('selu.language') === 'de' || (!storage?.getItem('selu.language') && browserLanguage.toLowerCase().startsWith('de')) ? 'de' : 'en'
+if (typeof document !== 'undefined') document.documentElement.lang = language
 export const t = (key: TranslationKey) => translations[language][key]
 export const getLanguage = () => language
+
+const languageListeners = new Set<() => void>()
+const subscribeLanguage = (listener: () => void) => {
+  languageListeners.add(listener)
+  return () => languageListeners.delete(listener)
+}
+
+export const useLanguage = () => useSyncExternalStore(subscribeLanguage, getLanguage, getLanguage)
+
+export type TranslationBundle<T extends Record<string, string>> = {
+  en: T
+  de: { [K in keyof T]: string }
+}
+
+export function defineTranslations<const T extends Record<string, string>>(
+  en: T,
+  de: { [K in keyof T]: string },
+): TranslationBundle<T> {
+  return { en, de }
+}
+
+export function useTranslations<T extends Record<string, string>>(bundle: TranslationBundle<T>): { [K in keyof T]: string } {
+  return bundle[useLanguage()]
+}
+
 export const setLanguage = (next: Language) => {
+  if (language === next) return
   language = next
-  localStorage.setItem('selu.language', next)
-  document.documentElement.lang = next
+  storage?.setItem('selu.language', next)
+  if (typeof document !== 'undefined') document.documentElement.lang = next
+  languageListeners.forEach((listener) => listener())
 }

@@ -1,0 +1,12 @@
+.settings-pairing { display: grid; gap: 17px; }
+.settings-copy { display: flex; align-items: center; gap: 8px; }
+.settings-copy code { min-width: 0; flex: 1; overflow-wrap: anywhere; padding: 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--canvas); font: 600 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.settings-list { display: grid; }
+.settings-list > div { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.settings-list > div:first-child { padding-top: 0; }
+.settings-list > div:last-child { padding-bottom: 0; border-bottom: 0; }
+.settings-list > div > svg { width: 19px; color: var(--coral-deep); }
+.settings-list span { display: grid; min-width: 0; gap: 3px; }
+.settings-list strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; }
+.settings-list small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 520px) { .settings-copy { align-items: stretch; flex-direction: column; } .settings-list > div { grid-template-columns: auto minmax(0, 1fr) auto; } .settings-list > div > .selu-ui-button:last-child { grid-column: 3; } }

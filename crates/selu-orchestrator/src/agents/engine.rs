@@ -458,7 +458,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
     tool_specs.push(memory::list_tool_spec());
     tool_specs.push(crate::schedules::set_schedule_tool_spec());
     tool_specs.push(crate::schedules::set_reminder_tool_spec());
-    tool_specs.push(crate::web::feedback::submit_feedback_tool_spec());
+    tool_specs.push(crate::services::feedback::submit_feedback_tool_spec());
     tool_specs.push(suppress_reply_tool_spec());
 
     // Image tools: only exposed when the agent has an image model configured.
@@ -843,7 +843,7 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
                             let args = invoke_args.clone();
                             Box::pin(async move {
                                 let args_str = args.to_string();
-                                crate::web::feedback::dispatch_submit_feedback(
+                                crate::services::feedback::dispatch_submit_feedback(
                                     &marketplace_url,
                                     &db,
                                     &args_str,

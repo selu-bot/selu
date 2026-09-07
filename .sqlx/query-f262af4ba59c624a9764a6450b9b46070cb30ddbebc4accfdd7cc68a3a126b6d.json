@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT api_key_encrypted FROM llm_providers WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "api_key_encrypted",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "llm_providers",
+            "name": "api_key_encrypted"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "f262af4ba59c624a9764a6450b9b46070cb30ddbebc4accfdd7cc68a3a126b6d"
+}

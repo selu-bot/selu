@@ -1,0 +1,81 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT cv.id AS \"id!\",\n                      cv.user_id AS \"user_id!\",\n                      cv.capability_id AS \"capability!\",\n                      u.display_name AS \"owner_display_name!\",\n                      COALESCE(cv.last_active_at, cv.created_at) AS \"last_used!\",\n                      cv.status AS \"state!\"\n               FROM cache_volumes cv\n               JOIN users u ON u.id = cv.user_id\n               WHERE cv.status = 'active' AND cv.user_id = ?\n               ORDER BY COALESCE(cv.last_active_at, cv.created_at) DESC, cv.id ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cache_volumes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "user_id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cache_volumes",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "capability!",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cache_volumes",
+            "name": "capability_id"
+          }
+        }
+      },
+      {
+        "name": "owner_display_name!",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "name": "last_used!",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "state!",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cache_volumes",
+            "name": "status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0401d3f022dce7f4142d5c5e1538cff95e0abdbf371827300ad53c46cb4ec693"
+}

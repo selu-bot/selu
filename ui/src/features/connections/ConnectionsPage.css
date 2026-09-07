@@ -1,0 +1,6 @@
+.provider-models { display: grid; gap: 8px; }
+.provider-models > div { display: flex; align-items: center; gap: 11px; padding: 12px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
+.provider-models > div > svg { width: 19px; color: var(--coral-deep); }
+.provider-models span { display: grid; min-width: 0; gap: 3px; }
+.provider-models strong { font-size: 12px; }
+.provider-models small { overflow: hidden; color: var(--muted); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }

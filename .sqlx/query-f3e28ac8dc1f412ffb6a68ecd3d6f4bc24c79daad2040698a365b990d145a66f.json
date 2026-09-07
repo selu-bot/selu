@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) FROM schedules\n           WHERE user_id = ? AND lower(name) = lower(?) AND (? IS NULL OR id != ?)",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f3e28ac8dc1f412ffb6a68ecd3d6f4bc24c79daad2040698a365b990d145a66f"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs\n               SET progress = ?, message_code = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')\n               WHERE id = ? AND status = ? AND (? = 1 OR owner_user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "ed50f7df8a4c63bc3b35277679ad4c734c9858011709359e4453ad1e0d29b510"
+}

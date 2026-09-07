@@ -4,18 +4,39 @@ use axum::{
     routing::{delete, get, post, put},
 };
 
+pub mod accounts;
+pub mod agents;
 pub mod artifacts;
+pub mod auth;
+pub mod automations;
+pub mod cache_admin;
+pub mod connectors;
 pub mod conversations;
 pub mod credentials;
+pub mod jobs;
 pub mod mobile;
 pub mod pipes;
+pub mod provider_admin;
 pub mod providers;
+pub mod system_updates;
 pub mod tool_policies;
 
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/v1/auth/state", get(auth::state))
+        .route("/api/v1/auth/login", post(auth::login))
+        .route("/api/v1/auth/setup", post(auth::setup))
+        .route("/api/v1/auth/logout", post(auth::logout))
         .merge(conversations::router())
+        .merge(jobs::router())
+        .merge(agents::router())
+        .merge(connectors::router())
+        .merge(system_updates::router())
+        .nest("/api/v1", accounts::router())
+        .merge(automations::router())
+        .nest("/api/v1", cache_admin::router())
+        .merge(provider_admin::router())
         .route(
             "/api/artifacts/{artifact_id}/download",
             get(artifacts::download_artifact),

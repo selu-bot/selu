@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM thread_agent_sessions\n           WHERE thread_id IN (SELECT id FROM threads WHERE user_id = ?)\n              OR session_id IN (SELECT id FROM sessions WHERE user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "adb306f4ed204b2567728b8b34bdce31de06dbef8f13d1ac11e9b4c5e6305b9c"
+}

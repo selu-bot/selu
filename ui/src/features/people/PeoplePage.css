@@ -1,0 +1,3 @@
+.people-you { display: inline-flex; margin-left: 8px; padding: 3px 7px; border-radius: 999px; color: var(--coral-deep); background: color-mix(in srgb, var(--coral) 9%, var(--panel)); font-size: 9px; text-transform: uppercase; vertical-align: middle; }
+.people-access { display: flex; align-items: center; gap: 7px; margin-top: 4px; color: var(--ink-soft); font-size: 11px; }
+.people-access svg { width: 15px; color: var(--coral-deep); }

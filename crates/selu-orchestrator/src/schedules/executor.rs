@@ -320,7 +320,7 @@ async fn execute_on_pipe(
         return;
     }
 
-    if crate::web::system_updates::push_notifications_enabled(&state).await {
+    if crate::services::system_updates::push_notifications_enabled(&state).await {
         let instance_id = match crate::persistence::db::get_instance_id(&state.db).await {
             Ok(id) => id,
             Err(e) => {

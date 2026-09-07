@@ -229,13 +229,15 @@ pub async fn init_all(state: AppState) {
     let base_url = state.public_base_url();
 
     for cfg in configs {
-        register_adapter(&state, &cfg, &base_url).await;
+        if let Err(error) = register_adapter(&state, &cfg, &base_url).await {
+            warn!(config_id = %cfg.id, error = %error, "Failed to initialize BlueBubbles adapter");
+        }
     }
 }
 
 /// Register a single adapter: set up channel sender + ensure webhook is
 /// registered with BlueBubbles.
-async fn register_adapter(state: &AppState, cfg: &BbConfig, _base_url: &str) {
+async fn register_adapter(state: &AppState, cfg: &BbConfig, _base_url: &str) -> Result<()> {
     let sent_guids: SentGuids = Arc::new(RwLock::new(HashSet::new()));
 
     // Store in module-level registry for the webhook handler
@@ -302,28 +304,22 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, _base_url: &str) {
     info!(
         config_id = %cfg.id,
         name = %cfg.name,
-        callback_url = %callback_url,
         "Registering webhook with BlueBubbles"
     );
-    match register_webhook_with_bb(&cfg.server_url, &cfg.server_password, &callback_url).await {
-        Ok(webhook_id) => {
-            let wh_id_str = webhook_id.to_string();
-            if let Err(e) = sqlx::query!(
-                "UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?",
-                wh_id_str,
-                cfg.id,
-            )
-            .execute(&state.db)
-            .await
-            {
-                error!(config_id = %cfg.id, "Failed to store bb_webhook_id: {e}");
-            }
-            info!(config_id = %cfg.id, webhook_id = webhook_id, "Webhook registered with BlueBubbles");
-        }
-        Err(e) => {
-            warn!(config_id = %cfg.id, "Failed to register webhook with BlueBubbles: {e}. Will retry on next startup.");
-        }
+    let webhook_id =
+        register_webhook_with_bb(&cfg.server_url, &cfg.server_password, &callback_url).await?;
+    let wh_id_str = webhook_id.to_string();
+    if let Err(error) = sqlx::query("UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?")
+        .bind(&wh_id_str)
+        .bind(&cfg.id)
+        .execute(&state.db)
+        .await
+    {
+        let _ = deregister_webhook_from_bb(&cfg.server_url, &cfg.server_password, &wh_id_str).await;
+        return Err(error).context("store BlueBubbles webhook ID");
     }
+    info!(config_id = %cfg.id, webhook_id, "Webhook registered with BlueBubbles");
+    Ok(())
 }
 
 /// Register a single adapter by config ID.
@@ -332,9 +328,70 @@ async fn register_adapter(state: &AppState, cfg: &BbConfig, _base_url: &str) {
 /// is ready immediately — no restart required.
 pub async fn start_one(state: AppState, config_id: &str) -> Result<()> {
     let cfg = load_config_by_id(&state, config_id).await?;
-    let base_url = state.public_base_url();
-    register_adapter(&state, &cfg, &base_url).await;
+    let callback_base = cfg
+        .callback_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|url| !url.is_empty())
+        .map(|url| url.trim_end_matches('/').to_string())
+        .unwrap_or_else(|| {
+            format!(
+                "http://localhost:{}{}",
+                state.config.server.port, state.base_path
+            )
+        });
+    let callback_url = format!(
+        "{}/api/bb/webhook/{}?token={}",
+        callback_base, cfg.id, cfg.inbound_token
+    );
+    let webhook_id = register_webhook_with_bb(&cfg.server_url, &cfg.server_password, &callback_url)
+        .await
+        .context("BlueBubbles webhook registration failed")?;
+    let webhook_id_text = webhook_id.to_string();
+    if let Err(error) = sqlx::query("UPDATE bluebubbles_configs SET bb_webhook_id = ? WHERE id = ?")
+        .bind(&webhook_id_text)
+        .bind(&cfg.id)
+        .execute(&state.db)
+        .await
+    {
+        let _ = deregister_webhook_from_bb(&cfg.server_url, &cfg.server_password, &webhook_id_text)
+            .await;
+        return Err(error).context("store BlueBubbles webhook id");
+    }
+    register_local(&state, &cfg).await;
     Ok(())
+}
+
+async fn register_local(state: &AppState, cfg: &BbConfig) {
+    let sent_guids: SentGuids = Arc::new(RwLock::new(HashSet::new()));
+    registry().write().await.insert(
+        cfg.id.clone(),
+        AdapterState {
+            server_url: cfg.server_url.clone(),
+            server_password: cfg.server_password.clone(),
+            chat_guid: cfg.chat_guid.clone(),
+            pipe_id: cfg.pipe_id.clone(),
+            sent_guids: sent_guids.clone(),
+        },
+    );
+    state
+        .channel_registry
+        .register(
+            &cfg.pipe_id,
+            Arc::new(BlueBubblesSender {
+                http: Client::new(),
+                server_url: cfg.server_url.clone(),
+                server_password: cfg.server_password.clone(),
+                chat_guid: cfg.chat_guid.clone(),
+                sent_guids,
+            }),
+        )
+        .await;
+}
+
+pub async fn stop_one(state: &AppState, config_id: &str, pipe_id: &str) {
+    registry().write().await.remove(config_id);
+    state.channel_registry.deregister(pipe_id).await;
 }
 
 // ---------------------------------------------------------------------------
@@ -369,26 +426,33 @@ async fn webhook_handler(
         }
     };
 
-    // Look up the pipe's inbound_token for this config
-    let pipe_token = sqlx::query!(
-        "SELECT p.inbound_token
-         FROM bluebubbles_configs bc
-         JOIN pipes p ON p.id = bc.pipe_id
-         WHERE bc.id = ? AND bc.active = 1",
-        config_id
+    let pipe_token = sqlx::query_scalar::<_, String>(
+        "SELECT p.inbound_token_encrypted \
+         FROM bluebubbles_configs bc \
+         JOIN pipes p ON p.id = bc.pipe_id \
+         WHERE bc.id = ? AND bc.active = 1 AND p.active = 1",
     )
+    .bind(&config_id)
     .fetch_optional(&state.db)
     .await;
 
     let expected_token = match pipe_token {
-        Ok(Some(row)) => row.inbound_token,
+        Ok(Some(encrypted)) => {
+            match crate::api::connectors::domain::decrypt_required(&state.credentials, &encrypted) {
+                Ok(token) => token,
+                Err(error) => {
+                    error!(config_id = %config_id, error = %error, "BB webhook REJECTED: secret decryption failed");
+                    return StatusCode::INTERNAL_SERVER_ERROR;
+                }
+            }
+        }
         Ok(None) => {
             warn!(config_id = %config_id, "BB webhook REJECTED: config not found or inactive");
             return StatusCode::NOT_FOUND;
         }
-        Err(e) => {
-            error!(config_id = %config_id, error = %e, "BB webhook REJECTED: DB error");
-            return StatusCode::NOT_FOUND;
+        Err(error) => {
+            error!(config_id = %config_id, error = %error, "BB webhook REJECTED: DB error");
+            return StatusCode::INTERNAL_SERVER_ERROR;
         }
     };
 
@@ -548,7 +612,7 @@ async fn webhook_handler(
         thread_originator_guid = ?thread_originator_guid,
         reply_to_guid = ?reply_to_guid,
         text_len = text.len(),
-        text_preview = %if text.len() > 80 { &text[..80] } else { &text },
+        text_preview = %text.chars().take(80).collect::<String>(),
         "BB webhook inbound message"
     );
 
@@ -1442,35 +1506,30 @@ pub async fn send_outbound(
     pipe_id: &str,
     envelope: &selu_core::types::OutboundEnvelope,
 ) -> Result<()> {
-    // Look up which BB config is attached to this pipe
-    let cfg = sqlx::query!(
-        "SELECT server_url, server_password, chat_guid
-         FROM bluebubbles_configs
-         WHERE pipe_id = ? AND active = 1
-         LIMIT 1",
-        pipe_id
+    use sqlx::Row as _;
+    let cfg = sqlx::query(
+        "SELECT server_url, server_password_encrypted, chat_guid \
+         FROM bluebubbles_configs \
+         WHERE pipe_id = ? AND active = 1 LIMIT 1",
     )
+    .bind(pipe_id)
     .fetch_optional(&state.db)
     .await
     .context("DB error loading BB config for outbound")?;
-
-    let cfg = match cfg {
-        Some(c) => c,
-        None => {
-            // No BB config for this pipe — not an error, just not a BB pipe
-            return Ok(());
-        }
+    let Some(cfg) = cfg else {
+        return Ok(());
     };
-
+    let password_blob: String = cfg.try_get("server_password_encrypted")?;
+    let server_password =
+        crate::api::connectors::domain::decrypt_required(&state.credentials, &password_blob)?;
     let http = Client::new();
     let sent_guids: SentGuids = Arc::new(RwLock::new(HashSet::new()));
     let clean_text = strip_markdown(&envelope.text);
-
     send_bb_message_with_attachments(
         &http,
-        &cfg.server_url,
-        &cfg.server_password,
-        &cfg.chat_guid,
+        cfg.try_get::<String, _>("server_url")?.as_str(),
+        &server_password,
+        cfg.try_get::<String, _>("chat_guid")?.as_str(),
         &clean_text,
         envelope.attachments.as_deref().unwrap_or(&[]),
         envelope.reply_to_message_ref.as_deref(),
@@ -1478,7 +1537,6 @@ pub async fn send_outbound(
     )
     .await
     .context("BlueBubbles outbound send failed")?;
-
     Ok(())
 }
 
@@ -1487,59 +1545,74 @@ pub async fn send_outbound(
 // ---------------------------------------------------------------------------
 
 async fn load_active_configs(state: &AppState) -> Result<Vec<BbConfig>> {
-    let rows = sqlx::query!(
-        "SELECT bc.id, bc.name, bc.server_url, bc.server_password, bc.chat_guid,
-                bc.pipe_id, bc.bb_webhook_id, bc.callback_base_url, p.inbound_token
-         FROM bluebubbles_configs bc
-         JOIN pipes p ON p.id = bc.pipe_id
-         WHERE bc.active = 1"
+    use sqlx::Row as _;
+    let rows = sqlx::query(
+        "SELECT bc.id, bc.name, bc.server_url, bc.server_password_encrypted, bc.chat_guid, \
+                bc.pipe_id, bc.bb_webhook_id, bc.callback_base_url, p.inbound_token_encrypted \
+         FROM bluebubbles_configs bc \
+         JOIN pipes p ON p.id = bc.pipe_id \
+         WHERE bc.active = 1 AND p.active = 1",
     )
     .fetch_all(&state.db)
     .await
     .context("Failed to load bluebubbles_configs")?;
-
-    Ok(rows
-        .into_iter()
-        .map(|r| BbConfig {
-            id: r.id.unwrap_or_default(),
-            name: r.name,
-            server_url: r.server_url,
-            server_password: r.server_password,
-            chat_guid: r.chat_guid,
-            pipe_id: r.pipe_id,
-            bb_webhook_id: r.bb_webhook_id,
-            inbound_token: r.inbound_token,
-            callback_base_url: r.callback_base_url,
+    rows.into_iter()
+        .map(|row| {
+            let password_blob: String = row.try_get("server_password_encrypted")?;
+            let inbound_blob: String = row.try_get("inbound_token_encrypted")?;
+            Ok(BbConfig {
+                id: row.try_get::<Option<String>, _>("id")?.unwrap_or_default(),
+                name: row.try_get("name")?,
+                server_url: row.try_get("server_url")?,
+                server_password: crate::api::connectors::domain::decrypt_required(
+                    &state.credentials,
+                    &password_blob,
+                )?,
+                chat_guid: row.try_get("chat_guid")?,
+                pipe_id: row.try_get("pipe_id")?,
+                bb_webhook_id: row.try_get("bb_webhook_id")?,
+                inbound_token: crate::api::connectors::domain::decrypt_required(
+                    &state.credentials,
+                    &inbound_blob,
+                )?,
+                callback_base_url: row.try_get("callback_base_url")?,
+            })
         })
-        .collect())
+        .collect()
 }
 
 async fn load_config_by_id(state: &AppState, config_id: &str) -> Result<BbConfig> {
-    let row = sqlx::query!(
-        "SELECT bc.id, bc.name, bc.server_url, bc.server_password, bc.chat_guid,
-                bc.pipe_id, bc.bb_webhook_id, bc.callback_base_url, p.inbound_token
-         FROM bluebubbles_configs bc
-         JOIN pipes p ON p.id = bc.pipe_id
-         WHERE bc.id = ? AND bc.active = 1",
-        config_id
+    use sqlx::Row as _;
+    let row = sqlx::query(
+        "SELECT bc.id, bc.name, bc.server_url, bc.server_password_encrypted, bc.chat_guid, \
+                bc.pipe_id, bc.bb_webhook_id, bc.callback_base_url, p.inbound_token_encrypted \
+         FROM bluebubbles_configs bc \
+         JOIN pipes p ON p.id = bc.pipe_id \
+         WHERE bc.id = ? AND bc.active = 1 AND p.active = 1",
     )
+    .bind(config_id)
     .fetch_optional(&state.db)
     .await
-    .context("Failed to load BlueBubbles config")?;
-
-    let row = row
-        .ok_or_else(|| anyhow::anyhow!("BlueBubbles config not found or inactive: {config_id}"))?;
-
+    .context("Failed to load BlueBubbles config")?
+    .ok_or_else(|| anyhow::anyhow!("BlueBubbles config not found or inactive: {config_id}"))?;
+    let password_blob: String = row.try_get("server_password_encrypted")?;
+    let inbound_blob: String = row.try_get("inbound_token_encrypted")?;
     Ok(BbConfig {
-        id: row.id.unwrap_or_default(),
-        name: row.name,
-        server_url: row.server_url,
-        server_password: row.server_password,
-        chat_guid: row.chat_guid,
-        pipe_id: row.pipe_id,
-        bb_webhook_id: row.bb_webhook_id,
-        inbound_token: row.inbound_token,
-        callback_base_url: row.callback_base_url,
+        id: row.try_get::<Option<String>, _>("id")?.unwrap_or_default(),
+        name: row.try_get("name")?,
+        server_url: row.try_get("server_url")?,
+        server_password: crate::api::connectors::domain::decrypt_required(
+            &state.credentials,
+            &password_blob,
+        )?,
+        chat_guid: row.try_get("chat_guid")?,
+        pipe_id: row.try_get("pipe_id")?,
+        bb_webhook_id: row.try_get("bb_webhook_id")?,
+        inbound_token: crate::api::connectors::domain::decrypt_required(
+            &state.credentials,
+            &inbound_blob,
+        )?,
+        callback_base_url: row.try_get("callback_base_url")?,
     })
 }
 

@@ -1,31 +1,18 @@
 # Selu UI
 
-The React SPA is Selu's web application. The orchestrator serves its production
-build at `/app/`; chat consumes only the shared `/api/v1` conversation API used
-by iOS. Settings still live in the server-rendered application while they are
-migrated. Navigation links in both applications make this boundary seamless.
+The React SPA is Selu's complete browser application. The orchestrator serves its production build at `/app/`; every page reads and mutates state through authenticated, versioned JSON APIs. Old management GET URLs are compatibility redirects only.
 
 ## Product architecture
 
-- `src/components/` contains focused, reusable interface pieces. Keep data
-  loading and event reconciliation in `App.tsx`; keep rendering and interaction
-  details in components.
-- `src/components/Composer.tsx` owns the slash command picker. It is driven
-  by `GET /api/v1/commands`, so commands are added on the server, never in
-  the client. The picker opens on "/", supports arrow keys, Enter/Tab and
-  Escape, and shows the expected argument once a command is complete.
-- `src/api.ts` is the only place that talks to the server. Requests are
-  same-origin, include the session cookie, and detect redirects to sign-in.
-- `src/i18n.ts` contains every user-visible English and German string.
-- `src/style.css` owns the design tokens and responsive shell. Light, dark, and
-  reduced-motion behavior must remain first-class when adding components.
-- Lucide is the shared icon system. The Selu companion in `BrandMark.tsx` is a
-  product asset and intentionally does not come from the icon library.
+- `src/features/` contains each page and its typed API module. Keep page-specific server state in TanStack Query and reusable presentation in shared components.
+- `src/components/` contains the application shell, navigation, conversation components, and focused reusable interface pieces.
+- `src/shared/ui/` contains accessible controls shared across feature pages.
+- `src/api.ts` owns the common same-origin client and shared session/conversation contracts. Feature API modules build on it and always include the HttpOnly session cookie.
+- `src/i18n.ts` contains shared English and German copy; feature pages use colocated `defineTranslations(...)` bundles with compile-time language parity.
+- `src/style.css` and feature stylesheets use the shared design tokens. Light, dark, narrow-screen, and reduced-motion behavior must remain first-class.
+- Lucide is the shared icon system. The Selu companion in `BrandMark.tsx` is a product asset and intentionally does not come from the icon library.
 
-The SPA shell is protected by the normal Selu session extractor and receives a
-restrictive Content Security Policy plus clickjacking, MIME-sniffing, referrer,
-and cache protections from the Rust server. Never put tokens in browser storage
-or add third-party scripts, analytics, or remote fonts to this application.
+The SPA shell is public so it can render login, setup, and expired-session states. Protected data and mutations require the normal Selu session through `/api/v1`; administrator operations enforce administrator access server-side. The Rust server applies a restrictive Content Security Policy plus clickjacking, MIME-sniffing, referrer, and cache protections. Never put tokens in browser storage or add third-party scripts, analytics, or remote fonts.
 
 ## Feedback pattern
 

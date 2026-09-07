@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs\n               SET status = 'succeeded', progress = 100, result_json = ?, error_json = NULL,\n                   completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),\n                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')\n               WHERE id = ? AND status = ? AND (? = 1 OR owner_user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "0a38ad60d41d899ee59ba50abf1419b88a3c24ba9b380f09ca4c77b6b0724e25"
+}

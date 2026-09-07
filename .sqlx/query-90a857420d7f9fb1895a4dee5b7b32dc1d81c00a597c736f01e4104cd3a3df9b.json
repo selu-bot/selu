@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM event_subscriptions WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "90a857420d7f9fb1895a4dee5b7b32dc1d81c00a597c736f01e4104cd3a3df9b"
+}

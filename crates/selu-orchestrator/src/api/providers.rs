@@ -11,7 +11,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::state::AppState;
+use crate::{api::auth::ApiAdmin, state::AppState};
 
 #[derive(Debug, Serialize)]
 pub struct ProviderResponse {
@@ -32,7 +32,7 @@ pub struct SetRegionRequest {
     pub base_url: String,
 }
 
-pub async fn list_providers(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_providers(_admin: ApiAdmin, State(state): State<AppState>) -> impl IntoResponse {
     let rows = sqlx::query!(
         "SELECT id, display_name, api_key_encrypted, base_url, active FROM llm_providers ORDER BY id"
     )
@@ -49,7 +49,7 @@ pub async fn list_providers(State(state): State<AppState>) -> impl IntoResponse 
                     has_api_key: r
                         .api_key_encrypted
                         .as_ref()
-                        .map_or(false, |k| !k.is_empty()),
+                        .is_some_and(|key| !key.is_empty()),
                     base_url: r.base_url,
                     active: r.active != 0,
                 })
@@ -65,6 +65,7 @@ pub async fn list_providers(State(state): State<AppState>) -> impl IntoResponse 
 
 /// PUT /api/providers/{id}/key - encrypt and store an API key
 pub async fn set_api_key(
+    _admin: ApiAdmin,
     Path(provider_id): Path<String>,
     State(state): State<AppState>,
     Json(req): Json<SetKeyRequest>,
@@ -110,6 +111,7 @@ pub async fn set_api_key(
 
 /// PUT /api/providers/{id}/region - set the base_url / region
 pub async fn set_region(
+    _admin: ApiAdmin,
     Path(provider_id): Path<String>,
     State(state): State<AppState>,
     Json(req): Json<SetRegionRequest>,

@@ -1,32 +1,16 @@
-pub mod agents;
-pub mod auth;
-pub mod cache;
-pub mod credentials;
-pub mod feedback;
-pub mod integrations;
-pub mod mobile;
-pub mod personality;
-pub mod pipes;
-pub mod providers;
-pub mod schedules;
 pub mod spa;
-pub mod system_updates;
-pub mod telegram;
-pub mod users;
-pub mod whatsapp;
 
-use crate::state::AppState;
+use crate::{api::auth::ApiPrincipal, state::AppState};
 use axum::{
     Router,
-    extract::FromRequestParts,
+    extract::{FromRequestParts, Path},
     http::{Uri, request::Parts},
     response::Redirect,
-    routing::{delete, get, post},
+    routing::get,
 };
 use std::convert::Infallible;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
-use tower_http::services::ServeDir;
 
 // ── BasePath extractor ───────────────────────────────────────────────────────
 
@@ -51,6 +35,83 @@ pub struct BasePath(pub String);
 /// Handlers extract it as `ExternalOrigin(origin): ExternalOrigin`.
 #[derive(Debug, Clone)]
 pub struct ExternalOrigin(pub String);
+
+/// Validate and canonicalize a reverse-proxy path prefix. Prefixes are made
+/// from URL path segments only: no query/fragment delimiters, backslashes,
+/// control characters, empty segments, or traversal segments are accepted.
+fn normalize_base_path(raw: &str) -> Option<String> {
+    if raw.is_empty() || raw == "/" {
+        return Some(String::new());
+    }
+    if !raw.starts_with('/') || raw.ends_with("//") {
+        return None;
+    }
+
+    let normalized = raw.trim_end_matches('/');
+    if normalized.is_empty() {
+        return Some(String::new());
+    }
+
+    for segment in normalized[1..].split('/') {
+        if segment.is_empty() || matches!(segment, "." | "..") {
+            return None;
+        }
+        let bytes = segment.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut index = 0;
+        while index < bytes.len() {
+            let byte = bytes[index];
+            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+                decoded.push(byte);
+                index += 1;
+            } else if byte == b'%'
+                && index + 2 < bytes.len()
+                && bytes[index + 1].is_ascii_hexdigit()
+                && bytes[index + 2].is_ascii_hexdigit()
+            {
+                let decoded_byte = (hex_value(bytes[index + 1]) << 4) | hex_value(bytes[index + 2]);
+                if decoded_byte.is_ascii_control()
+                    || matches!(
+                        decoded_byte,
+                        b'/' | b'\\' | b'?' | b'#' | b'<' | b'>' | b'\"' | b'\''
+                    )
+                {
+                    return None;
+                }
+                decoded.push(decoded_byte);
+                index += 3;
+            } else {
+                return None;
+            }
+        }
+        if decoded == b"." || decoded == b".." {
+            return None;
+        }
+    }
+
+    Some(normalized.to_owned())
+}
+
+fn hex_value(byte: u8) -> u8 {
+    match byte {
+        b'0'..=b'9' => byte - b'0',
+        b'a'..=b'f' => byte - b'a' + 10,
+        b'A'..=b'F' => byte - b'A' + 10,
+        _ => unreachable!("hex digits are validated before decoding"),
+    }
+}
+
+/// Strip a validated prefix only at a complete path-segment boundary.
+fn strip_base_path<'a>(path: &'a str, base_path: &str) -> Option<&'a str> {
+    if base_path.is_empty() {
+        return None;
+    }
+    if path == base_path {
+        return Some("/");
+    }
+    path.strip_prefix(base_path)
+        .filter(|remainder| remainder.starts_with('/'))
+}
 
 // ── Tower service: prefix stripping + extension injection ────────────────────
 //
@@ -108,32 +169,24 @@ where
     }
 
     fn call(&mut self, mut req: axum::extract::Request) -> Self::Future {
-        // ── 1. Resolve base path ─────────────────────────────────────────
+        // ── 1. Resolve and validate base path ────────────────────────────
+        let configured_bp = normalize_base_path(&self.state.base_path).unwrap_or_default();
         let bp = req
             .headers()
             .get("x-forwarded-prefix")
-            .and_then(|v| v.to_str().ok())
-            .map(|v| v.trim_end_matches('/').to_string())
-            .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| self.state.base_path.clone());
+            .and_then(|value| value.to_str().ok())
+            .and_then(normalize_base_path)
+            .unwrap_or(configured_bp);
 
         // ── 2. Strip prefix from URI ─────────────────────────────────────
-        if !bp.is_empty() {
-            let path = req.uri().path().to_string();
-            if let Some(stripped) = path.strip_prefix(bp.as_str()) {
-                let new_path = if stripped.is_empty() || !stripped.starts_with('/') {
-                    format!("/{}", stripped)
-                } else {
-                    stripped.to_string()
-                };
-                let new_uri = if let Some(q) = req.uri().query() {
-                    format!("{}?{}", new_path, q)
-                } else {
-                    new_path
-                };
-                if let Ok(parsed) = new_uri.parse::<Uri>() {
-                    *req.uri_mut() = parsed;
-                }
+        if let Some(stripped) = strip_base_path(req.uri().path(), &bp) {
+            let new_uri = if let Some(query) = req.uri().query() {
+                format!("{stripped}?{query}")
+            } else {
+                stripped.to_owned()
+            };
+            if let Ok(parsed) = new_uri.parse::<Uri>() {
+                *req.uri_mut() = parsed;
             }
         }
 
@@ -178,13 +231,10 @@ where
 
 // ── Extractors ───────────────────────────────────────────────────────────────
 
-impl FromRequestParts<AppState> for BasePath {
+impl<S: Send + Sync> FromRequestParts<S> for BasePath {
     type Rejection = Infallible;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         Ok(parts
             .extensions
             .get::<BasePath>()
@@ -193,13 +243,10 @@ impl FromRequestParts<AppState> for BasePath {
     }
 }
 
-impl FromRequestParts<AppState> for ExternalOrigin {
+impl<S: Send + Sync> FromRequestParts<S> for ExternalOrigin {
     type Rejection = Infallible;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        _state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         Ok(parts
             .extensions
             .get::<ExternalOrigin>()
@@ -216,388 +263,163 @@ pub fn prefixed_redirect(base_path: &str, path: &str) -> Redirect {
     Redirect::to(&format!("{}{}", base_path, path))
 }
 
-/// Build a URL string that respects the resolved base path.
-/// Useful for `format!`-based redirect targets and `HX-Redirect` headers.
-pub fn prefixed(base_path: &str, path: &str) -> String {
-    format!("{}{}", base_path, path)
-}
-
-// ── Root redirect handler ────────────────────────────────────────────────────
+// ── SPA and compatibility redirects ─────────────────────────────────────────
 
 async fn root_redirect(BasePath(base_path): BasePath) -> Redirect {
-    Redirect::to(&format!("{}/app/", base_path))
+    prefixed_redirect(&base_path, "/app/")
 }
 
 async fn app_redirect(BasePath(base_path): BasePath) -> Redirect {
-    Redirect::to(&format!("{}/app/", base_path))
+    prefixed_redirect(&base_path, "/app/")
 }
 
-// ── Router ───────────────────────────────────────────────────────────────────
+async fn login_redirect(BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/login")
+}
 
+async fn setup_redirect(BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/setup")
+}
+
+async fn connectors_redirect(_principal: ApiPrincipal, BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/connectors")
+}
+
+async fn agents_redirect(_principal: ApiPrincipal, BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/agents")
+}
+
+async fn agent_redirect(
+    _principal: ApiPrincipal,
+    Path(agent_id): Path<String>,
+    BasePath(base_path): BasePath,
+) -> Redirect {
+    prefixed_redirect(&base_path, &format!("/app/agents/{agent_id}"))
+}
+
+async fn updates_redirect(_principal: ApiPrincipal, BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/updates")
+}
+
+async fn settings_redirect(_principal: ApiPrincipal, BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/settings")
+}
+
+async fn connections_redirect(_principal: ApiPrincipal, BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/connections")
+}
+
+async fn automations_redirect(_principal: ApiPrincipal, BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/automations")
+}
+
+async fn people_redirect(_principal: ApiPrincipal, BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/people")
+}
+
+async fn about_redirect(_principal: ApiPrincipal, BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/about-you")
+}
+
+async fn feedback_redirect(_principal: ApiPrincipal, BasePath(base_path): BasePath) -> Redirect {
+    prefixed_redirect(&base_path, "/app/feedback")
+}
+
+// The web layer serves only the React shell and backward-compatible GET
+// redirects. Every read and mutation is owned by a versioned JSON API.
 pub fn router(state: AppState) -> Router<AppState> {
     let ui_dir = spa::ui_dir();
     Router::new()
-        // Public routes (no auth required)
-        .route("/login", get(auth::login_page).post(auth::login_submit))
-        .route("/logout", post(auth::logout))
-        .route("/setup", get(auth::setup_page).post(auth::setup_submit))
-        // Root redirect
         .route("/", get(root_redirect))
-        // All routes below require AuthUser extractor (session cookie)
-        // Conversation SPA. The shell is authenticated; static assets contain
-        // no user data and can be cached independently.
+        .route("/login", get(login_redirect))
+        .route("/setup", get(setup_redirect))
         .route("/app", get(app_redirect))
-        .route("/app/", get(spa::app_index))
-        .nest_service("/app/assets", ServeDir::new(format!("{ui_dir}/assets")))
-        // Pipes (unified: all pipe types including iMessage, webhook, web, etc.)
-        .route("/pipes", get(pipes::pipes_index))
-        .route("/pipes/new", get(pipes::pipes_new))
-        .route("/pipes/new/{pipe_type}", get(pipes::pipes_new_redirect))
-        .route("/pipes/webhook/new", get(pipes::pipes_webhook_new))
-        .route("/pipes/webhook", post(pipes::pipes_webhook_create))
-        .route("/pipes/web/new", get(pipes::pipes_web_new))
-        .route("/pipes/web", post(pipes::pipes_web_create))
-        .route("/pipes/{pipe_id}", delete(pipes::pipes_delete))
-        // Pipes: iMessage setup & management
-        .route(
-            "/pipes/imessage/setup",
-            get(integrations::imessage_setup_page).post(integrations::imessage_setup_submit),
-        )
-        .route(
-            "/pipes/imessage/proxy/chats",
-            post(integrations::bb_proxy_chats),
-        )
-        .route(
-            "/pipes/imessage/{config_id}",
-            get(integrations::imessage_detail).delete(integrations::imessage_delete),
-        )
-        .route(
-            "/pipes/imessage/{config_id}/people",
-            post(integrations::imessage_add_person),
-        )
-        .route(
-            "/pipes/imessage/{config_id}/people/{ref_id}",
-            delete(integrations::imessage_remove_person),
-        )
-        // Pipes: Telegram setup & management
-        .route(
-            "/pipes/telegram/setup",
-            get(telegram::telegram_setup_page).post(telegram::telegram_setup_submit),
-        )
-        .route(
-            "/pipes/telegram/proxy/chats",
-            post(telegram::tg_proxy_chats),
-        )
-        .route(
-            "/pipes/telegram/{config_id}",
-            get(telegram::telegram_detail),
-        )
-        .route(
-            "/pipes/telegram/{config_id}/delete",
-            post(telegram::telegram_delete),
-        )
-        .route(
-            "/pipes/telegram/{config_id}/webhook-check",
-            get(telegram::telegram_check_webhook),
-        )
-        .route(
-            "/pipes/telegram/{config_id}/webhook-reregister",
-            post(telegram::telegram_reregister_webhook),
-        )
-        .route(
-            "/pipes/telegram/{config_id}/people",
-            post(telegram::telegram_add_person),
-        )
-        .route(
-            "/pipes/telegram/{config_id}/people/{ref_id}",
-            delete(telegram::telegram_remove_person),
-        )
-        // Pipes: WhatsApp setup & management
-        .route(
-            "/pipes/whatsapp/setup",
-            get(whatsapp::whatsapp_setup_page).post(whatsapp::whatsapp_setup_submit),
-        )
-        .route(
-            "/pipes/whatsapp/chats/search",
-            get(whatsapp::whatsapp_search_chats),
-        )
-        .route(
-            "/pipes/whatsapp/{config_id}",
-            get(whatsapp::whatsapp_detail),
-        )
-        .route(
-            "/pipes/whatsapp/{config_id}/delete",
-            post(whatsapp::whatsapp_delete),
-        )
-        .route(
-            "/pipes/whatsapp/{config_id}/people",
-            post(whatsapp::whatsapp_add_person),
-        )
-        .route(
-            "/pipes/whatsapp/{config_id}/people/{ref_id}",
-            delete(whatsapp::whatsapp_remove_person),
-        )
-        // Agents (marketplace, install, setup, model assignment)
-        .route("/agents", get(agents::agents_index))
-        .route("/agents/check-updates", post(agents::check_agent_updates))
-        .route("/agents/install", post(agents::install_agent))
-        .route("/agents/update/wizard", post(agents::update_wizard))
-        .route("/agents/update", post(agents::update_agent))
-        .route("/agents/update/start", post(agents::start_agent_update))
-        .route(
-            "/agents/update/status/{job_id}",
-            get(agents::agent_update_status),
-        )
-        .route("/agents/default-model", post(agents::set_default_model))
-        .route(
-            "/agents/default-image-model",
-            post(agents::set_default_image_model),
-        )
-        .route("/agents/{agent_id}", get(agents::agent_detail))
-        .route(
-            "/agents/{agent_id}/storage",
-            get(agents::agent_detail_storage),
-        )
-        .route(
-            "/agents/{agent_id}/memory",
-            get(agents::agent_detail_memory),
-        )
-        .route(
-            "/agents/{agent_id}/network",
-            get(agents::agent_detail_network),
-        )
-        .route(
-            "/agents/{agent_id}/network/access",
-            post(agents::set_network_access_handler),
-        )
-        .route(
-            "/agents/{agent_id}/network/host",
-            post(agents::set_network_host_policy_handler),
-        )
-        .route(
-            "/agents/{agent_id}/network/host/delete",
-            post(agents::delete_network_host_handler),
-        )
-        .route(
-            "/agents/{agent_id}/permissions",
-            get(agents::agent_detail_permissions),
-        )
-        .route(
-            "/agents/{agent_id}/improvement",
-            get(agents::agent_detail_improvement),
-        )
-        .route(
-            "/agents/{agent_id}/improvement/pause",
-            post(agents::improvement_pause_handler),
-        )
-        .route(
-            "/agents/{agent_id}/improvement/reject",
-            post(agents::improvement_reject_handler),
-        )
-        .route(
-            "/agents/{agent_id}/improvement/activate",
-            post(agents::improvement_activate_handler),
-        )
-        .route(
-            "/agents/{agent_id}/improvement/reset",
-            post(agents::improvement_reset_handler),
-        )
-        .route(
-            "/agents/{agent_id}/secrets",
-            get(agents::agent_detail_secrets),
-        )
-        .route(
-            "/agents/{agent_id}/tool-loop-limit",
-            post(agents::set_runtime_settings_handler),
-        )
-        .route(
-            "/agents/{agent_id}/runtime-settings",
-            post(agents::set_runtime_settings_handler),
-        )
-        .route(
-            "/agents/{agent_id}/capabilities/{capability_id}/image/download",
-            post(agents::download_capability_image),
-        )
-        .route(
-            "/agents/{agent_id}/setup",
-            get(agents::setup_wizard).post(agents::setup_submit),
-        )
-        .route(
-            "/agents/{agent_id}/setup/test/{step_id}",
-            post(agents::setup_test),
-        )
-        .route(
-            "/agents/{agent_id}/model",
-            post(agents::set_agent_model_handler),
-        )
-        .route(
-            "/agents/{agent_id}/image-model",
-            post(agents::set_agent_image_model_handler),
-        )
-        .route(
-            "/agents/{agent_id}/policy",
-            post(agents::set_tool_policy_handler),
-        )
-        .route(
-            "/agents/{agent_id}/policy/reset",
-            post(agents::reset_tool_policy_handler),
-        )
-        .route(
-            "/agents/{agent_id}/uninstall",
-            post(agents::uninstall_agent),
-        )
-        .route(
-            "/agents/{agent_id}/auto-update",
-            post(agents::toggle_auto_update),
-        )
-        .route("/agents/{agent_id}/rate", post(agents::rate_agent))
-        .route(
-            "/agents/{agent_id}/credential",
-            post(agents::agent_credential_set),
-        )
-        .route(
-            "/agents/{agent_id}/credential/{scope}/{cap_id}/{name}",
-            delete(agents::agent_credential_delete),
-        )
-        .route(
-            "/agents/{agent_id}/storage/delete",
-            post(agents::agent_storage_delete),
-        )
-        .route(
-            "/agents/{agent_id}/memory/delete",
-            post(agents::agent_memory_delete),
-        )
-        .route(
-            "/agents/{agent_id}/automation",
-            post(agents::agent_automation_toggle),
-        )
-        .route(
-            "/agents/models/{provider_id}",
-            get(agents::models_for_provider),
-        )
-        // Credentials
-        // Cache management
-        .route("/cache", get(cache::cache_index))
-        .route("/cache/{id}", delete(cache::cache_delete))
-        // Credentials
-        .route("/credentials", get(credentials::credentials_index))
-        .route(
-            "/credentials/system",
-            post(credentials::credentials_set_system),
-        )
-        .route(
-            "/credentials/system/{cap_id}/{name}",
-            delete(credentials::credentials_delete_system),
-        )
-        .route("/credentials/user", post(credentials::credentials_set_user))
-        .route(
-            "/credentials/user/{user_id}/{cap_id}/{name}",
-            delete(credentials::credentials_delete_user),
-        )
-        // Providers
-        .route("/providers", get(providers::providers_index))
-        .route("/providers/new", get(providers::providers_new))
-        .route(
-            "/providers/new/{provider_id}",
-            get(providers::providers_setup_page).post(providers::providers_setup_submit),
-        )
-        .route(
-            "/providers/{provider_id}/disconnect",
-            post(providers::providers_disconnect),
-        )
-        // System updates
-        .route("/system-updates", get(system_updates::updates_index))
-        .route(
-            "/system-updates/channel",
-            post(system_updates::updates_set_channel),
-        )
-        .route(
-            "/system-updates/public-origin",
-            post(system_updates::updates_set_public_origin),
-        )
-        .route(
-            "/system-updates/public-origin/apply-current",
-            post(system_updates::updates_apply_current_host),
-        )
-        .route(
-            "/system-updates/check",
-            post(system_updates::updates_check_now),
-        )
-        .route(
-            "/system-updates/job-status",
-            get(system_updates::updates_job_status),
-        )
-        .route(
-            "/system-updates/apply",
-            post(system_updates::updates_apply_now),
-        )
-        .route(
-            "/system-updates/apply/start",
-            post(system_updates::updates_apply_start),
-        )
-        .route(
-            "/system-updates/rollback",
-            post(system_updates::updates_rollback_now),
-        )
-        .route(
-            "/system-updates/rollback/start",
-            post(system_updates::updates_rollback_start),
-        )
-        .route(
-            "/system-updates/auto-update",
-            post(system_updates::updates_toggle_auto_update),
-        )
-        .route(
-            "/system-updates/installation-telemetry",
-            post(system_updates::updates_toggle_installation_telemetry),
-        )
-        .route(
-            "/system-updates/push-notifications",
-            post(system_updates::updates_toggle_push_notifications),
-        )
-        // Schedules
-        .route(
-            "/schedules",
-            get(schedules::schedules_index).post(schedules::schedules_create),
-        )
-        .route(
-            "/schedules/{id}",
-            delete(schedules::schedules_delete).post(schedules::schedules_update),
-        )
-        .route("/schedules/{id}/toggle", post(schedules::schedules_toggle))
-        .route(
-            "/schedules/{id}/pipes",
-            post(schedules::schedules_update_pipes),
-        )
-        .route("/user/timezone", post(schedules::user_set_timezone))
-        // Users
-        .route("/users", get(users::users_index).post(users::users_create))
-        .route("/users/change-password", post(users::users_change_password))
-        .route("/users/{id}", delete(users::users_delete))
-        .route("/users/{id}/toggle-admin", post(users::users_toggle_admin))
-        .route("/users/{id}/language", post(users::users_set_language))
-        .route("/users/{id}/agents", post(users::users_set_agents))
-        // Personality
-        .route(
-            "/personality",
-            get(personality::personality_index).post(personality::personality_add),
-        )
-        .route(
-            "/personality/{id}",
-            delete(personality::personality_delete).put(personality::personality_update),
-        )
-        .route(
-            "/personality/{id}/edit",
-            get(personality::personality_edit_form),
-        )
-        .route("/personality/{id}/row", get(personality::personality_row))
-        // Feedback
-        .route(
-            "/feedback",
-            get(feedback::feedback_page).post(feedback::feedback_submit),
-        )
-        // Mobile app setup
-        .route("/mobile", get(mobile::mobile_page))
-        .route("/mobile/setup-token", post(mobile::create_setup_token))
+        .merge(spa::router(ui_dir))
+        .route("/pipes", get(connectors_redirect))
+        .route("/pipes/new", get(connectors_redirect))
+        .route("/pipes/new/{pipe_type}", get(connectors_redirect))
+        .route("/pipes/webhook/new", get(connectors_redirect))
+        .route("/pipes/web/new", get(connectors_redirect))
+        .route("/pipes/imessage/setup", get(connectors_redirect))
+        .route("/pipes/imessage/{config_id}", get(connectors_redirect))
+        .route("/pipes/telegram/setup", get(connectors_redirect))
+        .route("/pipes/telegram/{config_id}", get(connectors_redirect))
+        .route("/pipes/whatsapp/setup", get(connectors_redirect))
+        .route("/pipes/whatsapp/{config_id}", get(connectors_redirect))
+        .route("/agents", get(agents_redirect))
+        .route("/agents/{agent_id}", get(agent_redirect))
+        .route("/agents/{agent_id}/storage", get(agent_redirect))
+        .route("/agents/{agent_id}/memory", get(agent_redirect))
+        .route("/agents/{agent_id}/network", get(agent_redirect))
+        .route("/agents/{agent_id}/permissions", get(agent_redirect))
+        .route("/agents/{agent_id}/improvement", get(agent_redirect))
+        .route("/agents/{agent_id}/secrets", get(agent_redirect))
+        .route("/agents/{agent_id}/setup", get(agent_redirect))
+        .route("/subscriptions", get(agents_redirect))
+        .route("/system-updates", get(updates_redirect))
+        .route("/cache", get(settings_redirect))
+        .route("/credentials", get(settings_redirect))
+        .route("/mobile", get(settings_redirect))
+        .route("/providers", get(connections_redirect))
+        .route("/providers/new", get(connections_redirect))
+        .route("/providers/new/{provider_id}", get(connections_redirect))
+        .route("/schedules", get(automations_redirect))
+        .route("/users", get(people_redirect))
+        .route("/personality", get(about_redirect))
+        .route("/personality/{id}/edit", get(about_redirect))
+        .route("/personality/{id}/row", get(about_redirect))
+        .route("/feedback", get(feedback_redirect))
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_base_path, strip_base_path};
+
+    #[test]
+    fn validates_and_canonicalizes_base_paths() {
+        assert_eq!(normalize_base_path(""), Some(String::new()));
+        assert_eq!(normalize_base_path("/"), Some(String::new()));
+        assert_eq!(normalize_base_path("/selu/"), Some("/selu".to_owned()));
+        assert_eq!(
+            normalize_base_path("/tenant/selu"),
+            Some("/tenant/selu".to_owned())
+        );
+        assert_eq!(
+            normalize_base_path("/tenant%20one/selu"),
+            Some("/tenant%20one/selu".to_owned())
+        );
+    }
+
+    #[test]
+    fn rejects_malicious_or_ambiguous_base_paths() {
+        for prefix in [
+            "selu",
+            "/selu//nested",
+            "/selu/../admin",
+            "/selu/./app",
+            "/selu?<script>",
+            "/selu#fragment",
+            "/selu\\app",
+            "/selu/\"onload=alert(1)",
+            "/selu/%xx",
+            "/selu/%2e%2e/admin",
+            "/selu/%2Fadmin",
+            "/selu/%22onload",
+        ] {
+            assert_eq!(normalize_base_path(prefix), None, "{prefix}");
+        }
+    }
+
+    #[test]
+    fn strips_prefixes_only_at_segment_boundaries() {
+        assert_eq!(strip_base_path("/selu", "/selu"), Some("/"));
+        assert_eq!(
+            strip_base_path("/selu/app/login", "/selu"),
+            Some("/app/login")
+        );
+        assert_eq!(strip_base_path("/selux/app/login", "/selu"), None);
+        assert_eq!(strip_base_path("/sel", "/selu"), None);
+        assert_eq!(strip_base_path("/app/login", "/selu"), None);
+    }
 }

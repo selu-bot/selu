@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE users SET\n             username = COALESCE(?, username),\n             display_name = COALESCE(?, display_name),\n             is_admin = COALESCE(?, is_admin),\n             language = COALESCE(?, language),\n             timezone = COALESCE(?, timezone)\n           WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "e9908e2c7a3bca7889b7075f5caee1fd3790307757ab79489732ab2fcaa19176"
+}

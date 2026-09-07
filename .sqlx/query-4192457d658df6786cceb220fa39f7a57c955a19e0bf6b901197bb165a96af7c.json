@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM agent_events WHERE source_session_id IN (SELECT id FROM sessions WHERE user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "4192457d658df6786cceb220fa39f7a57c955a19e0bf6b901197bb165a96af7c"
+}

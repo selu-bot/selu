@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM workspaces WHERE session_id IN (SELECT id FROM sessions WHERE user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "11d3981a681b792bebae1dce532b123b437b724e9706e4faed181ca494e2d257"
+}

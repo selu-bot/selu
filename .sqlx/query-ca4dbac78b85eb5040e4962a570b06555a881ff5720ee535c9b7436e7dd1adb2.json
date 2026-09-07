@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT agent_id FROM user_agent_access WHERE user_id = ? ORDER BY agent_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "agent_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_agent_access",
+            "name": "agent_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ca4dbac78b85eb5040e4962a570b06555a881ff5720ee535c9b7436e7dd1adb2"
+}

@@ -1,2 +1,11 @@
+pub mod accounts;
+pub mod agents;
 pub mod auth;
+pub mod automations;
+pub mod cache_admin;
 pub mod conversations;
+pub mod feedback;
+pub mod jobs;
+pub mod pipes;
+pub mod provider_admin;
+pub mod system_updates;

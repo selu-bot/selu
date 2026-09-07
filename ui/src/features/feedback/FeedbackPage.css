@@ -1,0 +1,4 @@
+.feedback-success { display: grid; min-height: 260px; place-items: center; align-content: center; gap: 12px; text-align: center; }
+.feedback-success > svg { width: 52px; height: 52px; padding: 13px; border-radius: 18px; color: var(--coral-deep); background: color-mix(in srgb, var(--blush) 14%, var(--panel)); }
+.feedback-success p { max-width: 340px; margin: 0; color: var(--ink-soft); line-height: 1.55; }
+.feedback-success span { color: var(--muted); font: 700 12px ui-monospace, SFMono-Regular, Menlo, monospace; }

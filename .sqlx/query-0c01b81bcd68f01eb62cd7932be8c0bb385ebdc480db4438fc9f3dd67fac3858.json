@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM telegram_configs WHERE pipe_id IN (SELECT id FROM pipes WHERE user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "0c01b81bcd68f01eb62cd7932be8c0bb385ebdc480db4438fc9f3dd67fac3858"
+}

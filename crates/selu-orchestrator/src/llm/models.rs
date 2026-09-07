@@ -56,6 +56,7 @@ pub async fn list_models(
 ///
 /// Used both as fallback when live API fails and for resolving display names
 /// without making API calls (e.g. in page rendering).
+#[allow(dead_code)]
 pub fn static_fallback(provider_id: &str) -> Vec<ModelInfo> {
     static_models(provider_id)
 }

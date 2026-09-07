@@ -25,6 +25,10 @@ export const CONVERSATION_PAGE_SIZE = 40
 
 export type Run = { id: string; client_message_id: string; status: string }
 export type Session = { display_name: string; is_admin: boolean; language: string }
+export type AuthUser = { user_id?: string; display_name?: string; username?: string; is_admin?: boolean; language?: string }
+export type AuthState = { status: 'setup_required' | 'anonymous' | 'authenticated'; user?: AuthUser }
+export type LoginInput = { username: string; password: string }
+export type SetupInput = { display_name: string; username: string; password: string; language: 'en' | 'de' }
 export type Approval = { approval_id: string; tool_name: string; message?: string; arguments?: unknown }
 export type TurnRating = 1 | -1
 export type SlashCommand = { command: string; label: string; description: string; argument_hint: string | null }
@@ -37,8 +41,9 @@ export type ConversationEvent = {
   payload: Record<string, unknown>
 }
 
-const basePath = document.querySelector('meta[name="selu-base-path"]')?.getAttribute('content') ?? ''
-export const appPath = (path: string) => `${basePath}${path}`
+import { appPath } from './shared/paths'
+
+export { appPath } from './shared/paths'
 
 export class ApiError extends Error {
   constructor(public readonly status: number, public readonly code?: string) {
@@ -46,7 +51,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(appPath(path), {
     credentials: 'same-origin',
     redirect: 'follow',
@@ -58,34 +63,42 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(401, 'session.expired')
   }
   if (!response.ok) {
-    const detail = await response.json().catch(() => undefined) as { code?: string } | undefined
-    throw new ApiError(response.status, detail?.code)
+    const detail = await response.json().catch(() => undefined) as { code?: string; error?: { code?: string } } | undefined
+    throw new ApiError(response.status, detail?.code ?? detail?.error?.code)
   }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>
 }
 
 export const api = {
-  session: () => request<Session>('/api/v1/session'),
-  listConversations: (before?: string) => request<ConversationPage>(
+  authState: () => apiRequest<AuthState>('/api/v1/auth/state'),
+  login: (input: LoginInput) => apiRequest<AuthState>('/api/v1/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  }),
+  setup: (input: SetupInput) => apiRequest<AuthState>('/api/v1/auth/setup', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  }),
+  logout: () => apiRequest<void>('/api/v1/auth/logout', { method: 'POST' }),
+  session: () => apiRequest<Session>('/api/v1/session'),
+  listConversations: (before?: string) => apiRequest<ConversationPage>(
     `/api/v1/conversations?limit=${CONVERSATION_PAGE_SIZE}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
   ),
-  renameConversation: (id: string, title: string) => request<Conversation>(`/api/v1/conversations/${id}`, {
+  renameConversation: (id: string, title: string) => apiRequest<Conversation>(`/api/v1/conversations/${id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
   }),
-  deleteConversation: (id: string) => request<void>(`/api/v1/conversations/${id}`, { method: 'DELETE' }),
-  snapshot: (id: string) => request<Snapshot>(`/api/v1/conversations/${id}`),
-  createConversation: () => request<Conversation>('/api/v1/conversations', {
+  deleteConversation: (id: string) => apiRequest<void>(`/api/v1/conversations/${id}`, { method: 'DELETE' }),
+  snapshot: (id: string) => apiRequest<Snapshot>(`/api/v1/conversations/${id}`),
+  createConversation: () => apiRequest<Conversation>('/api/v1/conversations', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
   }),
-  send: (id: string, text: string, clientMessageId: string) => request<{ run: Run }>(
+  send: (id: string, text: string, clientMessageId: string) => apiRequest<{ run: Run }>(
     `/api/v1/conversations/${id}/messages`,
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, client_message_id: clientMessageId }) },
   ),
-  decideApproval: (id: string, approved: boolean) => request<void>(`/api/v1/approvals/${id}/decision`, {
+  decideApproval: (id: string, approved: boolean) => apiRequest<void>(`/api/v1/approvals/${id}/decision`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approved }),
   }),
-  commands: (lang: string) => request<{ commands: SlashCommand[] }>(`/api/v1/commands?lang=${encodeURIComponent(lang)}`),
-  rateLatestTurn: (id: string, rating: TurnRating) => request<void>(`/api/v1/conversations/${id}/feedback`, {
+  commands: (lang: string) => apiRequest<{ commands: SlashCommand[] }>(`/api/v1/commands?lang=${encodeURIComponent(lang)}`),
+  rateLatestTurn: (id: string, rating: TurnRating) => apiRequest<void>(`/api/v1/conversations/${id}/feedback`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating }),
   }),
   events: openEvents,

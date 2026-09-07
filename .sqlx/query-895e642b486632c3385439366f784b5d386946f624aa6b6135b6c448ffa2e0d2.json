@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs\n               SET status = ?, message_code = ?,\n                   started_at = CASE WHEN ? = 1 THEN COALESCE(started_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ELSE started_at END,\n                   completed_at = CASE WHEN ? = 1 THEN COALESCE(completed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ELSE NULL END,\n                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')\n               WHERE id = ? AND status = ? AND (? = 1 OR owner_user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "895e642b486632c3385439366f784b5d386946f624aa6b6135b6c448ffa2e0d2"
+}

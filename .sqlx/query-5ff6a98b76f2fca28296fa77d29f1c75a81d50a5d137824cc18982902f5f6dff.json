@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM messages\n           WHERE thread_id IN (SELECT id FROM threads WHERE user_id = ?)\n              OR session_id IN (SELECT id FROM sessions WHERE user_id = ?)\n              OR pipe_id IN (SELECT id FROM pipes WHERE user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "5ff6a98b76f2fca28296fa77d29f1c75a81d50a5d137824cc18982902f5f6dff"
+}

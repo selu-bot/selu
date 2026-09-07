@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT capability_id, credential_name, created_at\n         FROM system_credentials\n         WHERE capability_id = ? AND credential_name = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "capability_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "system_credentials",
+            "name": "capability_id"
+          }
+        }
+      },
+      {
+        "name": "credential_name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "system_credentials",
+            "name": "credential_name"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "system_credentials",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b45829a3bae6f4c8070a2683a9099d81177c42622d727c37ab727aff5b5b436e"
+}
