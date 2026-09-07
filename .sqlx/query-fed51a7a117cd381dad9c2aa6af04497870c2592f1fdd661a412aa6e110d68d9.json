@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT capability_id, credential_name, created_at\n         FROM system_credentials\n         WHERE capability_id = ?\n         ORDER BY credential_name",
+  "describe": {
+    "columns": [
+      {
+        "name": "capability_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "system_credentials",
+            "name": "capability_id"
+          }
+        }
+      },
+      {
+        "name": "credential_name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "system_credentials",
+            "name": "credential_name"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "system_credentials",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fed51a7a117cd381dad9c2aa6af04497870c2592f1fdd661a412aa6e110d68d9"
+}

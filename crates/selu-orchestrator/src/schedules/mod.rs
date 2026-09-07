@@ -123,9 +123,17 @@ fn shift_dow(n: u8) -> u8 {
     }
 }
 
-/// Parse a cron expression, adjusting the weekday field for the crate's convention.
+/// Parse a cron expression, accepting either the familiar five-field format
+/// (minute hour day-of-month month day-of-week) or the scheduler's native
+/// six-field format with seconds. Five-field input runs at second zero.
 fn parse_cron(cron_expr: &str) -> Result<CronSchedule> {
-    let adjusted = adjust_weekday_field(cron_expr)?;
+    let fields: Vec<&str> = cron_expr.split_whitespace().collect();
+    let normalized = if fields.len() == 5 {
+        format!("0 {}", fields.join(" "))
+    } else {
+        fields.join(" ")
+    };
+    let adjusted = adjust_weekday_field(&normalized)?;
     CronSchedule::from_str(&adjusted)
         .map_err(|e| anyhow::anyhow!("Invalid cron expression '{}': {}", cron_expr, e))
 }
@@ -445,47 +453,6 @@ pub async fn toggle_schedule(db: &SqlitePool, schedule_id: &str, user_id: &str) 
                 Err(e) => error!("Failed to recompute next_run for {}: {}", schedule_id, e),
             }
         }
-    }
-
-    Ok(true)
-}
-
-/// Update the pipe associations for a schedule.
-pub async fn update_pipes(
-    db: &SqlitePool,
-    schedule_id: &str,
-    user_id: &str,
-    pipe_ids: &[String],
-) -> Result<bool> {
-    // Verify ownership
-    let exists = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM schedules WHERE id = ? AND user_id = ?",
-        schedule_id,
-        user_id,
-    )
-    .fetch_one(db)
-    .await?;
-
-    if exists == 0 {
-        return Ok(false);
-    }
-
-    // Replace all pipe associations
-    sqlx::query!(
-        "DELETE FROM schedule_pipes WHERE schedule_id = ?",
-        schedule_id
-    )
-    .execute(db)
-    .await?;
-
-    for pipe_id in pipe_ids {
-        sqlx::query!(
-            "INSERT INTO schedule_pipes (schedule_id, pipe_id) VALUES (?, ?)",
-            schedule_id,
-            pipe_id,
-        )
-        .execute(db)
-        .await?;
     }
 
     Ok(true)
@@ -970,8 +937,22 @@ mod tests {
 
     #[test]
     fn test_validate_cron_valid() {
+        assert!(validate_cron("45 6 * * 1-5").is_ok());
         assert!(validate_cron("0 45 6 * * 1-5").is_ok());
         assert!(validate_cron("0 0 */2 * * *").is_ok());
+    }
+
+    #[test]
+    fn test_five_field_cron_matches_six_field_cron() {
+        let after = chrono::NaiveDate::from_ymd_opt(2026, 4, 17)
+            .unwrap()
+            .and_hms_opt(22, 0, 0)
+            .unwrap()
+            .and_utc();
+        assert_eq!(
+            compute_next_run("0 21 * * 1-5", "UTC", after).unwrap(),
+            compute_next_run("0 0 21 * * 1-5", "UTC", after).unwrap(),
+        );
     }
 
     #[test]

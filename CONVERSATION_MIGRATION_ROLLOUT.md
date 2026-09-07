@@ -33,9 +33,8 @@ are no longer registered.
   directly to the post-tool answer.
 - The React/Vite SPA is built into the orchestrator Docker image and served at
   `/app/`, including deployments behind `SELU__BASE_PATH`.
-- The SPA and remaining settings UI link to each other. Administrator-only
-  destinations are derived from `/api/v1/session`; credentials never enter
-  browser storage.
+- The SPA owns every browser surface. Administrator-only destinations are derived
+  from `/api/v1/session`; credentials never enter browser storage.
 - The chat UI has responsive navigation, light/dark themes, English/German
   copy, accessible expandable activity/tool details, reduced-motion support,
   optimistic sending, reconnect-aware scrolling, and inline approval cards.
@@ -67,8 +66,8 @@ restart-safe workflow is the next API extension.
    deploying. Confirm `/api/health`, then authenticate and call the v1 list and
    snapshot endpoints.
 5. **Web smoke test.** Open `/app/` through the production reverse proxy and
-   test it with the same base path customers use. Verify every settings link
-   and the settings-to-chat return link before testing execution.
+   test it with the same base path customers use. Verify every canonical SPA
+   section and each compatibility GET redirect before testing execution.
 6. **Internal/TestFlight iOS build.** Test the v1 chat surface against that
    deployed backend. Because there is no fallback protocol, a failing test is a
    deployment rollback, not a feature-flag change.

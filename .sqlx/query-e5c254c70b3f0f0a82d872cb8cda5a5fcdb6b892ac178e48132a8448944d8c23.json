@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE user_credentials SET expires_at = NULL\n         WHERE user_id = ? AND capability_id = ? AND credential_name = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "e5c254c70b3f0f0a82d872cb8cda5a5fcdb6b892ac178e48132a8448944d8c23"
+}

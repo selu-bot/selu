@@ -1,0 +1,39 @@
+.app-page-shell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--canvas);
+  transition: grid-template-columns .35s cubic-bezier(.2, .8, .2, 1);
+}
+
+.app-page-shell.nav-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
+.app-page-surface { min-width: 0; display: flex; flex-direction: column; }
+.app-page-topbar {
+  display: none;
+  min-height: 64px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--canvas) 84%, transparent);
+  backdrop-filter: blur(22px);
+  z-index: 4;
+}
+.app-page-topbar .brand-word { display: none; }
+.app-page-scroll { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: clamp(24px, 4vw, 56px); }
+
+@media (max-width: 1060px) and (min-width: 721px) {
+  .app-page-shell { grid-template-columns: 76px minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .app-page-shell, .app-page-shell.nav-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .app-page-topbar { display: flex; }
+  .app-page-scroll { padding: 22px 16px 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-page-shell { transition: none; }
+}

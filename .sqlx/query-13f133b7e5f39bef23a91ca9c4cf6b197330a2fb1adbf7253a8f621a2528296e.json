@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM pipes WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "13f133b7e5f39bef23a91ca9c4cf6b197330a2fb1adbf7253a8f621a2528296e"
+}

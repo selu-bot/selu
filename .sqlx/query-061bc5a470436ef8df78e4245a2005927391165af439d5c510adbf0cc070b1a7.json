@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE schedules SET agent_id = ?, one_shot = 0 WHERE id = ? AND user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "061bc5a470436ef8df78e4245a2005927391165af439d5c510adbf0cc070b1a7"
+}

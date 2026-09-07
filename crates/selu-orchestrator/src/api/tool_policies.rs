@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use tracing::error;
 
+use crate::api::auth::{ApiPrincipal, forbidden};
 use crate::permissions::tool_policy::{self, ToolPolicy};
 use crate::state::AppState;
 
@@ -83,9 +84,17 @@ pub struct ApprovalAction {
 /// Returns global defaults and, if `user_id` is provided, any per-user
 /// overrides.  Each entry includes a `scope` field.
 pub async fn list_policies(
+    principal: ApiPrincipal,
     Query(q): Query<PoliciesQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    let user_id = match q.user_id.as_deref() {
+        Some(requested) => match principal.user_scope(requested) {
+            Ok(user_id) => Some(user_id),
+            Err(_) => return forbidden(),
+        },
+        None => None,
+    };
     let mut resp: Vec<PolicyResponse> = Vec::new();
 
     // Always return global defaults
@@ -107,7 +116,7 @@ pub async fn list_policies(
     }
 
     // If user_id provided, also return per-user overrides
-    if let Some(ref user_id) = q.user_id {
+    if let Some(ref user_id) = user_id {
         match tool_policy::get_policies_for_agent(&state.db, user_id, &q.agent_id).await {
             Ok(overrides) => {
                 for p in overrides {
@@ -134,6 +143,7 @@ pub async fn list_policies(
 /// If `user_id` is provided, saves per-user overrides.
 /// If `user_id` is omitted, saves global defaults.
 pub async fn bulk_set_policies(
+    principal: ApiPrincipal,
     State(state): State<AppState>,
     Json(req): Json<BulkPolicyRequest>,
 ) -> impl IntoResponse {
@@ -148,10 +158,17 @@ pub async fn bulk_set_policies(
         .collect();
 
     let result = match req.user_id {
-        Some(ref user_id) => {
-            tool_policy::set_policies(&state.db, user_id, &req.agent_id, &policies).await
+        Some(ref requested_user_id) => {
+            let user_id = match principal.user_scope(requested_user_id) {
+                Ok(user_id) => user_id,
+                Err(_) => return forbidden(),
+            };
+            tool_policy::set_policies(&state.db, &user_id, &req.agent_id, &policies).await
         }
-        None => tool_policy::set_global_policies(&state.db, &req.agent_id, &policies).await,
+        None if principal.is_admin => {
+            tool_policy::set_global_policies(&state.db, &req.agent_id, &policies).await
+        }
+        None => return forbidden(),
     };
 
     match result {
@@ -167,12 +184,17 @@ pub async fn bulk_set_policies(
 ///
 /// Removes a per-user override, reverting to the global default.
 pub async fn delete_user_policy(
+    principal: ApiPrincipal,
     State(state): State<AppState>,
     Json(req): Json<DeletePolicyRequest>,
 ) -> impl IntoResponse {
+    let user_id = match principal.user_scope(&req.user_id) {
+        Ok(user_id) => user_id,
+        Err(_) => return forbidden(),
+    };
     match tool_policy::delete_user_policy(
         &state.db,
-        &req.user_id,
+        &user_id,
         &req.agent_id,
         &req.capability_id,
         &req.tool_name,
@@ -189,9 +211,14 @@ pub async fn delete_user_policy(
 
 /// GET /api/approvals?user_id=X&status=pending
 pub async fn list_approvals(
+    principal: ApiPrincipal,
     Query(q): Query<ApprovalQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    let user_id = match principal.user_scope(&q.user_id) {
+        Ok(user_id) => user_id,
+        Err(_) => return forbidden(),
+    };
     let status = q.status.as_deref().unwrap_or("pending");
 
     let rows = sqlx::query(
@@ -200,7 +227,7 @@ pub async fn list_approvals(
          WHERE user_id = ? AND status = ?
          ORDER BY created_at DESC",
     )
-    .bind(&q.user_id)
+    .bind(&user_id)
     .bind(status)
     .fetch_all(&state.db)
     .await;
@@ -231,10 +258,29 @@ pub async fn list_approvals(
 
 /// POST /api/approvals/{id}?approved=true|false
 pub async fn resolve_approval(
+    principal: ApiPrincipal,
     Path(approval_id): Path<String>,
     Query(action): Query<ApprovalAction>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    let owner = match sqlx::query_scalar::<_, String>(
+        "SELECT user_id FROM pending_tool_approvals WHERE id = ?",
+    )
+    .bind(&approval_id)
+    .fetch_optional(&state.db)
+    .await
+    {
+        Ok(Some(owner)) => owner,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => {
+            error!("Failed to resolve approval owner: {error}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    if principal.user_scope(&owner).is_err() {
+        return forbidden();
+    }
+
     let approved = action.approved.unwrap_or(false);
     let new_status = if approved { "approved" } else { "denied" };
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE llm_providers\n         SET api_key_encrypted = NULL, base_url = NULL, active = 0\n         WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "70fea565b8eeac46eda58822ca34c8f6d297d7b4161984ffbf1d75d87ceaa402"
+}

@@ -22,6 +22,16 @@ pub fn router() -> Router<AppState> {
     Router::new().route("/api/pipes/{pipe_id}/inbound", post(handle_inbound))
 }
 
+#[derive(sqlx::FromRow)]
+struct InboundPipe {
+    transport: String,
+    inbound_token_encrypted: Option<String>,
+    outbound_url: String,
+    outbound_auth_encrypted: Option<String>,
+    default_agent_id: Option<String>,
+    active: i64,
+}
+
 /// Resolve a sender_ref to a user_id via the user_sender_refs table.
 /// Returns None if the sender is not registered for this pipe (message should be ignored).
 async fn resolve_sender(
@@ -105,11 +115,12 @@ async fn handle_inbound(
 
     let pipe_id_str = pipe_id.to_string();
 
-    let pipe = match sqlx::query!(
-        "SELECT id, transport, inbound_token, outbound_url, outbound_auth, default_agent_id, active
+    let pipe = match sqlx::query_as::<_, InboundPipe>(
+        "SELECT transport, inbound_token_encrypted, outbound_url, \
+                outbound_auth_encrypted, default_agent_id, active \
          FROM pipes WHERE id = ?",
-        pipe_id_str
     )
+    .bind(&pipe_id_str)
     .fetch_optional(&state.db)
     .await
     {
@@ -124,7 +135,17 @@ async fn handle_inbound(
     if pipe.active == 0 {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if pipe.inbound_token != provided_token {
+    let inbound_token = match crate::api::connectors::domain::decrypt_required(
+        &state.credentials,
+        pipe.inbound_token_encrypted.as_deref().unwrap_or_default(),
+    ) {
+        Ok(token) => token,
+        Err(error) => {
+            error!(pipe_id = %pipe_id, error = %error, "Inbound: failed to decrypt token");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    if inbound_token != provided_token {
         warn!(pipe_id = %pipe_id, "Inbound: invalid token");
         return StatusCode::UNAUTHORIZED.into_response();
     }
@@ -215,7 +236,16 @@ async fn handle_inbound(
         .unwrap_or(false);
 
     let outbound_url = pipe.outbound_url.clone();
-    let outbound_auth = pipe.outbound_auth.clone();
+    let outbound_auth = match crate::api::connectors::domain::decrypt_optional(
+        &state.credentials,
+        pipe.outbound_auth_encrypted.as_deref(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            error!(pipe_id = %pipe_id, error = %error, "Inbound: failed to decrypt callback authorization");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
     let recipient_ref = envelope.sender_ref.clone();
     let whole_chat_reply_mode = whole_chat_mode;
 

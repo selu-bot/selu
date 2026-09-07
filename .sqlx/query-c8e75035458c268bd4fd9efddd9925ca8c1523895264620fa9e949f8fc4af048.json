@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO pipes\n           (id, user_id, name, transport, inbound_token, outbound_url, default_agent_id)\n           VALUES (?, ?, ?, 'web', ?, 'internal://web', NULL)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "c8e75035458c268bd4fd9efddd9925ca8c1523895264620fa9e949f8fc4af048"
+}

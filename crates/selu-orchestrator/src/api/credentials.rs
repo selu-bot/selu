@@ -20,7 +20,10 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::state::AppState;
+use crate::{
+    api::auth::{ApiAdmin, ApiPrincipal, forbidden},
+    state::AppState,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct SetCredentialRequest {
@@ -30,6 +33,7 @@ pub struct SetCredentialRequest {
 // ── System credentials ────────────────────────────────────────────────────────
 
 pub async fn set_system(
+    _admin: ApiAdmin,
     Path((capability_id, name)): Path<(String, String)>,
     State(state): State<AppState>,
     Json(req): Json<SetCredentialRequest>,
@@ -48,6 +52,7 @@ pub async fn set_system(
 }
 
 pub async fn delete_system(
+    _admin: ApiAdmin,
     Path((capability_id, name)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
@@ -61,6 +66,7 @@ pub async fn delete_system(
 }
 
 pub async fn list_system(
+    _admin: ApiAdmin,
     Path(capability_id): Path<String>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
@@ -76,10 +82,15 @@ pub async fn list_system(
 // ── User credentials ──────────────────────────────────────────────────────────
 
 pub async fn set_user(
-    Path((user_id, capability_id, name)): Path<(String, String, String)>,
+    principal: ApiPrincipal,
+    Path((requested_user_id, capability_id, name)): Path<(String, String, String)>,
     State(state): State<AppState>,
     Json(req): Json<SetCredentialRequest>,
 ) -> impl IntoResponse {
+    let user_id = match principal.user_scope(&requested_user_id) {
+        Ok(user_id) => user_id,
+        Err(_) => return forbidden(),
+    };
     match state
         .credentials
         .set_user(&user_id, &capability_id, &name, &req.value)
@@ -94,9 +105,14 @@ pub async fn set_user(
 }
 
 pub async fn delete_user(
-    Path((user_id, capability_id, name)): Path<(String, String, String)>,
+    principal: ApiPrincipal,
+    Path((requested_user_id, capability_id, name)): Path<(String, String, String)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    let user_id = match principal.user_scope(&requested_user_id) {
+        Ok(user_id) => user_id,
+        Err(_) => return forbidden(),
+    };
     match state
         .credentials
         .delete_user(&user_id, &capability_id, &name)
@@ -111,9 +127,14 @@ pub async fn delete_user(
 }
 
 pub async fn list_user(
-    Path((user_id, capability_id)): Path<(String, String)>,
+    principal: ApiPrincipal,
+    Path((requested_user_id, capability_id)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    let user_id = match principal.user_scope(&requested_user_id) {
+        Ok(user_id) => user_id,
+        Err(_) => return forbidden(),
+    };
     match state.credentials.list_user(&user_id, &capability_id).await {
         Ok(names) => Json(names).into_response(),
         Err(e) => {

@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT active, one_shot, cron_expression, next_run_at\n           FROM schedules WHERE id = ? AND user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "active",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "active"
+          }
+        }
+      },
+      {
+        "name": "one_shot",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "one_shot"
+          }
+        }
+      },
+      {
+        "name": "cron_expression",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "cron_expression"
+          }
+        }
+      },
+      {
+        "name": "next_run_at",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "next_run_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e679e9d20ffea993937ea6e966e1a5488c2af8be86c6f3c5a602c2b7d6982c60"
+}

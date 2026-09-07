@@ -25,44 +25,28 @@ Every user-visible string must be translatable. We currently support English (en
 
 **How i18n works in Selu:**
 
-The i18n system lives in `crates/selu-orchestrator/templates/layout.html`. It is client-side JavaScript. All translations are in a single `translations` object with `en` and `de` keys.
+The React i18n system lives in `ui/src/i18n.ts`. Shared shell strings live there; feature pages define colocated English and German bundles with `defineTranslations(...)` and read them with `useTranslations(...)`.
 
 **Rules:**
 
-- Never hardcode user-visible text in templates. Always use `data-i18n` attributes for text content and `data-i18n-placeholder` for input placeholders.
-- Never hardcode user-visible text in Rust code that ends up in the UI (e.g. template variables rendered as text). If a template variable contains user-visible text, either use a translation key in the template or document why it's an exception.
-- When you add a new page or feature, add both `en` and `de` translations to the `translations` object in `layout.html` before considering the feature complete.
-- Use dot-separated keys following the existing pattern: `section.element` (e.g., `pipes.title`, `chat.placeholder`, `agents.install`).
-- The `t(key)` JavaScript function is available for translations in inline scripts (e.g., in SSE handlers or dynamic JS).
-- Always fall back to English if a key is missing in the current language.
+- Never hardcode user-visible text in JSX. Put shared copy in `ui/src/i18n.ts` or define a feature-local bundle.
+- Every bundle must provide matching English and German keys before the feature is complete. `defineTranslations` enforces parity at compile time.
+- Use `t(key)` for shared strings and `useTranslations(bundle)` for feature copy. Use `useLanguage()` when formatting dates, times, and numbers.
+- Never expose raw Rust errors, API codes, secrets, or stack traces. Map failures to warm, actionable copy in both languages.
+- English is the fallback when a saved browser language is unsupported.
 
-**Pattern — adding a translatable element:**
+**Pattern — adding translated feature copy:**
 
-```html
-<!-- In the template -->
-<h1 data-i18n="mypage.title">My Page Title</h1>
-<input data-i18n-placeholder="mypage.search" placeholder="Search..." />
-```
+```tsx
+const messages = defineTranslations(
+  { title: 'My page', search: 'Search…' },
+  { title: 'Meine Seite', search: 'Suchen…' },
+)
 
-```javascript
-// In layout.html translations object
-en: {
-  'mypage.title': 'My Page Title',
-  'mypage.search': 'Search...',
-},
-de: {
-  'mypage.title': 'Meine Seite',
-  'mypage.search': 'Suchen...',
-},
-```
-
-The English text in the HTML attribute is the fallback if JS hasn't loaded yet.
-
-**Pattern — translating in JavaScript:**
-
-```javascript
-var msg = t('chat.confirm.approved');
-element.textContent = t('some.key');
+export function MyPage() {
+  const copy = useTranslations(messages)
+  return <><h1>{copy.title}</h1><input placeholder={copy.search} /></>
+}
 ```
 
 ### 3. Secure and flexible
@@ -71,15 +55,17 @@ Security is non-negotiable but must never get in the way of usability.
 
 **Authentication:**
 
-- All web routes except `/login`, `/logout`, and `/setup` require the `AuthUser` extractor. This is enforced per-handler, not via middleware — so every new handler must include `auth: AuthUser` in its signature.
+- The SPA shell is public so React can render login, setup, and expired-session states; protected data and mutations live behind authenticated JSON APIs.
+- Use `ApiPrincipal` for authenticated `/api/v1` handlers and `ApiAdmin` for administrator-only handlers (see `api/auth.rs`).
+- Legacy management GET URLs may exist only as compatibility redirects to canonical `/app/*` routes and must use `ApiPrincipal`. Do not add legacy form mutations or HTML renderers.
 - Sessions use HttpOnly cookies (`selu_session`) with a 7-day TTL, stored in the `web_sessions` SQLite table.
-- Passwords are hashed with Argon2id (see `web/auth.rs`).
+- Passwords are hashed with Argon2id in `services/auth.rs`.
 
 **Credentials and secrets:**
 
 - All stored secrets (API keys, capability credentials) are encrypted at rest with AES-256-GCM (see `permissions/store.rs`).
 - Never log secrets, API keys, or credential values. Not even at `debug` or `trace` level.
-- Never include secrets in error messages or template variables.
+- Never include secrets in error messages, API responses, or UI state.
 - The encryption key comes from the `SELU__ENCRYPTION_KEY` env var. Never hardcode it.
 
 **Tool policies:**
@@ -103,8 +89,9 @@ crates/
   selu-core/          — Shared types and errors
   selu-orchestrator/  — Main binary (all application logic)
     src/
-      web/            — HTML page handlers (Askama templates, server-rendered)
-      api/            — JSON REST API handlers
+      web/            — React shell serving, base-path handling, compatibility GET redirects
+      api/            — authenticated, versioned JSON API handlers
+      services/       — reusable application operations behind API and runtime callers
       agents/         — Agent loading, routing, sessions, execution engine
       llm/            — LLM provider abstraction (Bedrock, Anthropic, OpenAI, Pico)
       capabilities/   — Docker container lifecycle, gRPC, egress proxy
@@ -112,36 +99,27 @@ crates/
       events/         — EventBus, CEL filters, subscriptions
       pipes/          — Message transport (inbound webhooks, outbound delivery)
       channels/       — Channel abstraction and routing
-    templates/        — Askama HTML templates (extends layout.html)
     migrations/       — SQLite migrations
+ui/                    — React/Vite SPA (all browser UI)
 ```
 
 **Rust patterns:**
 
 Use `anyhow::Result` for application-level error handling. Use `.context("descriptive message")?` to add context when propagating errors. Use `thiserror` for typed error enums (in `selu-core`).
 
-Axum handlers follow this shape:
+Axum API handlers follow this shape:
 
 ```rust
 pub async fn my_handler(
-    State(state): State<AppState>,  // shared app state
-    auth: AuthUser,                 // session authentication (required on protected routes)
-    Form(form): Form<MyForm>,      // form data (or Path, Query, Json as needed)
-) -> impl IntoResponse {
-    // ...
+    principal: ApiPrincipal,          // authenticated session
+    State(state): State<AppState>,    // shared app state
+    Json(input): Json<MyInput>,       // typed JSON, or Path / Query
+) -> Response {
+    // Return a typed JSON response or the shared plain-language error envelope.
 }
 ```
 
-For templates, use Askama with the existing `layout.html` base:
-
-```rust
-#[derive(Template)]
-#[template(path = "my_page.html")]
-struct MyPageTemplate {
-    active_nav: &'static str,  // highlights the current nav item
-    // ... page-specific data
-}
-```
+Keep reusable business operations in `services/`; API handlers should validate transport input, enforce authorization, and map outcomes to stable JSON contracts. The browser UI belongs in `ui/src`, never in Rust templates or inline HTML.
 
 **Database patterns:**
 
@@ -160,12 +138,13 @@ Rules for AI agents and developers:
 - Always commit the `.sqlx/` directory alongside your code changes. Never `.gitignore` it.
 - If a build fails with `SQLX_OFFLINE=true but there is no cached data`, it means this step was missed.
 
-**Template patterns:**
+**Frontend patterns:**
 
-- All templates extend `layout.html` using `{% extends "layout.html" %}`.
-- Use Tailwind CSS classes for styling (loaded via CDN).
-- Use HTMX for dynamic interactions (loaded via CDN). Prefer `hx-get`, `hx-post`, `hx-delete` with `hx-target` and `hx-swap` over custom JavaScript.
-- Use `data-i18n` on every user-visible text element (see i18n section above).
+- Build every browser surface in the React SPA under `ui/src`; do not add Askama, HTMX, inline browser scripts, or legacy form handlers.
+- Use TanStack Query for server state and the typed feature API modules for `/api/v1` requests.
+- Follow the management pattern: calm overview cards, right-side sheets on desktop, and full-screen sheets on phones.
+- Use shared UI components and design tokens. Preserve keyboard access, focus management, screen-reader announcements, reduced motion, and responsive layouts.
+- Put every user-visible string in matching English and German translation bundles.
 
 **Background tasks:**
 
@@ -185,7 +164,8 @@ External user-facing documentation lives at `docs.selu.bot` (source in `selu-sit
 
 Any change touching these directories is potentially docs-relevant:
 
-- `src/web/` — UI pages and behavior users interact with
+- `src/web/` — SPA shell, compatibility redirects, and deployment behavior
+- `ui/src/` — all browser pages, interactions, accessibility, and copy
 - `src/api/` — REST API endpoints developers call
 - `src/agents/` — Agent format, routing, sessions, execution
 - `src/capabilities/` — Capability system, manifests, gRPC interface, container lifecycle
@@ -265,7 +245,7 @@ CI will block the PR if docs-relevant files changed but neither `DOCS_IMPACT.yam
 
 1. Does the UI make sense to a non-technical person?
 2. Are all new user-visible strings in both `en` and `de` translations?
-3. Are all new web handlers protected with `AuthUser` (unless they're public)?
+3. Are protected APIs using `ApiPrincipal` or `ApiAdmin`, with no legacy HTML/form route added?
 4. Are secrets handled safely (encrypted at rest, never logged, never in error messages)?
 5. Format the code using `cargo fmt --all`
 6. Does `cargo test --workspace` pass?

@@ -1,0 +1,48 @@
+.management-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 28px;
+}
+.management-card { display: flex; min-height: 214px; flex-direction: column; gap: 10px; }
+.management-card-top { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 10px; }
+.management-card-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 14px; color: var(--coral-deep); background: linear-gradient(145deg, color-mix(in srgb, var(--blush) 16%, var(--panel-solid)), color-mix(in srgb, var(--amber) 14%, var(--panel-solid))); }
+.management-card-icon svg { width: 20px; height: 20px; }
+.management-card h2 { margin: 7px 0 0; font-size: 17px; font-weight: 760; letter-spacing: -.025em; }
+.management-card-description { color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+.management-card footer { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.management-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.selu-ui-dialog-backdrop.management-sheet-backdrop { place-items: stretch end; padding: 0; }
+.selu-ui-dialog.management-sheet { width: min(460px, 100vw); max-height: 100dvh; height: 100dvh; border-width: 0 0 0 1px; border-radius: 0; animation-name: management-sheet-in; }
+.management-sheet .selu-ui-dialog-heading { padding: 24px 24px 0; }
+.management-sheet .selu-ui-dialog-body { padding: 20px 24px 26px; }
+.management-sheet .selu-ui-dialog-actions { padding: 16px 24px max(20px, env(safe-area-inset-bottom)); }
+.management-form { display: grid; gap: 18px; }
+.management-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.management-form details { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.management-form summary { padding: 13px 15px; color: var(--ink-soft); font-size: 12px; font-weight: 720; cursor: pointer; }
+.management-form details > div { display: grid; gap: 15px; padding: 0 15px 15px; }
+.management-choice-list { display: grid; gap: 8px; }
+.management-choice { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
+.management-choice input { margin-top: 2px; accent-color: var(--coral); }
+.management-choice span { display: grid; gap: 3px; color: var(--ink); font-size: 12px; font-weight: 680; }
+.management-choice small { color: var(--muted); font-size: 11px; font-weight: 500; line-height: 1.45; }
+.management-section { margin-top: 22px; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); }
+.management-section > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 22px; }
+.management-section > header h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
+.management-section > header p { margin: 4px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
+.management-section-body { border-top: 1px solid var(--line); padding: 20px 22px; }
+.management-muted { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.management-inline-error { padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--coral-deep) 30%, var(--line)); border-radius: 12px; color: var(--coral-deep); background: color-mix(in srgb, var(--coral) 7%, var(--panel)); font-size: 12px; }
+.management-code { overflow-wrap: anywhere; padding: 13px; border: 1px solid var(--line); border-radius: 13px; color: var(--ink); background: var(--canvas); font: 600 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+@keyframes management-sheet-in { from { opacity: .4; transform: translateX(32px); } }
+@media (max-width: 1080px) { .management-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .management-grid { grid-template-columns: 1fr; }
+  .management-grid .management-card { min-height: 190px; }
+  .selu-ui-dialog-backdrop.management-sheet-backdrop { padding: 0; }
+  .selu-ui-dialog.management-sheet { width: 100vw; max-height: 100dvh; border: 0; border-radius: 0; }
+  .management-form-row { grid-template-columns: 1fr; }
+  .management-sheet .selu-ui-dialog-actions { flex-direction: column-reverse; }
+}
+@media (prefers-reduced-motion: reduce) { .selu-ui-dialog.management-sheet { animation: none; } }

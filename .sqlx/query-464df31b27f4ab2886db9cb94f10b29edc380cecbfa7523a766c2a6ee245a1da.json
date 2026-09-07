@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT user_id, capability_id, credential_name, expires_at, created_at\n         FROM user_credentials\n         WHERE user_id = ? AND capability_id = ? AND credential_name = ?\n           AND (expires_at IS NULL OR expires_at > datetime('now'))",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_credentials",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "capability_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_credentials",
+            "name": "capability_id"
+          }
+        }
+      },
+      {
+        "name": "credential_name",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_credentials",
+            "name": "credential_name"
+          }
+        }
+      },
+      {
+        "name": "expires_at",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_credentials",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_credentials",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "464df31b27f4ab2886db9cb94f10b29edc380cecbfa7523a766c2a6ee245a1da"
+}

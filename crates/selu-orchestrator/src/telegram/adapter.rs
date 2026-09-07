@@ -163,6 +163,7 @@ struct AdapterState {
     bot_token: String,
     chat_id: String,
     pipe_id: String,
+    inbound_token: String,
 }
 
 static ADAPTER_REGISTRY: std::sync::OnceLock<AdapterRegistry> = std::sync::OnceLock::new();
@@ -238,6 +239,7 @@ async fn register_adapter_local(state: AppState, cfg: &TgConfig) {
                 bot_token: cfg.bot_token.clone(),
                 chat_id: cfg.chat_id.clone(),
                 pipe_id: cfg.pipe_id.clone(),
+                inbound_token: cfg.inbound_token.clone(),
             },
         );
     }
@@ -259,10 +261,11 @@ async fn register_adapter_local(state: AppState, cfg: &TgConfig) {
 
 /// Register adapter locally AND set webhook with Telegram.
 /// Used during initial setup (via `start_one`).
-async fn register_adapter_and_webhook(state: &AppState, cfg: &TgConfig, base_url: &str) {
-    register_adapter_local(state.clone(), cfg).await;
-
-    // Set webhook with Telegram
+async fn register_adapter_and_webhook(
+    state: &AppState,
+    cfg: &TgConfig,
+    base_url: &str,
+) -> Result<()> {
     let webhook_url = format!(
         "{}/api/telegram/webhook/{}?token={}",
         base_url, cfg.id, cfg.inbound_token
@@ -271,22 +274,17 @@ async fn register_adapter_and_webhook(state: &AppState, cfg: &TgConfig, base_url
     info!(
         config_id = %cfg.id,
         name = %cfg.name,
-        webhook_url = %webhook_url,
         "Registering webhook with Telegram"
     );
 
-    match set_webhook(&cfg.bot_token, &webhook_url).await {
-        Ok(()) => {
-            info!(config_id = %cfg.id, "Webhook registered with Telegram");
-        }
-        Err(e) => {
-            warn!(config_id = %cfg.id, "Failed to register webhook with Telegram: {e}");
-        }
-    }
+    set_webhook(&cfg.bot_token, &webhook_url).await?;
+    register_adapter_local(state.clone(), cfg).await;
+    info!(config_id = %cfg.id, "Webhook registered with Telegram");
 
     if let Err(e) = set_my_commands(&cfg.bot_token).await {
         warn!(config_id = %cfg.id, "Failed to publish the command menu to Telegram: {e}");
     }
+    Ok(())
 }
 
 /// Publish Selu's slash commands to Telegram's "/" menu, in English by
@@ -341,8 +339,7 @@ pub async fn start_one(
     let base_url = external_origin
         .map(|s| s.to_string())
         .unwrap_or_else(|| state.public_base_url());
-    register_adapter_and_webhook(&state, &cfg, &base_url).await;
-    Ok(())
+    register_adapter_and_webhook(&state, &cfg, &base_url).await
 }
 
 /// Re-register the webhook for an existing adapter.
@@ -360,7 +357,6 @@ pub async fn reregister_webhook(
 
     info!(
         config_id = %cfg.id,
-        webhook_url = %webhook_url,
         "Re-registering webhook with Telegram (troubleshoot)"
     );
 
@@ -398,29 +394,15 @@ async fn webhook_handler(
         }
     };
 
-    let pipe_token = sqlx::query!(
-        "SELECT p.inbound_token
-         FROM telegram_configs tc
-         JOIN pipes p ON p.id = tc.pipe_id
-         WHERE tc.id = ? AND tc.active = 1",
-        config_id
-    )
-    .fetch_optional(&state.db)
-    .await;
-
-    let expected_token = match pipe_token {
-        Ok(Some(row)) => row.inbound_token,
-        Ok(None) => {
-            warn!(config_id = %config_id, "Telegram webhook REJECTED: config not found or inactive");
+    let reg = registry().read().await;
+    let adapter = match reg.get(&config_id) {
+        Some(adapter) => adapter,
+        None => {
+            warn!(config_id = %config_id, "Telegram webhook REJECTED: config not in adapter registry");
             return StatusCode::NOT_FOUND;
         }
-        Err(e) => {
-            error!(config_id = %config_id, error = %e, "Telegram webhook REJECTED: DB error");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
     };
-
-    if provided_token != expected_token {
+    if provided_token != adapter.inbound_token {
         warn!(config_id = %config_id, "Telegram webhook REJECTED: token mismatch");
         return StatusCode::UNAUTHORIZED;
     }
@@ -431,16 +413,6 @@ async fn webhook_handler(
         None => {
             debug!(config_id = %config_id, "Telegram webhook SKIPPED: no message in update");
             return StatusCode::OK;
-        }
-    };
-
-    // 3. Look up adapter state
-    let reg = registry().read().await;
-    let adapter = match reg.get(&config_id) {
-        Some(a) => a,
-        None => {
-            warn!(config_id = %config_id, "Telegram webhook REJECTED: config not in adapter registry");
-            return StatusCode::NOT_FOUND;
         }
     };
 
@@ -1145,12 +1117,8 @@ pub async fn get_recent_chats(bot_token: &str) -> Result<Vec<TgRecentChat>> {
                     }
                 });
 
-                let last_message = m.text.unwrap_or_default();
-                let last_message = if last_message.len() > 80 {
-                    format!("{}...", &last_message[..77])
-                } else {
-                    last_message
-                };
+                let last_message =
+                    crate::api::connectors::domain::truncate_utf8(&m.text.unwrap_or_default(), 80);
 
                 chats.push(TgRecentChat {
                     chat_id,
@@ -1516,52 +1484,74 @@ impl crate::channels::ChannelSender for TelegramSender {
 // ---------------------------------------------------------------------------
 
 async fn load_active_configs(state: &AppState) -> Result<Vec<TgConfig>> {
-    let rows = sqlx::query!(
-        "SELECT tc.id, tc.name, tc.bot_token, tc.chat_id,
-                tc.pipe_id, p.inbound_token
-         FROM telegram_configs tc
-         JOIN pipes p ON p.id = tc.pipe_id
-         WHERE tc.active = 1"
+    use sqlx::Row as _;
+    let rows = sqlx::query(
+        "SELECT tc.id, tc.name, tc.bot_token_encrypted, tc.chat_id, \
+                tc.pipe_id, p.inbound_token_encrypted \
+         FROM telegram_configs tc \
+         JOIN pipes p ON p.id = tc.pipe_id \
+         WHERE tc.active = 1 AND p.active = 1",
     )
     .fetch_all(&state.db)
     .await
     .context("Failed to load telegram_configs")?;
 
-    Ok(rows
-        .into_iter()
-        .map(|r| TgConfig {
-            id: r.id.unwrap_or_default(),
-            name: r.name,
-            bot_token: r.bot_token.trim().to_string(),
-            chat_id: r.chat_id.trim().to_string(),
-            pipe_id: r.pipe_id,
-            inbound_token: r.inbound_token,
+    rows.into_iter()
+        .map(|row| {
+            let bot_blob: String = row.try_get("bot_token_encrypted")?;
+            let inbound_blob: String = row.try_get("inbound_token_encrypted")?;
+            Ok(TgConfig {
+                id: row.try_get::<Option<String>, _>("id")?.unwrap_or_default(),
+                name: row.try_get("name")?,
+                bot_token: crate::api::connectors::domain::decrypt_required(
+                    &state.credentials,
+                    &bot_blob,
+                )?
+                .trim()
+                .to_string(),
+                chat_id: row.try_get::<String, _>("chat_id")?.trim().to_string(),
+                pipe_id: row.try_get("pipe_id")?,
+                inbound_token: crate::api::connectors::domain::decrypt_required(
+                    &state.credentials,
+                    &inbound_blob,
+                )?,
+            })
         })
-        .collect())
+        .collect()
 }
 
 async fn load_config_by_id(state: &AppState, config_id: &str) -> Result<TgConfig> {
-    let row = sqlx::query!(
-        "SELECT tc.id, tc.name, tc.bot_token, tc.chat_id,
-                tc.pipe_id, p.inbound_token
-         FROM telegram_configs tc
-         JOIN pipes p ON p.id = tc.pipe_id
-         WHERE tc.id = ? AND tc.active = 1",
-        config_id
+    use sqlx::Row as _;
+    let row = sqlx::query(
+        "SELECT tc.id, tc.name, tc.bot_token_encrypted, tc.chat_id, \
+                tc.pipe_id, p.inbound_token_encrypted \
+         FROM telegram_configs tc \
+         JOIN pipes p ON p.id = tc.pipe_id \
+         WHERE tc.id = ? AND tc.active = 1 AND p.active = 1",
     )
+    .bind(config_id)
     .fetch_optional(&state.db)
     .await
-    .context("Failed to load Telegram config")?;
-
-    let row =
-        row.ok_or_else(|| anyhow::anyhow!("Telegram config not found or inactive: {config_id}"))?;
-
+    .context("Failed to load Telegram config")?
+    .ok_or_else(|| anyhow::anyhow!("Telegram config not found or inactive: {config_id}"))?;
+    let bot_blob: String = row.try_get("bot_token_encrypted")?;
+    let inbound_blob: String = row.try_get("inbound_token_encrypted")?;
     Ok(TgConfig {
-        id: row.id.unwrap_or_default(),
-        name: row.name,
-        bot_token: row.bot_token.trim().to_string(),
-        chat_id: row.chat_id.trim().to_string(),
-        pipe_id: row.pipe_id,
-        inbound_token: row.inbound_token,
+        id: row.try_get::<Option<String>, _>("id")?.unwrap_or_default(),
+        name: row.try_get("name")?,
+        bot_token: crate::api::connectors::domain::decrypt_required(&state.credentials, &bot_blob)?
+            .trim()
+            .to_string(),
+        chat_id: row.try_get::<String, _>("chat_id")?.trim().to_string(),
+        pipe_id: row.try_get("pipe_id")?,
+        inbound_token: crate::api::connectors::domain::decrypt_required(
+            &state.credentials,
+            &inbound_blob,
+        )?,
     })
+}
+
+pub async fn stop_one(state: &AppState, config_id: &str, pipe_id: &str) {
+    registry().write().await.remove(config_id);
+    state.channel_registry.deregister(pipe_id).await;
 }

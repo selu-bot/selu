@@ -1,0 +1,3 @@
+.automation-timing, .automation-prompt { display: block; }
+.automation-timing { color: var(--ink-soft); font-weight: 650; }
+.automation-prompt { display: -webkit-box; margin-top: 7px; overflow: hidden; color: var(--muted); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }

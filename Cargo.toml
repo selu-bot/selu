@@ -51,7 +51,6 @@ reqwest = { version = "0.13", features = ["json", "query", "stream", "multipart"
 eventsource-stream = "0.2"
 
 # Templating
-askama = "0.16"
 
 # Config
 config = "0.15"

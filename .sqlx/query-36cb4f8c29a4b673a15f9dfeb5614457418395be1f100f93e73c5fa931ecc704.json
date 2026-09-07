@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO mobile_setup_tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "36cb4f8c29a4b673a15f9dfeb5614457418395be1f100f93e73c5fa931ecc704"
+}

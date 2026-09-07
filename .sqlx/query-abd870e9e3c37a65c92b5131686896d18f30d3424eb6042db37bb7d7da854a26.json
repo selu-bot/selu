@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT api_key_encrypted, base_url, active FROM llm_providers WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "api_key_encrypted",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "llm_providers",
+            "name": "api_key_encrypted"
+          }
+        }
+      },
+      {
+        "name": "base_url",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "llm_providers",
+            "name": "base_url"
+          }
+        }
+      },
+      {
+        "name": "active",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "llm_providers",
+            "name": "active"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "abd870e9e3c37a65c92b5131686896d18f30d3424eb6042db37bb7d7da854a26"
+}

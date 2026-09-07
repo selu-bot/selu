@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM bluebubbles_configs WHERE pipe_id IN (SELECT id FROM pipes WHERE user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "de9cbdcefe67921abf598cf5f70431a13250542c000843d996385236bb4f14bc"
+}

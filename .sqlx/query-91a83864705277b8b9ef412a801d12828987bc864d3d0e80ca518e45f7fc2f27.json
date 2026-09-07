@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM mobile_setup_tokens WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "91a83864705277b8b9ef412a801d12828987bc864d3d0e80ca518e45f7fc2f27"
+}

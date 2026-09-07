@@ -154,14 +154,20 @@ async fn dispatch_notification(
         .replace("{payload}", &event.payload.to_string());
 
     // Look up the pipe's outbound URL
-    let pipe = sqlx::query!(
-        "SELECT outbound_url, outbound_auth FROM pipes WHERE id = ? AND active = 1",
-        config.pipe_id
+    let (outbound_url, outbound_auth_encrypted): (String, Option<String>) = sqlx::query_as(
+        "SELECT outbound_url, outbound_auth_encrypted \
+             FROM pipes WHERE id = ? AND active = 1",
     )
+    .bind(&config.pipe_id)
     .fetch_optional(&state.db)
     .await
     .context("DB error loading pipe for notification")?
     .context("Pipe not found or inactive")?;
+    let outbound_auth = crate::api::connectors::domain::decrypt_optional(
+        &state.credentials,
+        outbound_auth_encrypted.as_deref(),
+    )
+    .context("decrypt pipe notification authorization")?;
 
     let outbound = selu_core::types::OutboundEnvelope {
         recipient_ref: "notification".to_string(),
@@ -176,7 +182,7 @@ async fn dispatch_notification(
     };
 
     OutboundSender::new()
-        .send(&pipe.outbound_url, pipe.outbound_auth.as_deref(), &outbound)
+        .send(&outbound_url, outbound_auth.as_deref(), &outbound)
         .await
         .context("Failed to send pipe notification")?;
 

@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"pipe_id!\", name, transport, active\n           FROM pipes\n           WHERE user_id = ? AND active = 1\n           ORDER BY CASE WHEN transport = 'web' THEN 0 ELSE 1 END, name, id",
+  "describe": {
+    "columns": [
+      {
+        "name": "pipe_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "transport",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "transport"
+          }
+        }
+      },
+      {
+        "name": "active",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "active"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "da1668064d5c0cc2850512eb0d2a2b89145f6d066e1840b0f018f5b35530aad6"
+}

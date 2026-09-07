@@ -452,7 +452,13 @@ mod tests {
         (user_id, pipe_id)
     }
 
-    async fn seed_thread(db: &SqlitePool, user_id: &str, pipe_id: &str, created_at: &str, kind: &str) -> String {
+    async fn seed_thread(
+        db: &SqlitePool,
+        user_id: &str,
+        pipe_id: &str,
+        created_at: &str,
+        kind: &str,
+    ) -> String {
         let id = uuid::Uuid::new_v4().to_string();
         sqlx::query("INSERT INTO threads (id, pipe_id, session_id, user_id, status, thread_kind, created_at) VALUES (?, ?, 'session', ?, 'active', ?, ?)")
             .bind(&id).bind(pipe_id).bind(user_id).bind(kind).bind(created_at).execute(db).await.unwrap();
@@ -461,7 +467,10 @@ mod tests {
 
     #[test]
     fn cursor_round_trips_and_rejects_garbage() {
-        let cursor = ListCursor { last_activity_at: "2026-09-04T07:16:46.906".into(), id: "abc".into() };
+        let cursor = ListCursor {
+            last_activity_at: "2026-09-04T07:16:46.906".into(),
+            id: "abc".into(),
+        };
         assert_eq!(ListCursor::decode(&cursor.encode()).unwrap(), cursor);
         assert!(ListCursor::decode("").is_err());
         assert!(ListCursor::decode("no-separator").is_err());
@@ -474,16 +483,28 @@ mod tests {
         let (user_id, pipe_id) = seed_user_and_pipe(&db).await;
         let mut expected = Vec::new();
         for day in 1..=5 {
-            expected.push(seed_thread(&db, &user_id, &pipe_id, &format!("2026-09-0{day} 10:00:00"), "conversation").await);
+            expected.push(
+                seed_thread(
+                    &db,
+                    &user_id,
+                    &pipe_id,
+                    &format!("2026-09-0{day} 10:00:00"),
+                    "conversation",
+                )
+                .await,
+            );
         }
         // Two threads share an activity timestamp so the id tie-breaker is exercised.
-        expected.push(seed_thread(&db, &user_id, &pipe_id, "2026-09-05 10:00:00", "schedule").await);
+        expected
+            .push(seed_thread(&db, &user_id, &pipe_id, "2026-09-05 10:00:00", "schedule").await);
 
         let mut seen = Vec::new();
         let mut cursor = None;
         let mut pages = 0;
         loop {
-            let page = list_conversations(&db, &user_id, 2, cursor.as_ref()).await.unwrap();
+            let page = list_conversations(&db, &user_id, 2, cursor.as_ref())
+                .await
+                .unwrap();
             assert!(page.conversations.len() <= 2);
             seen.extend(page.conversations.iter().map(|c| c.id.clone()));
             pages += 1;
@@ -497,7 +518,11 @@ mod tests {
         let mut unique = seen.clone();
         unique.sort();
         unique.dedup();
-        assert_eq!(unique.len(), expected.len(), "no conversation may repeat across pages");
+        assert_eq!(
+            unique.len(),
+            expected.len(),
+            "no conversation may repeat across pages"
+        );
         // Newest activity first.
         let first_two: Vec<_> = seen.iter().take(2).collect();
         assert!(first_two.contains(&&expected[4]) && first_two.contains(&&expected[5]));
@@ -508,31 +533,80 @@ mod tests {
     async fn delete_removes_thread_and_dependents() {
         let db = setup_db().await;
         let (user_id, pipe_id) = seed_user_and_pipe(&db).await;
-        let thread_id = seed_thread(&db, &user_id, &pipe_id, "2026-09-01 10:00:00", "conversation").await;
+        let thread_id = seed_thread(
+            &db,
+            &user_id,
+            &pipe_id,
+            "2026-09-01 10:00:00",
+            "conversation",
+        )
+        .await;
         sqlx::query("INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content) VALUES ('m1', ?, 'session', ?, 'user', 'hi')")
             .bind(&pipe_id).bind(&thread_id).execute(&db).await.unwrap();
         sqlx::query("INSERT INTO conversation_runs (id, thread_id, user_id, client_message_id, status) VALUES ('r1', ?, ?, 'c1', 'completed')")
             .bind(&thread_id).bind(&user_id).execute(&db).await.unwrap();
         let bus = ConversationEventBus::new();
-        bus.publish(&db, &user_id, &thread_id, Some("r1"), "run.created", None, serde_json::json!({})).await.unwrap();
+        bus.publish(
+            &db,
+            &user_id,
+            &thread_id,
+            Some("r1"),
+            "run.created",
+            None,
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
         sqlx::query("INSERT INTO thread_artifacts (id, thread_id, user_id, filename, mime_type, size_bytes, file_path) VALUES ('a1', ?, ?, 'f.txt', 'text/plain', 1, '/nonexistent/f.txt')")
             .bind(&thread_id).bind(&user_id).execute(&db).await.unwrap();
 
         // Another user's id must not be able to delete it.
-        assert!(delete_conversation(&db, "someone-else", &thread_id).await.is_err());
-        assert!(get_conversation(&db, &user_id, &thread_id).await.unwrap().is_some());
+        assert!(
+            delete_conversation(&db, "someone-else", &thread_id)
+                .await
+                .is_err()
+        );
+        assert!(
+            get_conversation(&db, &user_id, &thread_id)
+                .await
+                .unwrap()
+                .is_some()
+        );
 
-        let artifacts = delete_conversation(&db, &user_id, &thread_id).await.unwrap();
+        let artifacts = delete_conversation(&db, &user_id, &thread_id)
+            .await
+            .unwrap();
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0].artifact_id, "a1");
-        assert!(get_conversation(&db, &user_id, &thread_id).await.unwrap().is_none());
+        assert!(
+            get_conversation(&db, &user_id, &thread_id)
+                .await
+                .unwrap()
+                .is_none()
+        );
         for (table, statement) in [
-            ("messages", "SELECT COUNT(*) FROM messages WHERE thread_id = ?"),
-            ("conversation_runs", "SELECT COUNT(*) FROM conversation_runs WHERE thread_id = ?"),
-            ("conversation_events", "SELECT COUNT(*) FROM conversation_events WHERE thread_id = ?"),
-            ("thread_artifacts", "SELECT COUNT(*) FROM thread_artifacts WHERE thread_id = ?"),
+            (
+                "messages",
+                "SELECT COUNT(*) FROM messages WHERE thread_id = ?",
+            ),
+            (
+                "conversation_runs",
+                "SELECT COUNT(*) FROM conversation_runs WHERE thread_id = ?",
+            ),
+            (
+                "conversation_events",
+                "SELECT COUNT(*) FROM conversation_events WHERE thread_id = ?",
+            ),
+            (
+                "thread_artifacts",
+                "SELECT COUNT(*) FROM thread_artifacts WHERE thread_id = ?",
+            ),
         ] {
-            let count: i64 = sqlx::query_scalar(statement).bind(&thread_id).fetch_one(&db).await.unwrap();
+            let count: i64 = sqlx::query_scalar(statement)
+                .bind(&thread_id)
+                .fetch_one(&db)
+                .await
+                .unwrap();
             assert_eq!(count, 0, "{table} still references the deleted thread");
         }
     }

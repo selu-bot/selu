@@ -20,11 +20,11 @@ use crate::{
         engine::{ChannelKind, TurnParams, run_turn},
         improvement, router as agent_router,
     },
+    api::auth::ApiPrincipal,
     commands,
     llm::tool_loop::LoopEvent,
     services::conversations::{self, ConversationRun},
     state::AppState,
-    web::auth::AuthUser,
 };
 
 pub fn router() -> Router<AppState> {
@@ -59,11 +59,11 @@ struct SessionResponse {
     language: String,
 }
 
-async fn session(user: AuthUser) -> Json<SessionResponse> {
+async fn session(user: ApiPrincipal) -> Json<SessionResponse> {
     Json(SessionResponse {
-        display_name: user.display_name,
+        display_name: user.display_name.clone(),
         is_admin: user.is_admin,
-        language: user.language,
+        language: user.language.clone(),
     })
 }
 
@@ -83,11 +83,15 @@ struct ListResponse {
 }
 
 async fn list(
-    user: AuthUser,
+    user: ApiPrincipal,
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
 ) -> Response {
-    let cursor = match query.before.as_deref().map(conversations::ListCursor::decode) {
+    let cursor = match query
+        .before
+        .as_deref()
+        .map(conversations::ListCursor::decode)
+    {
         Some(Ok(cursor)) => Some(cursor),
         Some(Err(_)) => {
             return (
@@ -123,7 +127,7 @@ struct UpdateConversationRequest {
 /// Rename a conversation. Titles are user-facing labels only; the agent never
 /// reads them, so any non-empty text is accepted.
 async fn update(
-    user: AuthUser,
+    user: ApiPrincipal,
     State(state): State<AppState>,
     Path(conversation_id): Path<String>,
     Json(request): Json<UpdateConversationRequest>,
@@ -180,7 +184,7 @@ async fn update(
 /// persisted artifacts. A conversation with an active run is refused so the
 /// running engine never writes into a thread that no longer exists.
 async fn delete(
-    user: AuthUser,
+    user: ApiPrincipal,
     State(state): State<AppState>,
     Path(conversation_id): Path<String>,
 ) -> Response {
@@ -200,7 +204,13 @@ async fn delete(
         )
             .into_response();
     }
-    let artifacts = match conversations::delete_conversation(&state.db, &user.user_id, &conversation_id).await {
+    let artifacts = match conversations::delete_conversation(
+        &state.db,
+        &user.user_id,
+        &conversation_id,
+    )
+    .await
+    {
         Ok(artifacts) => artifacts,
         Err(error) => return internal_error(error),
     };
@@ -224,14 +234,12 @@ async fn delete(
     // The thread row is gone, so this event is not attached to a run and is
     // only delivered live; a reconnecting client simply no longer sees the
     // conversation in its list.
-    let _ = state
-        .conversation_events
-        .publish_transient(
-            &user.user_id,
-            &conversation_id,
-            "conversation.deleted",
-            serde_json::json!({ "conversation_id": conversation_id }),
-        );
+    let _ = state.conversation_events.publish_transient(
+        &user.user_id,
+        &conversation_id,
+        "conversation.deleted",
+        serde_json::json!({ "conversation_id": conversation_id }),
+    );
     StatusCode::NO_CONTENT.into_response()
 }
 
@@ -244,7 +252,7 @@ struct CreateConversationRequest {
 /// the shared contract rather than either client so both surfaces navigate to
 /// the exact same conversation identity.
 async fn create(
-    user: AuthUser,
+    user: ApiPrincipal,
     State(state): State<AppState>,
     Json(request): Json<CreateConversationRequest>,
 ) -> Response {
@@ -304,7 +312,7 @@ struct SnapshotResponse {
 }
 
 async fn snapshot(
-    user: AuthUser,
+    user: ApiPrincipal,
     State(state): State<AppState>,
     Path(conversation_id): Path<String>,
 ) -> Response {
@@ -402,7 +410,7 @@ struct CommandsResponse {
 /// The slash commands a client may offer in its composer. Descriptions are
 /// localized so the picker needs no client-side strings per command.
 async fn list_commands(
-    user: AuthUser,
+    user: ApiPrincipal,
     Query(query): Query<CommandsQuery>,
 ) -> Json<CommandsResponse> {
     let lang = query
@@ -429,7 +437,7 @@ struct SendMessageResponse {
 /// Accept a user message and start exactly one durable run. The response is
 /// intentionally asynchronous; clients learn every transition via `/events`.
 async fn send_message(
-    user: AuthUser,
+    user: ApiPrincipal,
     State(state): State<AppState>,
     Path(conversation_id): Path<String>,
     Json(request): Json<SendMessageRequest>,
@@ -545,7 +553,7 @@ async fn send_message(
     if commands::is_command(&text) {
         tokio::spawn(execute_command_run(
             state,
-            user.user_id,
+            user.user_id.clone(),
             conversation_id,
             run_id,
             request.client_message_id,
@@ -554,7 +562,7 @@ async fn send_message(
     } else {
         tokio::spawn(execute_run(
             state,
-            user.user_id,
+            user.user_id.clone(),
             pipe_id,
             conversation_id,
             run_id,
@@ -591,7 +599,10 @@ async fn execute_command_run(
     )
     .await;
     let Some(reply) = reply else {
-        tracing::error!(run_id, "Slash command could not be handled for this conversation");
+        tracing::error!(
+            run_id,
+            "Slash command could not be handled for this conversation"
+        );
         let _ = set_run_status(
             &state,
             &user_id,
@@ -628,8 +639,15 @@ async fn execute_command_run(
     {
         tracing::warn!(run_id, "Could not publish command reply: {error:#}");
     }
-    if let Err(error) =
-        set_run_status(&state, &user_id, &conversation_id, &run_id, "completed", None).await
+    if let Err(error) = set_run_status(
+        &state,
+        &user_id,
+        &conversation_id,
+        &run_id,
+        "completed",
+        None,
+    )
+    .await
     {
         tracing::error!(run_id, "Could not finish command run: {error:#}");
     }
@@ -646,7 +664,7 @@ struct TurnFeedbackRequest {
 /// lessons. Rating while Selu is still working is refused so the rating cannot
 /// attach to a reply the user has not seen yet.
 async fn rate_latest_turn(
-    user: AuthUser,
+    user: ApiPrincipal,
     State(state): State<AppState>,
     Path(conversation_id): Path<String>,
     Json(request): Json<TurnFeedbackRequest>,
@@ -674,8 +692,7 @@ async fn rate_latest_turn(
         )
             .into_response();
     }
-    match improvement::rate_turn(&state.db, &user.user_id, &conversation_id, request.rating).await
-    {
+    match improvement::rate_turn(&state.db, &user.user_id, &conversation_id, request.rating).await {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         // The turn signal is written shortly after a reply completes; a
         // conversation without one has nothing the rating could apply to.
@@ -796,7 +813,7 @@ async fn notify_run_started(
     run_id: &str,
     text: &str,
 ) {
-    if !crate::web::system_updates::push_notifications_enabled(state).await {
+    if !crate::services::system_updates::push_notifications_enabled(state).await {
         return;
     }
     let Ok(instance_id) = crate::persistence::db::get_instance_id(&state.db).await else {
@@ -841,7 +858,7 @@ async fn notify_run_finished(
     conversation_id: &str,
     run_id: &str,
 ) {
-    if !crate::web::system_updates::push_notifications_enabled(state).await {
+    if !crate::services::system_updates::push_notifications_enabled(state).await {
         return;
     }
     let Ok(instance_id) = crate::persistence::db::get_instance_id(&state.db).await else {
@@ -1000,7 +1017,7 @@ struct EventQuery {
 }
 
 async fn events(
-    user: AuthUser,
+    user: ApiPrincipal,
     State(state): State<AppState>,
     Query(query): Query<EventQuery>,
 ) -> Response {
@@ -1028,7 +1045,7 @@ async fn events(
         .last()
         .map(|event| event.id)
         .unwrap_or_else(|| query.after.unwrap_or(0));
-    let user_id = user.user_id;
+    let user_id = user.user_id.clone();
     let filter_conversation_id = query.conversation_id;
     let event_stream = stream::unfold(
         (VecDeque::from(historical), receiver, replay_cursor),
@@ -1091,7 +1108,7 @@ struct ApprovalDecision {
 }
 
 async fn decide_approval(
-    user: AuthUser,
+    user: ApiPrincipal,
     State(state): State<AppState>,
     Path(approval_id): Path<String>,
     Json(decision): Json<ApprovalDecision>,
@@ -1140,7 +1157,7 @@ async fn decide_approval(
     }
 }
 
-async fn owns_conversation(state: &AppState, user: &AuthUser, conversation_id: &str) -> bool {
+async fn owns_conversation(state: &AppState, user: &ApiPrincipal, conversation_id: &str) -> bool {
     matches!(conversations::conversation_owner(&state.db, conversation_id).await, Ok(Some((owner, _))) if owner == user.user_id)
 }
 

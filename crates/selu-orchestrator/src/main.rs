@@ -130,7 +130,8 @@ async fn main() -> Result<()> {
         event_bus,
     );
 
-    web::system_updates::hydrate_public_origin_override(&state).await;
+    api::connectors::domain::backfill_connector_secrets(&state.db, &state.credentials).await?;
+    services::system_updates::hydrate_public_origin_override(&state).await;
 
     // Best-effort dynamic capability tool sync at startup.
     {
@@ -153,7 +154,7 @@ async fn main() -> Result<()> {
     // ── Web pipe backfill ───────────────────────────────────────────────────
     // Ensure every user has a web pipe (handles existing users from before
     // auto-creation was added).
-    web::pipes::backfill_web_pipes(&state.db).await;
+    services::pipes::backfill_web_pipes(&state.db).await;
 
     // ── BlueBubbles adapters ──────────────────────────────────────────────────
     // Register channel senders + auto-upgrade legacy polling configs to webhooks
@@ -165,7 +166,7 @@ async fn main() -> Result<()> {
 
     // ── WhatsApp bridge sidecar ───────────────────────────────────────────────
     // If an active WhatsApp pipe exists, ensure its bridge container is running.
-    web::whatsapp::ensure_bridge_for_active_pipe(&state).await;
+    api::connectors::domain::ensure_whatsapp_bridge_for_active_pipe(&state).await;
 
     // ── Background tasks ──────────────────────────────────────────────────────
 
@@ -306,7 +307,7 @@ async fn main() -> Result<()> {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(12 * 60 * 60));
         loop {
             if let Err(e) =
-                web::system_updates::run_auto_check_if_enabled(&system_update_state).await
+                services::system_updates::run_auto_check_if_enabled(&system_update_state).await
             {
                 tracing::warn!("System update auto-check failed: {e}");
             }

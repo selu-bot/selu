@@ -1364,202 +1364,202 @@ entries:
 
       Pipe setup and detail pages were updated to explain that an empty allowed
       sender list means "reply to nobody yet", not "reply to everyone".
-- id: 2026-03-25-whatsapp-self-chat-support
-  date: "2026-03-25"
-  pr:
-  area: channels
-  type: changed
-  audience: users
-  summary: "WhatsApp pipes now support chatting with your own WhatsApp account"
-  affected_files:
-    - sidecars/whatsapp-bridge/src/index.js
-    - sidecars/whatsapp-bridge/README.md
-  docs_sections:
-    - user-guide/channels/telegram
-  details: |
-    The WhatsApp bridge now treats WhatsApp's self-chat identity aliases as the
-    same account when deciding whether an inbound `fromMe` event should be
-    forwarded to Selu.
+  - id: 2026-03-25-whatsapp-self-chat-support
+    date: "2026-03-25"
+    pr:
+    area: channels
+    type: changed
+    audience: users
+    summary: "WhatsApp pipes now support chatting with your own WhatsApp account"
+    affected_files:
+      - sidecars/whatsapp-bridge/src/index.js
+      - sidecars/whatsapp-bridge/README.md
+    docs_sections:
+      - user-guide/channels/telegram
+    details: |
+      The WhatsApp bridge now treats WhatsApp's self-chat identity aliases as the
+      same account when deciding whether an inbound `fromMe` event should be
+      forwarded to Selu.
 
-    This allows people who message themselves in WhatsApp to use that chat with
-    Selu, even when WhatsApp reports the self-chat as a local identity (`@lid`)
-    instead of the phone JID used elsewhere.
-- id: 2026-03-25-whatsapp-self-chat-whole-thread
-  date: "2026-03-25"
-  pr:
-  area: channels
-  type: changed
-  audience: users
-  summary: "WhatsApp self-chat now treats the whole conversation as one thread"
-  affected_files:
-    - sidecars/whatsapp-bridge/src/index.js
-    - crates/selu-orchestrator/src/pipes/inbound.rs
-  docs_sections:
-    - user-guide/channels/telegram
-  details: |
-    When Selu is used through WhatsApp self-messaging, inbound messages are now
-    marked to use whole-chat thread routing instead of per-message reply
-    routing.
+      This allows people who message themselves in WhatsApp to use that chat with
+      Selu, even when WhatsApp reports the self-chat as a local identity (`@lid`)
+      instead of the phone JID used elsewhere.
+  - id: 2026-03-25-whatsapp-self-chat-whole-thread
+    date: "2026-03-25"
+    pr:
+    area: channels
+    type: changed
+    audience: users
+    summary: "WhatsApp self-chat now treats the whole conversation as one thread"
+    affected_files:
+      - sidecars/whatsapp-bridge/src/index.js
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+    docs_sections:
+      - user-guide/channels/telegram
+    details: |
+      When Selu is used through WhatsApp self-messaging, inbound messages are now
+      marked to use whole-chat thread routing instead of per-message reply
+      routing.
 
-    This avoids WhatsApp self-chat reply metadata edge cases by treating the
-    conversation like one ongoing chat thread. The tradeoff is that self-chat
-    replies are no longer tied to a specific WhatsApp message bubble.
-- id: 2026-03-27-admin-password-reset-command
-  date: "2026-03-27"
-  pr:
-  area: security
-  type: added
-  audience: developers
-  summary: "Added an admin CLI command to securely reset a user's web password"
-  affected_files:
-    - crates/selu-orchestrator/src/admin.rs
-    - crates/selu-orchestrator/src/main.rs
-  docs_sections:
-    - user-guide/self-hosting/updating
-    - reference/env-vars
-  details: |
-    The orchestrator binary now supports an administrative command:
+      This avoids WhatsApp self-chat reply metadata edge cases by treating the
+      conversation like one ongoing chat thread. The tradeoff is that self-chat
+      replies are no longer tied to a specific WhatsApp message bubble.
+  - id: 2026-03-27-admin-password-reset-command
+    date: "2026-03-27"
+    pr:
+    area: security
+    type: added
+    audience: developers
+    summary: "Added an admin CLI command to securely reset a user's web password"
+    affected_files:
+      - crates/selu-orchestrator/src/admin.rs
+      - crates/selu-orchestrator/src/main.rs
+    docs_sections:
+      - user-guide/self-hosting/updating
+      - reference/env-vars
+    details: |
+      The orchestrator binary now supports an administrative command:
 
-      selu-orchestrator reset-password --username <username> --password-stdin
+        selu-orchestrator reset-password --username <username> --password-stdin
 
-    The command reads the new password from stdin, hashes it with Argon2id,
-    updates the selected user's `password_hash`, and revokes all active
-    `web_sessions` for that user in the same transaction.
+      The command reads the new password from stdin, hashes it with Argon2id,
+      updates the selected user's `password_hash`, and revokes all active
+      `web_sessions` for that user in the same transaction.
 
-    This provides a secure recovery path when an admin forgets a user's
-    password without introducing a web-based reset endpoint.
-- id: 2026-03-27-self-service-password-change
-  date: "2026-03-27"
-  pr:
-  area: security
-  type: added
-  audience: users
-  summary: "Logged-in users can now change their own password from the Users screen"
-  affected_files:
-    - crates/selu-orchestrator/src/web/users.rs
-    - crates/selu-orchestrator/src/web/mod.rs
-    - crates/selu-orchestrator/templates/users.html
-    - crates/selu-orchestrator/templates/layout.html
-  docs_sections:
-    - user-guide/security/credentials
-    - user-guide/self-hosting/updating
-  details: |
-    Added a self-service password change flow on `/users` for all authenticated users.
-    The form is opened from a "Change password" button in a modal, keeping the
-    page focused on the main user list.
-    The flow requires the current password, enforces a minimum length for the new
-    password, confirms the new password, and updates the stored Argon2id hash.
+      This provides a secure recovery path when an admin forgets a user's
+      password without introducing a web-based reset endpoint.
+  - id: 2026-03-27-self-service-password-change
+    date: "2026-03-27"
+    pr:
+    area: security
+    type: added
+    audience: users
+    summary: "Logged-in users can now change their own password from the Users screen"
+    affected_files:
+      - crates/selu-orchestrator/src/web/users.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/users.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/security/credentials
+      - user-guide/self-hosting/updating
+    details: |
+      Added a self-service password change flow on `/users` for all authenticated users.
+      The form is opened from a "Change password" button in a modal, keeping the
+      page focused on the main user list.
+      The flow requires the current password, enforces a minimum length for the new
+      password, confirms the new password, and updates the stored Argon2id hash.
 
-    After a successful password change, Selu revokes other active web sessions
-    for that account to reduce account takeover risk while keeping the current
-    session active.
+      After a successful password change, Selu revokes other active web sessions
+      for that account to reduce account takeover risk while keeping the current
+      session active.
 
-    The Users page navigation is now visible to non-admin users so they can
-    reach their account password settings.
-- id: 2026-03-27-artifact-handoff-for-attachments
-  date: "2026-03-27"
-  pr:
-  area: agents
-  type: added
-  audience: developers
-  summary: "Capabilities can now return artifact payloads that become attachment references across tools in the same session"
-  affected_files:
-    - crates/selu-orchestrator/src/agents/artifacts.rs
-    - crates/selu-orchestrator/src/agents/engine.rs
-    - crates/selu-orchestrator/src/state.rs
-  docs_sections:
-    - developer-guide/capabilities/container-guidelines
-    - developer-guide/agent-format/package-structure
-    - reference/manifest-yaml-schema
-  details: |
-    Added orchestrator-level artifact handoff support for capability tool flows.
-    A capability tool can now return JSON with an `artifact` (or `artifacts`)
-    object that includes `filename`, `mime_type`, and `data_base64`.
+      The Users page navigation is now visible to non-admin users so they can
+      reach their account password settings.
+  - id: 2026-03-27-artifact-handoff-for-attachments
+    date: "2026-03-27"
+    pr:
+    area: agents
+    type: added
+    audience: developers
+    summary: "Capabilities can now return artifact payloads that become attachment references across tools in the same session"
+    affected_files:
+      - crates/selu-orchestrator/src/agents/artifacts.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/state.rs
+    docs_sections:
+      - developer-guide/capabilities/container-guidelines
+      - developer-guide/agent-format/package-structure
+      - reference/manifest-yaml-schema
+    details: |
+      Added orchestrator-level artifact handoff support for capability tool flows.
+      A capability tool can now return JSON with an `artifact` (or `artifacts`)
+      object that includes `filename`, `mime_type`, and `data_base64`.
 
-    Selu stores the payload in session-scoped in-memory storage and rewrites
-    tool output to a compact `artifact_id` reference. Later tool calls in the
-    same user session can pass `attachments[].artifact_id`, and Selu resolves
-    it back into `data_base64` right before invoking the target capability.
+      Selu stores the payload in session-scoped in-memory storage and rewrites
+      tool output to a compact `artifact_id` reference. Later tool calls in the
+      same user session can pass `attachments[].artifact_id`, and Selu resolves
+      it back into `data_base64` right before invoking the target capability.
 
-    Security constraints:
-    - artifacts are scoped to `(user_id, session_id)`
-    - artifacts expire automatically (TTL)
-    - payload size is validated with an upper bound
-- id: 2026-03-27-grpc-artifact-streaming
-  date: "2026-03-27"
-  pr:
-  area: capabilities
-  type: changed
-  audience: developers
-  summary: "Capability artifact exchange now uses artifact IDs and gRPC upload/download streams instead of inline base64 payloads"
-  affected_files:
-    - crates/selu-orchestrator/proto/capability.proto
-    - crates/selu-orchestrator/src/capabilities/grpc.rs
-    - crates/selu-orchestrator/src/capabilities/mod.rs
-    - crates/selu-orchestrator/src/agents/artifacts.rs
-    - crates/selu-orchestrator/src/agents/engine.rs
-    - crates/selu-orchestrator/src/llm/tool_loop.rs
-  docs_sections:
-    - developer-guide/capabilities/container-guidelines
-    - user-guide/agents/sessions
-    - reference/manifest-yaml-schema
-  details: |
-    Orchestrator-to-capability artifact transfer now uses dedicated gRPC RPCs:
-    `UploadInputArtifact` and `DownloadOutputArtifact`.
+      Security constraints:
+      - artifacts are scoped to `(user_id, session_id)`
+      - artifacts expire automatically (TTL)
+      - payload size is validated with an upper bound
+  - id: 2026-03-27-grpc-artifact-streaming
+    date: "2026-03-27"
+    pr:
+    area: capabilities
+    type: changed
+    audience: developers
+    summary: "Capability artifact exchange now uses artifact IDs and gRPC upload/download streams instead of inline base64 payloads"
+    affected_files:
+      - crates/selu-orchestrator/proto/capability.proto
+      - crates/selu-orchestrator/src/capabilities/grpc.rs
+      - crates/selu-orchestrator/src/capabilities/mod.rs
+      - crates/selu-orchestrator/src/agents/artifacts.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/llm/tool_loop.rs
+    docs_sections:
+      - developer-guide/capabilities/container-guidelines
+      - user-guide/agents/sessions
+      - reference/manifest-yaml-schema
+    details: |
+      Orchestrator-to-capability artifact transfer now uses dedicated gRPC RPCs:
+      `UploadInputArtifact` and `DownloadOutputArtifact`.
 
-    Capabilities that produce artifacts should return metadata with a
-    `capability_artifact_id` in tool results. Orchestrator fetches bytes using
-    `DownloadOutputArtifact`, stores them as session-scoped artifacts, and
-    surfaces `artifact_id` to later tool calls.
+      Capabilities that produce artifacts should return metadata with a
+      `capability_artifact_id` in tool results. Orchestrator fetches bytes using
+      `DownloadOutputArtifact`, stores them as session-scoped artifacts, and
+      surfaces `artifact_id` to later tool calls.
 
-    Capabilities that consume attachments receive files through
-    `UploadInputArtifact`; tool arguments now carry references (`artifact_id`
-    from the model, translated to `capability_artifact_id` for the capability)
-    rather than inline `data_base64`.
+      Capabilities that consume attachments receive files through
+      `UploadInputArtifact`; tool arguments now carry references (`artifact_id`
+      from the model, translated to `capability_artifact_id` for the capability)
+      rather than inline `data_base64`.
 
-    Inline artifact payloads in tool args/results are rejected. This reduces
-    sensitive payload exposure in logs and approval records.
-- id: 2026-03-27-pipe-pdf-outbound-delivery
-  date: "2026-03-27"
-  pr:
-  area: channels
-  type: changed
-  audience: both
-  summary: "Generated artifacts (including PDFs) can now be delivered as outbound pipe attachments with signed download links"
-  affected_files:
-    - crates/selu-core/src/types.rs
-    - crates/selu-orchestrator/src/agents/engine.rs
-    - crates/selu-orchestrator/src/agents/artifacts.rs
-    - crates/selu-orchestrator/src/api/mod.rs
-    - crates/selu-orchestrator/src/api/artifacts.rs
-    - crates/selu-orchestrator/src/pipes/inbound.rs
-    - crates/selu-orchestrator/src/channels/registry.rs
-    - crates/selu-orchestrator/src/channels/webhook_sender.rs
-    - crates/selu-orchestrator/src/telegram/adapter.rs
-    - crates/selu-orchestrator/src/bluebubbles/adapter.rs
-    - crates/selu-orchestrator/src/schedules/executor.rs
-    - sidecars/whatsapp-bridge/src/index.js
-  docs_sections:
-    - user-guide/channels/telegram
-    - user-guide/channels/web-chat
-    - reference/api
-  details: |
-    Outbound delivery now supports structured attachments in addition to text.
+      Inline artifact payloads in tool args/results are rejected. This reduces
+      sensitive payload exposure in logs and approval records.
+  - id: 2026-03-27-pipe-pdf-outbound-delivery
+    date: "2026-03-27"
+    pr:
+    area: channels
+    type: changed
+    audience: both
+    summary: "Generated artifacts (including PDFs) can now be delivered as outbound pipe attachments with signed download links"
+    affected_files:
+      - crates/selu-core/src/types.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/agents/artifacts.rs
+      - crates/selu-orchestrator/src/api/mod.rs
+      - crates/selu-orchestrator/src/api/artifacts.rs
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+      - crates/selu-orchestrator/src/channels/registry.rs
+      - crates/selu-orchestrator/src/channels/webhook_sender.rs
+      - crates/selu-orchestrator/src/telegram/adapter.rs
+      - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+      - crates/selu-orchestrator/src/schedules/executor.rs
+      - sidecars/whatsapp-bridge/src/index.js
+    docs_sections:
+      - user-guide/channels/telegram
+      - user-guide/channels/web-chat
+      - reference/api
+    details: |
+      Outbound delivery now supports structured attachments in addition to text.
 
-    `run_turn` returns both assistant text and newly generated session
-    artifacts. Pipe/channel delivery paths convert those artifacts into outbound
-    attachments and include:
-    - attachment metadata (artifact_id, filename, mime_type, size_bytes)
-    - optional inline `data_base64` for webhook adapters
-    - short-lived signed `download_url` values
+      `run_turn` returns both assistant text and newly generated session
+      artifacts. Pipe/channel delivery paths convert those artifacts into outbound
+      attachments and include:
+      - attachment metadata (artifact_id, filename, mime_type, size_bytes)
+      - optional inline `data_base64` for webhook adapters
+      - short-lived signed `download_url` values
 
-    A new public endpoint serves signed artifact downloads:
-    `GET /api/artifacts/{artifact_id}/download?exp=...&sig=...`.
+      A new public endpoint serves signed artifact downloads:
+      `GET /api/artifacts/{artifact_id}/download?exp=...&sig=...`.
 
-    Telegram now sends PDF attachments with `sendDocument`.
-    BlueBubbles keeps text delivery and appends signed download links.
-    WhatsApp bridge outbound webhook handling now accepts `attachments` and
-    sends PDF documents (URL- or base64-backed) when provided.
+      Telegram now sends PDF attachments with `sendDocument`.
+      BlueBubbles keeps text delivery and appends signed download links.
+      WhatsApp bridge outbound webhook handling now accepts `attachments` and
+      sends PDF documents (URL- or base64-backed) when provided.
 
   - id: 2026-03-27-system-updates-modal-self-restart
     date: "2026-03-27"
@@ -1588,7 +1588,9 @@ entries:
       background JSON actions instead of redirecting away immediately. The UI
       shows a modal with staged progress, keeps polling while Selu restarts,
       and reloads the page automatically when the refreshed server is back so
-      people see the successful update state without manually refreshing.  - id: 2026-03-27-agent-update-wizard
+      people see the successful update state without manually refreshing.
+
+  - id: 2026-03-27-agent-update-wizard
     date: "2026-03-27"
     pr:
     area: ui
@@ -2357,61 +2359,61 @@ entries:
       of a long silent gap.
 
       New i18n key: `chat.tool.delegating_progress` (en/de).
-- id: 2026-05-04-schedule-thread-section
-  date: "2026-05-04"
-  pr:
-  area: channels
-  type: changed
-  audience: both
-  summary: "Scheduled runs now reuse one schedule thread per pipe and appear in a separate schedule section"
-  affected_files:
-    - crates/selu-orchestrator/src/schedules/executor.rs
-    - crates/selu-orchestrator/src/services/chat.rs
-    - crates/selu-orchestrator/src/api/mobile.rs
-    - crates/selu-orchestrator/src/web/chat.rs
-    - crates/selu-orchestrator/templates/chat.html
-    - crates/selu-orchestrator/migrations/0059_schedule_threads.sql
-    - ../selu-ios/Selu/Models/Models.swift
-    - ../selu-ios/Selu/Views/Chat/ChatNavigationView.swift
-  docs_sections:
-    - user-guide/channels/web-chat
-    - user-guide/channels/imessage
-    - reference/api
-  details: |
-    Threads now have `thread_kind` (`conversation` or `schedule`) and optional
-    `schedule_id` metadata. The schedule executor reuses the same thread for
-    each schedule and pipe instead of creating a new conversation for every
-    run. Web Chat and the iOS app render schedule-created threads in a
-    separate "Schedules" section so normal conversations are not flooded.
+  - id: 2026-05-04-schedule-thread-section
+    date: "2026-05-04"
+    pr:
+    area: channels
+    type: changed
+    audience: both
+    summary: "Scheduled runs now reuse one schedule thread per pipe and appear in a separate schedule section"
+    affected_files:
+      - crates/selu-orchestrator/src/schedules/executor.rs
+      - crates/selu-orchestrator/src/services/chat.rs
+      - crates/selu-orchestrator/src/api/mobile.rs
+      - crates/selu-orchestrator/src/web/chat.rs
+      - crates/selu-orchestrator/templates/chat.html
+      - crates/selu-orchestrator/migrations/0059_schedule_threads.sql
+      - ../selu-ios/Selu/Models/Models.swift
+      - ../selu-ios/Selu/Views/Chat/ChatNavigationView.swift
+    docs_sections:
+      - user-guide/channels/web-chat
+      - user-guide/channels/imessage
+      - reference/api
+    details: |
+      Threads now have `thread_kind` (`conversation` or `schedule`) and optional
+      `schedule_id` metadata. The schedule executor reuses the same thread for
+      each schedule and pipe instead of creating a new conversation for every
+      run. Web Chat and the iOS app render schedule-created threads in a
+      separate "Schedules" section so normal conversations are not flooded.
 
-    The mobile thread list response includes two new fields:
-    `thread_kind` and `schedule_id`. Existing clients can ignore them.
-- id: 2026-09-02-capability-image-self-healing
-  date: "2026-09-02"
-  pr:
-  area: capabilities
-  type: changed
-  audience: users
-  summary: "Missing capability container images are restored automatically and shown in agent settings"
-  affected_files:
-    - crates/selu-orchestrator/src/capabilities/runner.rs
-    - crates/selu-orchestrator/src/capabilities/mod.rs
-    - crates/selu-orchestrator/src/web/agents.rs
-    - crates/selu-orchestrator/src/web/mod.rs
-    - crates/selu-orchestrator/templates/agents_detail.html
-    - crates/selu-orchestrator/templates/layout.html
-  docs_sections:
-    - user-guide/agents/*
-    - user-guide/self-hosting/docker
-  details: |
-    When Docker no longer has the image required by an installed agent's
-    capability, Selu now downloads the image automatically on the next use and
-    continues starting the capability. Concurrent requests for the same missing
-    image share one download.
+      The mobile thread list response includes two new fields:
+      `thread_kind` and `schedule_id`. Existing clients can ignore them.
+  - id: 2026-09-02-capability-image-self-healing
+    date: "2026-09-02"
+    pr:
+    area: capabilities
+    type: changed
+    audience: users
+    summary: "Missing capability container images are restored automatically and shown in agent settings"
+    affected_files:
+      - crates/selu-orchestrator/src/capabilities/runner.rs
+      - crates/selu-orchestrator/src/capabilities/mod.rs
+      - crates/selu-orchestrator/src/web/agents.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - crates/selu-orchestrator/templates/layout.html
+    docs_sections:
+      - user-guide/agents/*
+      - user-guide/self-hosting/docker
+    details: |
+      When Docker no longer has the image required by an installed agent's
+      capability, Selu now downloads the image automatically on the next use and
+      continues starting the capability. Concurrent requests for the same missing
+      image share one download.
 
-    Each capability's image status is also shown on the agent Overview page as
-    Files ready, Download needed, or Status unavailable. Administrators can use the
-    Download now action to restore a missing image before the capability is used.
+      Each capability's image status is also shown on the agent Overview page as
+      Files ready, Download needed, or Status unavailable. Administrators can use the
+      Download now action to restore a missing image before the capability is used.
 
   - id: 2026-09-04-conversation-manage-and-paginate
     date: "2026-09-04"
@@ -2539,39 +2541,222 @@ entries:
       immediately; clients receive run.created, message.created for the reply
       and run.updated (completed).
 
-- id: 2026-09-07-streamlined-memory-model
-  date: "2026-09-07"
-  pr:
-  area: agents
-  type: changed
-  audience: both
-  summary: "Memory now has three explicit boundaries: user profile, shared notes, and per-agent lessons"
-  affected_files:
-    - crates/selu-core/src/types.rs
-    - crates/selu-orchestrator/src/agents/profile.rs
-    - crates/selu-orchestrator/src/agents/personality.rs
-    - crates/selu-orchestrator/src/agents/memory.rs
-    - crates/selu-orchestrator/src/agents/improvement.rs
-    - crates/selu-orchestrator/templates/personality.html
-    - crates/selu-orchestrator/templates/agents_detail.html
-    - ui/src/i18n.ts
-  docs_sections:
-    - user-guide/personality
-    - user-guide/agents/sessions
-    - developer-guide/built-in-tools/memory
-  details: |
-    Selu now presents and documents three deliberately separate concepts.
-    "About you" contains stable user facts and is always injected for every
-    agent. "Shared notes" contains user-scoped, searchable context saved by agents and shared with all
-    agents; the saving agent is provenance only. "Lessons" contains behavioral
-    guidance scoped to one agent and user.
+  - id: 2026-09-07-streamlined-memory-model
+    date: "2026-09-07"
+    pr:
+    area: agents
+    type: changed
+    audience: both
+    summary: "Memory now has three explicit boundaries: user profile, shared notes, and per-agent lessons"
+    affected_files:
+      - crates/selu-core/src/types.rs
+      - crates/selu-orchestrator/src/agents/profile.rs
+      - crates/selu-orchestrator/src/agents/personality.rs
+      - crates/selu-orchestrator/src/agents/memory.rs
+      - crates/selu-orchestrator/src/agents/improvement.rs
+      - crates/selu-orchestrator/templates/personality.html
+      - crates/selu-orchestrator/templates/agents_detail.html
+      - ui/src/i18n.ts
+    docs_sections:
+      - user-guide/personality
+      - user-guide/agents/sessions
+      - developer-guide/built-in-tools/memory
+    details: |
+      Selu now presents and documents three deliberately separate concepts.
+      "About you" contains stable user facts and is always injected for every
+      agent. "Shared notes" contains user-scoped, searchable context saved by agents and shared with all
+      agents; the saving agent is provenance only. "Lessons" contains behavioral
+      guidance scoped to one agent and user.
 
-    Agent lessons now use one five-turn reflection path. Lessons with at least
-    two supporting observations and confidence of 0.85 or higher activate
-    immediately (up to ten active lessons); uncertain lessons remain explicit
-    suggestions the user can activate, pause, or remove. The unused daily
-    metrics table, unpopulated signal flags, promotion scheduler, and second
-    daily LLM optimization pass were removed. Existing profile, note, feedback,
-    and lesson-management capabilities remain available. Mobile memory responses
-    retain the existing category field for compatibility, returning an empty
-    string for shared notes as before.
+      Agent lessons now use one five-turn reflection path. Lessons with at least
+      two supporting observations and confidence of 0.85 or higher activate
+      immediately (up to ten active lessons); uncertain lessons remain explicit
+      suggestions the user can activate, pause, or remove. The unused daily
+      metrics table, unpopulated signal flags, promotion scheduler, and second
+      daily LLM optimization pass were removed. Existing profile, note, feedback,
+      and lesson-management capabilities remain available. Mobile memory responses
+      retain the existing category field for compatibility, returning an empty
+      string for shared notes as before.
+
+  - id: 2026-09-07-react-management-pages
+    date: "2026-09-07"
+    pr:
+    area: ui
+    type: added
+    audience: both
+    summary: "The React SPA now covers profile, automations, people, AI services, account security, mobile pairing, secrets, cache storage, and feedback"
+    affected_files:
+      - ui/src/app/router.tsx
+      - ui/src/components/AppNavigation.tsx
+      - ui/src/features/about/AboutPage.tsx
+      - ui/src/features/automations/AutomationsPage.tsx
+      - ui/src/features/connections/ConnectionsPage.tsx
+      - ui/src/features/people/PeoplePage.tsx
+      - ui/src/features/settings/SettingsPage.tsx
+      - ui/src/features/feedback/FeedbackPage.tsx
+      - crates/selu-orchestrator/src/api/automations.rs
+      - crates/selu-orchestrator/src/api/provider_admin.rs
+      - crates/selu-orchestrator/src/services/automations.rs
+      - crates/selu-orchestrator/src/services/provider_admin.rs
+      - crates/selu-orchestrator/src/schedules/mod.rs
+    docs_sections:
+      - user-guide/personality
+      - user-guide/llm-providers/bedrock
+      - user-guide/security/credentials
+      - user-guide/self-hosting/updating
+      - user-guide/channels/web-chat
+      - reference/api
+    details: |
+      Added authenticated SPA routes under `/app` for About you, Automations,
+      AI services, People, Settings, and Feedback. The pages use overview cards
+      with focused side panels, become full-screen sheets on phones, support
+      English and German, and progressively disclose technical timing and secret
+      fields. Exact repeating timing accepts standard five-part cron expressions;
+      Selu supplies a zero-seconds field internally while retaining existing
+      six-part schedule compatibility.
+
+      The Settings overview now includes password changes, five-minute one-time
+      mobile pairing, caller-owned encrypted values, admin-only shared values,
+      and caller/admin-scoped cache storage. Secret values remain write-only.
+
+      Added versioned read endpoints for active caller-owned automation delivery
+      destinations and safe all-secret metadata listings. No secret values are
+      returned. Amazon Bedrock configuration now consistently requires both a
+      bearer access token and an AWS region, matching the actual runtime client.
+
+  - id: 2026-09-07-react-agents-connectors-updates
+    date: "2026-09-07"
+    pr:
+    area: ui
+    type: changed
+    audience: both
+    summary: "Agents, messaging connections, and System Updates now run entirely in the React SPA with versioned JSON APIs"
+    affected_files:
+      - ui/src/app/router.tsx
+      - ui/src/components/AppNavigation.tsx
+      - ui/src/features/agents/AgentsPage.tsx
+      - ui/src/features/agents/api.ts
+      - ui/src/features/connectors/ConnectorsPage.tsx
+      - ui/src/features/connectors/api.ts
+      - ui/src/features/updates/UpdatesPage.tsx
+      - ui/src/features/updates/api.ts
+      - crates/selu-orchestrator/src/api/agents.rs
+      - crates/selu-orchestrator/src/api/connectors.rs
+      - crates/selu-orchestrator/src/api/system_updates.rs
+      - crates/selu-orchestrator/src/web/mod.rs
+    docs_sections:
+      - user-guide/agents
+      - user-guide/channels/web-chat
+      - user-guide/channels/telegram
+      - user-guide/channels/imessage
+      - user-guide/self-hosting/updating
+      - user-guide/security/credentials
+      - reference/api
+    details: |
+      Added `/app/agents`, `/app/agents/:agentId`, `/app/connectors`, and
+      `/app/updates`. The pages use responsive overview cards, focused desktop
+      side panels, full-screen phone sheets, plain-language English/German copy,
+      accessible confirmations, reduced-motion styling, and progressive
+      disclosure for advanced connection and runtime settings.
+
+      Messaging Connections now covers Web chat, one-time Webhook credentials,
+      Telegram chat discovery and webhook repair, BlueBubbles chat discovery,
+      WhatsApp bridge/QR status, and per-connection allowed people. Stored tokens,
+      passwords, and authorization values remain write-only; webhook inbound
+      credentials are returned only by the immediate creation response.
+
+      Agents now covers catalogue installation, setup tests and permissions,
+      updates with live progress, model/runtime/automation settings, tool and
+      network policy, private details, storage, memory, learning, ratings, helper
+      images, and uninstall. System Updates now covers release state, changelogs,
+      checks, apply/rollback progress, public address, channel, automatic updates,
+      mobile alerts, and anonymous installation-statistics preference.
+
+      New admin-only APIs live under `/api/v1/agents`, `/api/v1/connectors`, and
+      `/api/v1/system-updates`. Old authenticated page URLs redirect into the
+      SPA. Their legacy form mutations, Askama renderers, and templates are
+      removed; lifecycle work now runs only through typed native services.
+  - id: 2026-09-07-messaging-connectors-backend-migration
+    date: "2026-09-07"
+    pr:
+    area: channels
+    type: changed
+    audience: both
+    summary: "Messaging connector setup now uses the v1 API and encrypted transactional backend services"
+    affected_files:
+      - crates/selu-orchestrator/src/api/connectors.rs
+      - crates/selu-orchestrator/src/api/connectors/domain.rs
+      - crates/selu-orchestrator/src/telegram/adapter.rs
+      - crates/selu-orchestrator/src/bluebubbles/adapter.rs
+      - crates/selu-orchestrator/src/pipes/inbound.rs
+      - crates/selu-orchestrator/src/events/fanout.rs
+      - crates/selu-orchestrator/migrations/0063_encrypt_connector_secrets.sql
+    docs_sections:
+      - user-guide/channels/imessage
+      - user-guide/channels/telegram
+      - user-guide/self-hosting/docker
+      - user-guide/security/credentials
+      - reference/api
+    details: |
+      Connector setup, chat discovery, allowed-person changes, webhook checks,
+      and removal now use `/api/v1/connectors` rather than server-rendered
+      mutation routes. Existing authenticated connector page URLs redirect to
+      the SPA, while legacy mutation routes are retired.
+
+      Telegram bot tokens, BlueBubbles passwords, pipe inbound bearer tokens,
+      and optional outbound authorization values are encrypted at rest with the
+      existing AES-256-GCM instance key. Startup backfills existing plaintext
+      values into encrypted columns and clears the legacy placeholders before
+      adapters, pipe ingestion, event fanout, or the WhatsApp sidecar start.
+
+      Connector database writes and sender mappings are transactional. Failed
+      Telegram or BlueBubbles webhook registration compensates by removing the
+      newly-created rows; failed WhatsApp persistence stops the sidecar. A
+      Telegram setup request now reports webhook registration failure instead
+      of returning a false success.
+  - id: 2026-09-07-react-spa-final-cutover
+    date: "2026-09-07"
+    pr:
+    area: ui
+    type: removed
+    audience: both
+    summary: "The React SPA is now Selu's only browser UI; server-rendered pages and legacy form mutations are removed"
+    affected_files:
+      - crates/selu-orchestrator/src/web/mod.rs
+      - crates/selu-orchestrator/src/web/spa.rs
+      - crates/selu-orchestrator/src/api/auth.rs
+      - crates/selu-orchestrator/src/api/conversations.rs
+      - crates/selu-orchestrator/src/services/feedback.rs
+      - crates/selu-orchestrator/src/services/pipes.rs
+      - crates/selu-orchestrator/Cargo.toml
+      - ui/src/app/router.tsx
+      - ui/src/features/
+    docs_sections:
+      - getting-started/first-conversation
+      - user-guide/agents
+      - user-guide/channels/web-chat
+      - user-guide/channels/telegram
+      - user-guide/channels/imessage
+      - user-guide/personality
+      - user-guide/llm-providers/bedrock
+      - user-guide/security/credentials
+      - user-guide/self-hosting/updating
+      - reference/api
+    details: |
+      Selu no longer ships or renders Askama templates and no browser flow uses
+      HTMX or HTML form handlers. Login, first-time setup, conversations, profile,
+      people, automations, AI providers, credentials, cache storage, mobile
+      pairing, feedback, Agents, Messaging Connections, and System Updates all
+      live under `/app` and use authenticated `/api/v1` JSON contracts.
+
+      Public `/login` and `/setup` GET requests redirect to their SPA routes.
+      Previous authenticated management GET URLs remain only as base-path-aware
+      redirects to canonical `/app/*` destinations. Their POST, PUT, PATCH, and
+      DELETE form routes are no longer registered; clients must use the versioned
+      APIs. The old `/logout` route is also removed in favor of
+      `/api/v1/auth/logout`.
+
+      Runtime-only feedback-tool and browser-chat pipe backfill helpers moved
+      from the web namespace into native services. Conversation APIs now use
+      `ApiPrincipal` directly. The Askama dependency, all Rust template
+      renderers, and the complete template directory were deleted.

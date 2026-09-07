@@ -187,7 +187,7 @@ async fn mobile_login(
         .await
         .unwrap_or_default();
 
-    let push_enabled = crate::web::system_updates::push_notifications_enabled(&state).await;
+    let push_enabled = crate::services::system_updates::push_notifications_enabled(&state).await;
 
     Json(LoginResponse {
         session_id,
@@ -218,7 +218,7 @@ async fn instance_info(State(state): State<AppState>, headers: HeaderMap) -> imp
     let instance_id = crate::persistence::db::get_instance_id(&state.db)
         .await
         .unwrap_or_default();
-    let push_enabled = crate::web::system_updates::push_notifications_enabled(&state).await;
+    let push_enabled = crate::services::system_updates::push_notifications_enabled(&state).await;
 
     Json(InstanceInfoResponse {
         instance_id,
@@ -379,7 +379,7 @@ async fn redeem_setup_token(
     let instance_id = crate::persistence::db::get_instance_id(&state.db)
         .await
         .unwrap_or_default();
-    let push_enabled = crate::web::system_updates::push_notifications_enabled(&state).await;
+    let push_enabled = crate::services::system_updates::push_notifications_enabled(&state).await;
 
     Json(LoginResponse {
         session_id,

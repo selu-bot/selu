@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.id as \"pipe_id!\", p.name, p.transport, p.active\n           FROM schedule_pipes sp\n           JOIN pipes p ON p.id = sp.pipe_id\n           WHERE sp.schedule_id = ? AND p.user_id = ?\n           ORDER BY p.name, p.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "pipe_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "transport",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "transport"
+          }
+        }
+      },
+      {
+        "name": "active",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "pipes",
+            "name": "active"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b9ac0d1731a4e1c1cf8af500264867c4d2f614c7cee99cd34511a8a67082c9b1"
+}

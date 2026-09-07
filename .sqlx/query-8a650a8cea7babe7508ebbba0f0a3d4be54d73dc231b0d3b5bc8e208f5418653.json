@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM whatsapp_configs WHERE pipe_id IN (SELECT id FROM pipes WHERE user_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "8a650a8cea7babe7508ebbba0f0a3d4be54d73dc231b0d3b5bc8e208f5418653"
+}
