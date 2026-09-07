@@ -98,8 +98,14 @@ impl OpenAiProvider {
         let mut body = json!({
             "model": self.default_model,
             "messages": messages_to_openai(messages),
-            "temperature": temperature,
         });
+
+        if super::model_capabilities::supports_configurable_temperature(
+            self.provider_id,
+            &self.default_model,
+        ) {
+            body["temperature"] = json!(temperature);
+        }
 
         if stream {
             body["stream"] = json!(true);
@@ -365,5 +371,23 @@ impl LlmProvider for OpenAiProvider {
             });
 
         Ok(Box::pin(stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn omits_temperature_for_openai_reasoning_models() {
+        let messages = vec![ChatMessage::user("hello")];
+
+        let reasoning = OpenAiProvider::new("test-key", "gpt-5.6");
+        let reasoning_body = reasoning.build_body(&messages, &[], 0.7, false);
+        assert!(reasoning_body.get("temperature").is_none());
+
+        let configurable = OpenAiProvider::new("test-key", "gpt-4o");
+        let configurable_body = configurable.build_body(&messages, &[], 0.7, false);
+        assert!(configurable_body.get("temperature").is_some());
     }
 }

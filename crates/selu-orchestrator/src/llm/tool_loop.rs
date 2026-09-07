@@ -237,7 +237,21 @@ pub async fn run_loop(
                             break;
                         };
 
-                        match chunk? {
+                        let chunk = match chunk {
+                            Ok(chunk) => chunk,
+                            Err(error) => {
+                                warn!(
+                                    iteration,
+                                    error = %error,
+                                    "Streaming response failed, falling back to non-streaming"
+                                );
+                                stream_ok = false;
+                                stream_reason = "chunk_error";
+                                break;
+                            }
+                        };
+
+                        match chunk {
                             StreamChunk::Text(t) => {
                                 if !got_first_token {
                                     let elapsed = stream_start.elapsed().as_millis();

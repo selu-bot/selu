@@ -2760,3 +2760,33 @@ entries:
       from the web namespace into native services. Conversation APIs now use
       `ApiPrincipal` directly. The Askama dependency, all Rust template
       renderers, and the complete template directory were deleted.
+
+  - id: 2026-09-07-new-model-compatibility
+    date: "2026-09-07"
+    pr:
+    area: llm-providers
+    type: changed
+    audience: both
+    summary: "New reasoning models use provider-managed sampling and Bedrock stream failures no longer end silently"
+    affected_files:
+      - crates/selu-orchestrator/src/llm/model_capabilities.rs
+      - crates/selu-orchestrator/src/llm/openai.rs
+      - crates/selu-orchestrator/src/llm/anthropic.rs
+      - crates/selu-orchestrator/src/llm/bedrock.rs
+      - crates/selu-orchestrator/src/llm/tool_loop.rs
+      - crates/selu-orchestrator/src/llm/models.rs
+    docs_sections:
+      - user-guide/llm-providers/openai
+      - user-guide/llm-providers/anthropic
+      - user-guide/llm-providers/bedrock
+    details: |
+      Selu now omits the optional temperature field for model families that
+      require provider-managed sampling, including GPT-5.x, OpenAI o-series,
+      Claude Fable and Mythos, Claude 5.x, and Claude Opus 4.7 or newer.
+      This applies both to direct provider APIs and Amazon Bedrock Converse.
+
+      Bedrock transport, event-stream, and model-side stream exceptions now
+      trigger the existing non-streaming fallback instead of being discarded.
+      Empty Bedrock responses become failed runs rather than blank assistant
+      messages. Static fallback catalogues include Claude Fable 5.1 and
+      GPT-5.6 Sol Bedrock inference profiles.

@@ -506,6 +506,14 @@ fn static_models(provider_id: &str) -> Vec<ModelInfo> {
     match provider_id {
         "anthropic" => vec![
             ModelInfo {
+                id: "claude-fable-5-1".into(),
+                name: "Claude Fable 5.1".into(),
+            },
+            ModelInfo {
+                id: "claude-opus-5".into(),
+                name: "Claude Opus 5".into(),
+            },
+            ModelInfo {
                 id: "claude-opus-4-20250514".into(),
                 name: "Claude Opus 4".into(),
             },
@@ -519,6 +527,10 @@ fn static_models(provider_id: &str) -> Vec<ModelInfo> {
             },
         ],
         "openai" => vec![
+            ModelInfo {
+                id: "gpt-5.6".into(),
+                name: "GPT-5.6".into(),
+            },
             ModelInfo {
                 id: "gpt-4o".into(),
                 name: "GPT-4o".into(),
@@ -555,6 +567,18 @@ fn static_models(provider_id: &str) -> Vec<ModelInfo> {
             },
         ],
         "bedrock" => vec![
+            ModelInfo {
+                id: "global.anthropic.claude-fable-5-1".into(),
+                name: "Claude Fable 5.1 (Global)".into(),
+            },
+            ModelInfo {
+                id: "global.anthropic.claude-opus-5".into(),
+                name: "Claude Opus 5 (Global)".into(),
+            },
+            ModelInfo {
+                id: "global.openai.gpt-5.6-sol".into(),
+                name: "GPT-5.6 Sol (Global)".into(),
+            },
             ModelInfo {
                 id: "us.anthropic.claude-opus-4-20250514-v1:0".into(),
                 name: "Claude Opus 4".into(),
