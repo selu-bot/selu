@@ -124,7 +124,11 @@ fn estimate_base64_decoded_len(data: &str) -> usize {
 }
 
 /// Build the Bedrock Converse request body from our internal message types.
-fn build_converse_body(messages: &[ChatMessage], tools: &[ToolSpec], temperature: f32) -> Value {
+fn build_converse_body(
+    messages: &[ChatMessage],
+    tools: &[ToolSpec],
+    temperature: Option<f32>,
+) -> Value {
     // Extract system prompts
     let system: Vec<Value> = messages
         .iter()
@@ -223,10 +227,13 @@ fn build_converse_body(messages: &[ChatMessage], tools: &[ToolSpec], temperature
     let mut body = json!({
         "messages": bedrock_messages,
         "inferenceConfig": {
-            "temperature": temperature,
             "maxTokens": 16384,
         }
     });
+
+    if let Some(temperature) = temperature {
+        body["inferenceConfig"]["temperature"] = json!(temperature);
+    }
 
     if !system.is_empty() {
         body["system"] = json!(system);
@@ -279,9 +286,23 @@ mod tests {
             tool_calls: vec![],
             is_error: false,
         }];
-        let body = build_converse_body(&messages, &[], 0.2);
+        let body = build_converse_body(&messages, &[], Some(0.2));
         let content = &body["messages"][0]["content"];
         assert_eq!(content.as_array().map(|a| a.len()), Some(0));
+    }
+
+    #[test]
+    fn optional_temperature_is_omitted_from_inference_config() {
+        let messages = vec![ChatMessage::user("hello")];
+
+        let managed = build_converse_body(&messages, &[], None);
+        assert!(managed["inferenceConfig"].get("temperature").is_none());
+
+        let configurable = build_converse_body(&messages, &[], Some(0.7));
+        let temperature = configurable["inferenceConfig"]["temperature"]
+            .as_f64()
+            .expect("temperature should be numeric");
+        assert!((temperature - 0.7).abs() < 1e-6);
     }
 }
 
@@ -307,6 +328,9 @@ impl LlmProvider for BedrockProvider {
         tools: &[ToolSpec],
         temperature: f32,
     ) -> Result<LlmResponse> {
+        let temperature =
+            super::model_capabilities::supports_configurable_temperature("bedrock", &self.model_id)
+                .then_some(temperature);
         let body = build_converse_body(messages, tools, temperature);
         debug!(provider = "bedrock", model = %self.model_id, "Sending converse request");
 
@@ -365,7 +389,15 @@ impl LlmProvider for BedrockProvider {
             return Ok(LlmResponse::ToolCalls(tool_calls));
         }
 
-        Ok(LlmResponse::Text(text_parts.join("")))
+        let text = text_parts.join("");
+        if text.is_empty() {
+            let stop_reason = resp_json["stopReason"].as_str().unwrap_or("unknown");
+            return Err(anyhow!(
+                "Bedrock response contained no text or tool calls (stop reason: {stop_reason})"
+            ));
+        }
+
+        Ok(LlmResponse::Text(text))
     }
 
     async fn chat_stream(
@@ -374,6 +406,9 @@ impl LlmProvider for BedrockProvider {
         tools: &[ToolSpec],
         temperature: f32,
     ) -> Result<ChunkStream> {
+        let temperature =
+            super::model_capabilities::supports_configurable_temperature("bedrock", &self.model_id)
+                .then_some(temperature);
         let body = build_converse_body(messages, tools, temperature);
         debug!(provider = "bedrock", model = %self.model_id, "Sending converse-stream request");
 
@@ -415,7 +450,7 @@ impl LlmProvider for BedrockProvider {
                 Ok(c) => c,
                 Err(e) => {
                     warn!("Bedrock stream chunk error: {e}");
-                    return stream::iter(Vec::new());
+                    return stream::iter(vec![Err(anyhow!("Bedrock stream transport error: {e}"))]);
                 }
             };
 
@@ -455,7 +490,12 @@ impl LlmProvider for BedrockProvider {
                                 event_type = ?event_type,
                                 "Bedrock stream exception: {payload_str}"
                             );
-                            continue;
+                            events.push(Err(anyhow!(
+                                "Bedrock stream exception {:?}: {}",
+                                event_type,
+                                payload_str
+                            )));
+                            break;
                         }
 
                         // Parse JSON payload
@@ -526,6 +566,7 @@ impl LlmProvider for BedrockProvider {
                     }
                     Err(e) => {
                         warn!("Bedrock event stream decode error: {e}");
+                        events.push(Err(anyhow!("Bedrock event stream decode error: {e}")));
                         break;
                     }
                 }

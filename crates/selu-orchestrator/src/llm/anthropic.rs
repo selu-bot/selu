@@ -152,10 +152,13 @@ fn build_request(
     let mut req = json!({
         "model": model,
         "max_tokens": 16384,
-        "temperature": temperature,
         "messages": msgs,
         "stream": stream,
     });
+
+    if super::model_capabilities::supports_configurable_temperature("anthropic", model) {
+        req["temperature"] = json!(temperature);
+    }
 
     if !system_prompt.is_empty() {
         req["system"] = json!(system_prompt);
@@ -350,5 +353,21 @@ impl LlmProvider for AnthropicProvider {
         });
 
         Ok(Box::pin(stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn omits_temperature_for_managed_sampling_models() {
+        let messages = vec![ChatMessage::user("hello")];
+
+        let fable = build_request(&messages, &[], "claude-fable-5-1", 0.7, false);
+        assert!(fable.get("temperature").is_none());
+
+        let sonnet = build_request(&messages, &[], "claude-sonnet-4-20250514", 0.7, false);
+        assert!(sonnet.get("temperature").is_some());
     }
 }

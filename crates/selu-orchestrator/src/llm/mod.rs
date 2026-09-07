@@ -3,6 +3,7 @@ pub mod bedrock;
 pub mod context_budget;
 pub mod image_normalizer;
 pub mod image_provider;
+pub mod model_capabilities;
 pub mod models;
 pub mod openai;
 pub mod provider;
