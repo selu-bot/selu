@@ -26,11 +26,11 @@
     <div class="flex flex-wrap gap-2 p-1 rounded-xl bg-surface-raised border border-edge">
       <a href="{{ base_path }}/agents/{{ agent_id }}" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "overview" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.overview">Overview</a>
       <a href="{{ base_path }}/agents/{{ agent_id }}/storage" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "storage" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.storage">Storage</a>
-      <a href="{{ base_path }}/agents/{{ agent_id }}/memory" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "memory" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.memory">Memory</a>
+      <a href="{{ base_path }}/agents/{{ agent_id }}/memory" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "memory" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.memory">Shared notes</a>
       <a href="{{ base_path }}/agents/{{ agent_id }}/secrets" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "secrets" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.secrets">Secrets</a>
       <a href="{{ base_path }}/agents/{{ agent_id }}/network" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "network" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.network">Network</a>
       <a href="{{ base_path }}/agents/{{ agent_id }}/permissions" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "permissions" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.permissions">Permissions</a>
-      <a href="{{ base_path }}/agents/{{ agent_id }}/improvement" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "improvement" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.improvement">Improvement</a>
+      <a href="{{ base_path }}/agents/{{ agent_id }}/improvement" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors {% if active_tab == "improvement" %}bg-coral/15 text-coral border border-coral/30{% else %}text-txt-muted hover:text-txt-heading{% endif %}" data-i18n="agents.detail.tab.improvement">Lessons</a>
     </div>
 
     {% if let Some(err) = error %}
@@ -83,7 +83,7 @@
           <p class="mt-2 text-2xl font-bold text-txt-heading">{{ overview.storage_count }}</p>
         </div>
         <div class="bg-surface-raised border border-edge rounded-xl p-4">
-          <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.memory_entries">Memory Entries</p>
+          <p class="text-xs text-txt-muted" data-i18n="agents.detail.overview.memory_entries">Shared Notes</p>
           <p class="mt-2 text-2xl font-bold text-txt-heading">{{ overview.memory_count }}</p>
         </div>
         <div class="bg-surface-raised border border-edge rounded-xl p-4">
@@ -105,7 +105,7 @@
         </div>
         <div class="pt-2 flex flex-wrap gap-2">
           <a href="{{ base_path }}/agents/{{ agent_id }}/storage" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_storage">Open Storage</a>
-          <a href="{{ base_path }}/agents/{{ agent_id }}/memory" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_memory">Open Memory</a>
+          <a href="{{ base_path }}/agents/{{ agent_id }}/memory" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_memory">Open Shared Notes</a>
           <a href="{{ base_path }}/agents/{{ agent_id }}/network" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_network">Open Network</a>
           <a href="{{ base_path }}/agents/{{ agent_id }}/secrets" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_secrets">Open Secrets</a>
           <a href="{{ base_path }}/agents/{{ agent_id }}/permissions" class="text-xs px-3 py-1.5 rounded-lg border border-edge text-txt-muted hover:text-txt-heading" data-i18n="agents.detail.overview.open_permissions">Open Permissions</a>
@@ -353,18 +353,18 @@
     {% if active_tab == "memory" %}
     <section class="space-y-4">
       <div>
-        <h2 class="text-base font-bold text-txt-heading" data-i18n="agents.detail.section.memory">Memory</h2>
-        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.section.memory_desc">Things this agent remembers across conversations.</p>
+        <h2 class="text-base font-bold text-txt-heading" data-i18n="agents.detail.section.memory">Shared notes</h2>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="agents.detail.section.memory_desc">Notes this agent saved for you. Once saved, every agent can use them.</p>
       </div>
 
       <div class="bg-surface-raised border border-edge rounded-2xl overflow-hidden">
         <div class="px-5 py-3.5 border-b border-edge flex items-center justify-between">
-          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.section.memory">Memory</span>
+          <span class="text-sm font-semibold text-txt-heading" data-i18n="agents.detail.section.memory">Shared notes</span>
           <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-alt text-txt-muted" data-i18n="agents.detail.memory.last500">Recent entries</span>
         </div>
         {% if memory_entries.is_empty() %}
         <div class="p-5">
-          <p class="text-sm text-txt-muted text-center py-6" data-i18n="agents.detail.memory.empty">This agent hasn't saved any notes yet.</p>
+          <p class="text-sm text-txt-muted text-center py-6" data-i18n="agents.detail.memory.empty">This agent hasn't saved any shared notes yet.</p>
         </div>
         {% else %}
         <div class="overflow-x-auto">
@@ -375,7 +375,7 @@
                 {% if is_admin %}
                 <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.user">User</th>
                 {% endif %}
-                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.note">Memory</th>
+                <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.note">Note</th>
                 <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.tags">Tags</th>
                 <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.source">Source</th>
                 <th class="px-5 py-2.5 font-medium text-txt-muted uppercase tracking-wide" data-i18n="agents.detail.memory.actions">Actions</th>
@@ -801,18 +801,18 @@
     {% if active_tab == "improvement" %}
     <section class="space-y-4">
       <div>
-        <h2 class="text-base font-bold text-txt-heading" data-i18n="improvement.title">What your agent has learned</h2>
-        <p class="text-xs text-txt-muted mt-1" data-i18n="improvement.description">Your agent learns from conversations to get better over time. These are the patterns it has picked up.</p>
+        <h2 class="text-base font-bold text-txt-heading" data-i18n="improvement.title">Lessons for this agent</h2>
+        <p class="text-xs text-txt-muted mt-1" data-i18n="improvement.description">Selu reviews recent conversations for useful behavior changes. Confident lessons are applied automatically; you can pause or remove them.</p>
       </div>
 
       <div class="flex items-center gap-3 text-xs text-txt-muted">
-        <span data-i18n="improvement.signal_count">Interactions tracked:</span>
+        <span data-i18n="improvement.signal_count">Interactions reviewed:</span>
         <span class="font-medium text-txt-heading">{{ improvement_signal_count }}</span>
       </div>
 
       {% if improvement_insights.is_empty() %}
       <div class="bg-surface-raised border border-edge rounded-2xl p-8 text-center">
-        <p class="text-sm text-txt-muted" data-i18n="improvement.empty">No lessons learned yet. Keep chatting and your agent will start picking up patterns!</p>
+        <p class="text-sm text-txt-muted" data-i18n="improvement.empty">No lessons yet. Selu checks for useful patterns after every five replies.</p>
       </div>
       {% else %}
 
@@ -823,7 +823,7 @@
             {% if insight.status == "active" %}
             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-i18n="improvement.status.active">Active</span>
             {% else if insight.status == "candidate" %}
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20" data-i18n="improvement.status.learning">Learning...</span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20" data-i18n="improvement.status.learning">Suggested</span>
             {% else if insight.status == "paused" %}
             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20" data-i18n="improvement.status.paused">Paused</span>
             {% endif %}
@@ -847,7 +847,7 @@
               hx-target="#insight-{{ insight.id }}"
               hx-swap="outerHTML"
               class="px-2.5 py-1 text-xs font-medium rounded-lg border border-edge text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-              data-i18n="improvement.action.activate">Activate now</button>
+              data-i18n="improvement.action.activate">Use this lesson</button>
             {% else if insight.status == "paused" %}
             <button
               hx-post="{{ base_path }}/agents/{{ agent_id }}/improvement/activate"
@@ -870,16 +870,7 @@
         <div class="px-5 pb-4">
           <p class="text-sm text-txt-heading leading-relaxed">{{ insight.lesson_text }}</p>
           <div class="flex items-center gap-4 mt-2.5 text-[11px] text-txt-muted">
-            <span><span data-i18n="improvement.evidence">Evidence from</span> {{ insight.supporting_signals }} <span data-i18n="improvement.conversations">conversations</span></span>
-            {% if insight.status == "candidate" %}
-            <span class="flex items-center gap-1.5">
-              <span data-i18n="improvement.progress">Progress:</span>
-              <span class="inline-flex h-1.5 w-16 rounded-full bg-surface-alt overflow-hidden">
-                <span class="h-full rounded-full bg-blue-400 transition-all" style="width: {{ insight.supporting_signals * 100 / insight.promotion_threshold }}%"></span>
-              </span>
-              {{ insight.supporting_signals }}/{{ insight.promotion_threshold }}
-            </span>
-            {% endif %}
+            <span><span data-i18n="improvement.evidence">Based on</span> {{ insight.supporting_signals }} <span data-i18n="improvement.conversations">observations</span></span>
           </div>
         </div>
       </div>
@@ -888,7 +879,7 @@
 
       <div class="pt-4 border-t border-edge">
         <form hx-post="{{ base_path }}/agents/{{ agent_id }}/improvement/reset" hx-confirm="This will remove all learned lessons and start fresh. Are you sure?" class="inline">
-          <button type="submit" class="text-xs text-red-400 hover:text-red-300 transition-colors underline underline-offset-2" data-i18n="improvement.reset.button">Start fresh</button>
+          <button type="submit" class="text-xs text-red-400 hover:text-red-300 transition-colors underline underline-offset-2" data-i18n="improvement.reset.button">Clear lessons</button>
         </form>
       </div>
     </section>

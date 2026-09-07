@@ -492,23 +492,19 @@ async fn update_profile_fact(
         Err(s) => return s.into_response(),
     };
 
-    // Verify ownership before updating.
-    let owner: Option<String> = sqlx::query_scalar("SELECT user_id FROM user_profile WHERE id = ?")
-        .bind(&fact_id)
-        .fetch_optional(&state.db)
-        .await
-        .unwrap_or(None);
-
-    match owner {
-        Some(uid) if uid == user.user_id => {}
-        Some(_) => return StatusCode::FORBIDDEN.into_response(),
-        None => return StatusCode::NOT_FOUND.into_response(),
-    }
-
     let category = req.category.as_deref().unwrap_or("other");
 
-    match profile::update_fact(&state.db, &fact_id, req.fact.trim(), category).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+    match profile::update_fact(
+        &state.db,
+        &user.user_id,
+        &fact_id,
+        req.fact.trim(),
+        category,
+    )
+    .await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
             error!("Failed to update profile fact: {e}");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -637,7 +633,7 @@ async fn list_memories(
                         memory: m.memory,
                         tags: m.tags,
                         source: m.source,
-                        category: m.category,
+                        category: String::new(),
                         agent_id: m.agent_id,
                         agent_name,
                         updated_at: m.updated_at,
@@ -678,7 +674,6 @@ async fn create_memory(
         req.memory.trim(),
         req.tags.as_deref().unwrap_or(""),
         "manual",
-        "",
     )
     .await
     {

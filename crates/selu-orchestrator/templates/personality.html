@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Memory{% endblock %}
+{% block title %}About you{% endblock %}
 
 {% block body %}
 <div class="flex-1 overflow-y-auto">
@@ -8,8 +8,8 @@
 
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="personality.title">Memory</h1>
-      <p class="text-sm text-txt-muted mt-1" data-i18n="personality.desc">This is what your agents know about you. Facts are shared across all agents. You can edit or remove anything.</p>
+      <h1 class="text-2xl font-black text-txt-heading font-heading" data-i18n="personality.title">About you</h1>
+      <p class="text-sm text-txt-muted mt-1" data-i18n="personality.desc">Facts your agents should always know about you. They are shared across every agent, and you stay in control.</p>
     </div>
 
     {% if let Some(err) = error %}

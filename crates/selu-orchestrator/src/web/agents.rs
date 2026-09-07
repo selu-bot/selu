@@ -280,7 +280,6 @@ pub struct InsightView {
     pub status: String,
     pub confidence_pct: u8,
     pub supporting_signals: i64,
-    pub promotion_threshold: i64,
     pub created_at: String,
 }
 
@@ -2399,7 +2398,6 @@ async fn render_agent_detail_page(
                 status: i.status,
                 confidence_pct: (i.confidence * 100.0).round() as u8,
                 supporting_signals: i.supporting_signals,
-                promotion_threshold: i.promotion_threshold,
                 created_at: i.created_at,
             })
             .collect();
@@ -3514,13 +3512,19 @@ pub struct InsightActionForm {
 }
 
 pub async fn improvement_pause_handler(
-    _user: AuthUser,
-    Path(_agent_id): Path<String>,
+    user: AuthUser,
+    Path(agent_id): Path<String>,
     State(state): State<AppState>,
     Form(form): Form<InsightActionForm>,
 ) -> Response {
-    match crate::agents::improvement::update_insight_status(&state.db, &form.insight_id, "paused")
-        .await
+    match crate::agents::improvement::update_insight_status(
+        &state.db,
+        &form.insight_id,
+        &agent_id,
+        &user.user_id,
+        "paused",
+    )
+    .await
     {
         Ok(true) => Html(
             r#"<span class="text-xs text-amber-400" data-i18n="improvement.status.paused">Paused</span>"#,
@@ -3531,14 +3535,16 @@ pub async fn improvement_pause_handler(
 }
 
 pub async fn improvement_reject_handler(
-    _user: AuthUser,
-    Path(_agent_id): Path<String>,
+    user: AuthUser,
+    Path(agent_id): Path<String>,
     State(state): State<AppState>,
     Form(form): Form<InsightActionForm>,
 ) -> Response {
     match crate::agents::improvement::update_insight_status(
         &state.db,
         &form.insight_id,
+        &agent_id,
+        &user.user_id,
         "rejected",
     )
     .await
@@ -3552,13 +3558,19 @@ pub async fn improvement_reject_handler(
 }
 
 pub async fn improvement_activate_handler(
-    _user: AuthUser,
-    Path(_agent_id): Path<String>,
+    user: AuthUser,
+    Path(agent_id): Path<String>,
     State(state): State<AppState>,
     Form(form): Form<InsightActionForm>,
 ) -> Response {
-    match crate::agents::improvement::update_insight_status(&state.db, &form.insight_id, "active")
-        .await
+    match crate::agents::improvement::update_insight_status(
+        &state.db,
+        &form.insight_id,
+        &agent_id,
+        &user.user_id,
+        "active",
+    )
+    .await
     {
         Ok(true) => Html(
             r#"<span class="text-xs text-emerald-400" data-i18n="improvement.status.activated">Activated</span>"#,
