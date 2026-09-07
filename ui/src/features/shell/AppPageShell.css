@@ -1,7 +1,9 @@
 .app-page-shell {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   width: 100%;
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   background: var(--canvas);
@@ -9,7 +11,14 @@
 }
 
 .app-page-shell.nav-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
-.app-page-surface { min-width: 0; display: flex; flex-direction: column; }
+.app-page-surface {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
 .app-page-topbar {
   display: none;
   min-height: 64px;
@@ -22,7 +31,16 @@
   z-index: 4;
 }
 .app-page-topbar .brand-word { display: none; }
-.app-page-scroll { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: clamp(24px, 4vw, 56px); }
+.app-page-scroll {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: clamp(24px, 4vw, 56px);
+}
 
 @media (max-width: 1060px) and (min-width: 721px) {
   .app-page-shell { grid-template-columns: 76px minmax(0, 1fr); }

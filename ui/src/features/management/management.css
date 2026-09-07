@@ -1,17 +1,19 @@
 .management-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
   gap: 16px;
   margin-top: 28px;
 }
-.management-card { display: flex; min-height: 214px; flex-direction: column; gap: 10px; }
-.management-card-top { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 10px; }
+.management-card { display: flex; min-width: 0; min-height: 214px; flex-direction: column; gap: 10px; overflow-wrap: anywhere; }
+.management-card-top { display: flex; min-width: 0; min-height: 42px; align-items: center; justify-content: space-between; gap: 10px; }
 .management-card-icon { display: grid; width: 42px; height: 42px; flex: none; place-items: center; border-radius: 14px; color: var(--coral-deep); background: linear-gradient(145deg, color-mix(in srgb, var(--blush) 16%, var(--panel-solid)), color-mix(in srgb, var(--amber) 14%, var(--panel-solid))); }
 .management-card-icon svg { width: 20px; height: 20px; }
-.management-card h2 { margin: 7px 0 0; font-size: 17px; font-weight: 760; letter-spacing: -.025em; }
-.management-card-description { color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
-.management-card footer { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
-.management-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.management-card h2 { margin: 7px 0 0; overflow-wrap: anywhere; font-size: 17px; font-weight: 760; letter-spacing: -.025em; }
+.management-card-description { min-width: 0; overflow-wrap: anywhere; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+.management-card footer { display: flex; min-width: 0; min-height: 40px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.management-card footer > :first-child { min-width: 0; flex: 1 1 140px; overflow-wrap: anywhere; }
+.management-card-actions { display: flex; min-width: 0; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .selu-ui-dialog-backdrop.management-sheet-backdrop { place-items: stretch end; padding: 0; }
 .selu-ui-dialog.management-sheet { width: min(460px, 100vw); max-height: 100dvh; height: 100dvh; border-width: 0 0 0 1px; border-radius: 0; animation-name: management-sheet-in; }
 .management-sheet .selu-ui-dialog-heading { padding: 24px 24px 0; }
