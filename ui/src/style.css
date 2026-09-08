@@ -257,6 +257,12 @@
   .message-action.is-selected { color: var(--coral-deep); }
   .message-action svg { width: 12px; height: 12px; }
 
+  .tool-activity-list { display: grid; width: min(640px, calc(100% - 46px)); gap: 8px; margin-left: 46px; }
+  .tool-activity-list + .tool-activity-list { margin-top: -10px; }
+  .tool-activity-item { display: flex; min-height: 22px; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .tool-activity-check { display: grid; width: 17px; height: 17px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #4c9c72; background: color-mix(in srgb, #63bf8d 16%, transparent); }
+  .tool-activity-check svg { width: 11px; height: 11px; stroke-width: 3; }
+
   .activity-trail, .tool-message { width: min(640px, calc(100% - 46px)); margin-left: 46px; border: 1px solid var(--line); border-radius: 15px; background: var(--panel); box-shadow: var(--shadow-soft); overflow: clip; }
   .activity-trail summary, .tool-message summary { display: flex; align-items: center; gap: 11px; min-height: 55px; padding: 10px 14px; cursor: pointer; list-style: none; }
   .activity-trail summary::-webkit-details-marker, .tool-message summary::-webkit-details-marker { display: none; }

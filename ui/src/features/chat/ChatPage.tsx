@@ -5,7 +5,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { api, type ConversationEvent, type Message, type Run, type Snapshot, type TurnRating } from '../../api'
 import { t } from '../../i18n'
 import { describeError, useNotices, useQueryErrorNotice } from '../../notices'
-import { ActivityTrail, ApprovalCard, ConversationMessage, StreamingMessage } from '../../components/ConversationMessage'
+import { ActivityTrail, ApprovalCard, ConversationMessage, isToolCallPlaceholder, StreamingMessage } from '../../components/ConversationMessage'
 import { MobileBackButton } from '../../components/AppNavigation'
 import { BrandMark } from '../../components/BrandMark'
 import { Composer } from '../../components/Composer'
@@ -165,7 +165,7 @@ export function ChatPage({ conversationId }: { conversationId: string | null }) 
 
   const active = snapshot.data?.runs.some((run) => ACTIVE_RUN_STATUSES.includes(run.status)) ?? false
   const visibleMessages = useMemo(() => snapshot.data?.messages.filter((message) => !message.compacted) ?? [], [snapshot.data?.messages])
-  const latestReplyId = active ? null : [...visibleMessages].reverse().find((message) => message.role === 'assistant')?.id ?? null
+  const latestReplyId = active ? null : [...visibleMessages].reverse().find((message) => message.role === 'assistant' && !isToolCallPlaceholder(message))?.id ?? null
   const conversation = snapshot.data?.conversation ?? conversationItems.find((item) => item.id === selected)
   const isSchedule = conversation?.kind === 'schedule'
   const title = conversation?.title ?? t('newConversation')

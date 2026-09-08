@@ -3,13 +3,44 @@ import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Approval, Message, MessageAttachment, TurnRating } from '../api'
-import { t } from '../i18n'
+import { defineTranslations, t, useTranslations } from '../i18n'
 import { appPath } from '../shared/paths'
 import { BrandMark } from './BrandMark'
 
 const PHOTO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
 const ATTACHMENT_CONTEXT_MARKER = '\n\nAttached image artifacts:\n'
 const PHOTO_ONLY_CONTEXT = 'User sent image attachment(s) without accompanying text.'
+const TOOL_PLACEHOLDER_PATTERN = /^\s*(?:\[calling [^\]\r\n]+\]\s*)+$/
+const TOOL_NAME_PATTERN = /\[calling ([^\]\r\n]+)\]/g
+
+const toolActivityTranslations = defineTranslations(
+  {
+    calendar: 'Worked with the calendar',
+    delegation: 'Brought in additional help',
+    document: 'Worked with a document',
+    email: 'Worked on an email',
+    image: 'Worked with an image',
+    location: 'Looked up a place',
+    memory: 'Checked saved information',
+    other: 'Completed another step',
+    weather: 'Checked the weather',
+    webSearch: 'Searched the web',
+  },
+  {
+    calendar: 'Mit dem Kalender gearbeitet',
+    delegation: 'Weitere Unterstützung hinzugezogen',
+    document: 'Mit einem Dokument gearbeitet',
+    email: 'An einer E-Mail gearbeitet',
+    image: 'Mit einem Bild gearbeitet',
+    location: 'Einen Ort nachgeschlagen',
+    memory: 'Gespeicherte Informationen geprüft',
+    other: 'Einen weiteren Schritt erledigt',
+    weather: 'Das Wetter geprüft',
+    webSearch: 'Im Web gesucht',
+  },
+)
+
+type ToolActivityCopy = { [K in keyof typeof toolActivityTranslations.en]: string }
 
 /// Thumbs feedback is offered on the latest reply only, because the rating is
 /// stored on the most recent turn and feeds the agent's behavioral lessons.
@@ -26,9 +57,10 @@ type ConversationMessageProps = {
 }
 
 export function ConversationMessage({ message, entering = false, feedback }: ConversationMessageProps) {
+  const activities = toolActivityNames(message)
+  if (activities) return <ToolActivities names={activities} />
   if (message.role === 'tool') return <ToolMessage message={message} />
   if (message.role === 'system') return null
-  if (message.role === 'assistant' && isToolCallPlaceholder(message)) return null
   const photos = displayablePhotos(message.attachments)
   const content = displayContent(message)
   const hasText = Boolean(content.trim())
@@ -50,6 +82,46 @@ export function ConversationMessage({ message, entering = false, feedback }: Con
       </div>}
     </div>
   </article>
+}
+
+function ToolActivities({ names }: { names: string[] }) {
+  const copy = useTranslations(toolActivityTranslations)
+  return <div className="tool-activity-list" role="list" aria-label={t('workDone')}>
+    {names.map((name, index) => <div className="tool-activity-item" role="listitem" key={`${name}-${index}`}>
+      <span className="tool-activity-check" aria-hidden="true"><Check /></span>
+      <span>{toolActivityLabel(name, copy)}</span>
+    </div>)}
+  </div>
+}
+
+function toolActivityNames(message: Message): string[] | null {
+  if (message.role !== 'assistant' || !TOOL_PLACEHOLDER_PATTERN.test(message.content)) return null
+  const structured = structuredToolNames(message.tool_calls)
+  if (structured.length) return structured
+  return [...message.content.matchAll(TOOL_NAME_PATTERN)].map((match) => match[1].trim())
+}
+
+function structuredToolNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null) return []
+    const name = (item as { name?: unknown }).name
+    return typeof name === 'string' && name.trim() ? [name.trim()] : []
+  })
+}
+
+function toolActivityLabel(toolName: string, copy: ToolActivityCopy): string {
+  const name = toolName.toLowerCase()
+  if (name.includes('delegate')) return copy.delegation
+  if (name.includes('memory') || name.includes('knowledge')) return copy.memory
+  if (name.includes('location') || name.includes('geocode') || name.includes('address') || name.includes('map')) return copy.location
+  if (name.includes('email') || name.includes('mail') || name.includes('inbox')) return copy.email
+  if (name.includes('calendar') || name.includes('event')) return copy.calendar
+  if (name.includes('weather') || name.includes('forecast')) return copy.weather
+  if (name.includes('image') || name.includes('photo') || name.includes('vision')) return copy.image
+  if (name.includes('document') || name.includes('file') || name.includes('pdf')) return copy.document
+  if (name.includes('web') || name.includes('browser') || name.includes('search') || name.includes('url') || name.includes('http')) return copy.webSearch
+  return copy.other
 }
 
 function displayContent(message: Message) {
@@ -189,10 +261,10 @@ function FeedbackButtons({ feedback }: { feedback: TurnFeedback }) {
 }
 
 /// The engine stores a "[calling <tool>]" stand-in for assistant turns that
-/// only invoked tools. The following tool message already exposes the details.
-function isToolCallPlaceholder(message: Message) {
-  const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0
-  return hasToolCalls && /^\s*(\[calling [^\]]*\]\s*)+$/.test(message.content)
+/// only invoked tools. Recognize the protocol wrapper even when persisted
+/// messages omit the optional `tool_calls` metadata.
+export function isToolCallPlaceholder(message: Message) {
+  return toolActivityNames(message) !== null
 }
 
 function formatTime(value: string) {
