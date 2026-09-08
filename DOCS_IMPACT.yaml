@@ -2853,6 +2853,14 @@ entries:
       - crates/selu-orchestrator/src/api/conversations.rs
       - crates/selu-orchestrator/src/api/artifacts.rs
       - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/llm/tool_loop.rs
+      - ui/src/api.ts
+      - ui/src/components/Composer.tsx
+      - ui/src/components/ConversationMessage.tsx
+      - ui/src/features/chat/ChatPage.tsx
+      - ui/src/features/home/HomePage.tsx
+      - ui/src/notices.tsx
+      - ui/src/style.css
       - ../selu-ios/Selu/Views/Chat/ConversationStore.swift
       - ../selu-ios/Selu/Views/Chat/ConversationRootView.swift
       - ../selu-ios/SeluShare/ShareViewController.swift
@@ -2879,7 +2887,15 @@ entries:
       drop photos. Deploy these backend changes before enabling native photo sends.
       GET /api/v1/artifacts/{artifact_id} is session-authenticated and owner-scoped
       for both memory and disk artifacts. User message attachment metadata persists
-      across reloads. The iOS Photos picker and Share extension both use the shared
+      across reloads. Photo-bearing message.created events are published only after
+      those artifact references are durable, so other open clients render photos
+      without waiting for the run to finish.
+      The web SPA now offers the same capability-gated photo flow on Home and in
+      conversations: removable local previews, photo-only sends, authenticated
+      persisted-photo rendering and English/German guidance for every photo error.
+      Failed sends retain their text, photos and original client message UUID;
+      changing the restored draft starts a new logical message instead.
+      The iOS Photos picker and Share extension both use the shared
       SeluAPIClient and stable v1 message IDs. Advanced backend administration
       remains outside the app. Full implementation and validation notes are in
       ../selu-ios/docs/CHAT_READINESS.md.

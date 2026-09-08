@@ -86,6 +86,14 @@ pub enum LoopEvent {
         approval_message: Option<String>,
         approval_id: String,
     },
+    /// A photo-bearing user message and its stable artifact references have
+    /// been persisted and are ready for live clients to render.
+    UserMessagePersisted {
+        id: String,
+        content: String,
+        created_at: String,
+        attachments: Vec<crate::agents::artifacts::ArtifactRef>,
+    },
     /// A tool interaction message was added to the conversation.
     /// Used for incremental persistence so reconnecting clients see
     /// in-progress tool calls without waiting for the turn to complete.

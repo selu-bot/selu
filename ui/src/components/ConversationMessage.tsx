@@ -2,9 +2,14 @@ import { Check, ChevronDown, Copy, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, 
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Approval, Message, TurnRating } from '../api'
+import type { Approval, Message, MessageAttachment, TurnRating } from '../api'
 import { t } from '../i18n'
+import { appPath } from '../shared/paths'
 import { BrandMark } from './BrandMark'
+
+const PHOTO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+const ATTACHMENT_CONTEXT_MARKER = '\n\nAttached image artifacts:\n'
+const PHOTO_ONLY_CONTEXT = 'User sent image attachment(s) without accompanying text.'
 
 /// Thumbs feedback is offered on the latest reply only, because the rating is
 /// stored on the most recent turn and feeds the agent's behavioral lessons.
@@ -24,22 +29,63 @@ export function ConversationMessage({ message, entering = false, feedback }: Con
   if (message.role === 'tool') return <ToolMessage message={message} />
   if (message.role === 'system') return null
   if (message.role === 'assistant' && isToolCallPlaceholder(message)) return null
-  return <article className={`message-row is-${message.role}${entering ? ' is-entering' : ''}`}>
+  const photos = displayablePhotos(message.attachments)
+  const content = displayContent(message)
+  const hasText = Boolean(content.trim())
+  if (!hasText && photos.length === 0) return null
+  return <article className={`message-row is-${message.role}${photos.length ? ' has-attachments' : ''}${entering ? ' is-entering' : ''}`}>
     {message.role === 'assistant' && <div className="message-avatar"><BrandMark compact /></div>}
     <div className="message-content">
       <div className="message-meta">
         <span>{message.role === 'user' ? t('you') : 'Selu'}</span>
         <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>
       </div>
-      <div className="message-surface">
-        <Markdown>{message.content}</Markdown>
-      </div>
+      <PhotoAttachments photos={photos} />
+      {hasText && <div className="message-surface">
+        <Markdown>{content}</Markdown>
+      </div>}
       {message.role === 'assistant' && <div className="message-actions">
-        <CopyButton text={message.content} />
+        {hasText && <CopyButton text={content} />}
         {feedback && <FeedbackButtons feedback={feedback} />}
       </div>}
     </div>
   </article>
+}
+
+function displayContent(message: Message) {
+  if (message.role !== 'user' || !message.attachments?.length) return message.content
+  const marker = message.content.indexOf(ATTACHMENT_CONTEXT_MARKER)
+  if (marker < 0) return message.content
+  const content = message.content.slice(0, marker)
+  return content.startsWith(PHOTO_ONLY_CONTEXT) ? '' : content
+}
+
+type DisplayablePhoto = MessageAttachment & { src: string; persisted: boolean }
+
+function displayablePhotos(attachments: Message['attachments']): DisplayablePhoto[] {
+  if (!Array.isArray(attachments)) return []
+  const photos: DisplayablePhoto[] = []
+  for (const attachment of attachments) {
+    if (!PHOTO_MIME_TYPES.has(attachment.mime_type) || !attachment.filename) continue
+    if (attachment.artifact_id) {
+      photos.push({ ...attachment, src: appPath(`/api/v1/artifacts/${encodeURIComponent(attachment.artifact_id)}`), persisted: true })
+    } else if (attachment.preview_url?.startsWith(`data:${attachment.mime_type};base64,`)) {
+      photos.push({ ...attachment, src: attachment.preview_url, persisted: false })
+    }
+  }
+  return photos
+}
+
+function PhotoAttachments({ photos }: { photos: DisplayablePhoto[] }) {
+  if (!photos.length) return null
+  return <div className={`message-attachments${photos.length === 1 ? ' is-single' : ''}`} role="group" aria-label={t('photoAttachments')}>
+    {photos.map((photo, index) => {
+      const image = <img src={photo.src} alt={photo.filename} loading={photo.persisted ? 'lazy' : 'eager'} decoding="async" draggable={false} />
+      return photo.persisted
+        ? <a className="message-photo" href={photo.src} target="_blank" rel="noopener noreferrer" aria-label={`${t('openPhoto')}: ${photo.filename}`} key={`${photo.artifact_id}-${index}`}>{image}</a>
+        : <span className="message-photo" key={`preview-${photo.filename}-${index}`}>{image}</span>
+    })}
+  </div>
 }
 
 export function StreamingMessage({ parts, text }: { parts: string[], text: string }) {

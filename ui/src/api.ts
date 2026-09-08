@@ -10,6 +10,14 @@ export type Conversation = {
   active_run_id: string | null
 }
 
+export type MessageAttachment = {
+  artifact_id?: string
+  filename: string
+  mime_type: string
+  size_bytes: number
+  preview_url?: string
+}
+
 export type Message = {
   id: string
   role: 'user' | 'assistant' | 'tool' | 'system'
@@ -17,14 +25,15 @@ export type Message = {
   created_at: string
   compacted: boolean
   tool_calls?: unknown
-  attachments?: unknown
+  attachments?: MessageAttachment[] | null
 }
 
 export type ConversationPage = { conversations: Conversation[]; next_cursor?: string }
 export const CONVERSATION_PAGE_SIZE = 40
 
 export type Run = { id: string; client_message_id: string; status: string }
-export type Session = { display_name: string; is_admin: boolean; language: string }
+export type Session = { display_name: string; is_admin: boolean; language: string; supports_photo_uploads?: boolean }
+export type PhotoUpload = { filename: string; mime_type: string; data_base64: string }
 export type AuthUser = { user_id?: string; display_name?: string; username?: string; is_admin?: boolean; language?: string }
 export type AuthState = { status: 'setup_required' | 'anonymous' | 'authenticated'; user?: AuthUser }
 export type LoginInput = { username: string; password: string }
@@ -90,9 +99,9 @@ export const api = {
   createConversation: () => apiRequest<Conversation>('/api/v1/conversations', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
   }),
-  send: (id: string, text: string, clientMessageId: string) => apiRequest<{ run: Run }>(
+  send: (id: string, text: string, clientMessageId: string, attachments: PhotoUpload[] = []) => apiRequest<{ run: Run }>(
     `/api/v1/conversations/${id}/messages`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, client_message_id: clientMessageId }) },
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, client_message_id: clientMessageId, ...(attachments.length ? { attachments } : {}) }) },
   ),
   decideApproval: (id: string, approved: boolean) => apiRequest<void>(`/api/v1/approvals/${id}/decision`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approved }),

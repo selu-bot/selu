@@ -2,21 +2,27 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { AlertCircle, ArrowUp, CalendarClock, Clock3, Menu, MessageCircle, Sparkles } from 'lucide-react'
-import { api, type Conversation, type Message, type Snapshot } from '../../api'
+import { api, type Conversation, type Message, type PhotoUpload, type Snapshot } from '../../api'
 import { BrandMark } from '../../components/BrandMark'
+import { PhotoPickerButton, PhotoPreviewStrip } from '../../components/Composer'
 import { t } from '../../i18n'
 import { useNotices } from '../../notices'
 import { createClientId } from '../../shared/clientId'
 import { dedupeConversations, prependConversation, type ConversationPages } from '../../shared/conversations'
+import { photoUploadPayload, preparePhotoFiles, type SelectedPhoto } from '../../shared/photoUploads'
+import { failedSendQueryKey, type RetryableSend } from '../../shared/sendRetry'
 import { navigateWithTransition } from '../../shared/transitions'
 import { useAppChrome } from '../shell/useAppChrome'
 
 type StartConversationDependencies = {
   text: string
+  attachments?: PhotoUpload[]
+  optimisticAttachments?: Message['attachments']
   create: () => Promise<Conversation>
-  send: (id: string, text: string, messageId: string) => Promise<unknown>
+  send: (id: string, text: string, messageId: string, attachments?: PhotoUpload[]) => Promise<unknown>
   showOptimistically: (conversation: Conversation, message: Message) => void
   navigate: (conversationId: string) => void | Promise<void>
+  onSendError?: (conversation: Conversation, messageId: string) => void
   messageId?: () => string
 }
 
@@ -29,11 +35,19 @@ export async function startHomeConversation(input: StartConversationDependencies
     content: input.text,
     created_at: new Date().toISOString(),
     compacted: false,
+    attachments: input.optimisticAttachments,
   }
   input.showOptimistically(conversation, message)
-  const send = input.send(conversation.id, input.text, message.id)
+  const sendResult = input.send(conversation.id, input.text, message.id, input.attachments ?? []).then(
+    () => ({ ok: true as const }),
+    (error: unknown) => ({ ok: false as const, error }),
+  )
   await input.navigate(conversation.id)
-  await send
+  const result = await sendResult
+  if (!result.ok) {
+    input.onSendError?.(conversation, messageId)
+    throw result.error
+  }
   return conversation
 }
 
@@ -42,6 +56,8 @@ export function HomePage() {
   const navigate = useNavigate()
   const notices = useNotices()
   const [draft, setDraft] = useState('')
+  const [photos, setPhotos] = useState<SelectedPhoto[]>([])
+  const [photoSelectionBusy, setPhotoSelectionBusy] = useState(false)
   const { navigation, navCollapsed, openMobileNavigation, session } = useAppChrome('home')
   const conversations = useInfiniteQuery({
     queryKey: ['conversations'],
@@ -55,8 +71,10 @@ export function HomePage() {
   const recent = items.filter((item) => item.kind !== 'schedule' && !item.active_run_id).slice(0, 5)
 
   const start = useMutation({
-    mutationFn: (text: string) => startHomeConversation({
+    mutationFn: ({ text, selectedPhotos }: { text: string; selectedPhotos: SelectedPhoto[] }) => startHomeConversation({
       text,
+      attachments: photoUploadPayload(selectedPhotos),
+      optimisticAttachments: selectedPhotos.map(({ filename, mime_type, preview_url, size_bytes }) => ({ filename, mime_type, preview_url, size_bytes })),
       create: api.createConversation,
       send: api.send,
       showOptimistically: (conversation, message) => {
@@ -66,21 +84,37 @@ export function HomePage() {
         })
       },
       navigate: (conversationId) => navigateWithTransition(() => navigate({ to: '/app/conversations/$conversationId', params: { conversationId } })),
+      onSendError: (conversation, messageId) => {
+        const retry: RetryableSend = { text, messageId, photos: selectedPhotos }
+        cache.setQueryData(failedSendQueryKey(conversation.id), retry)
+      },
     }),
     onSuccess: () => {
       setDraft('')
+      setPhotos([])
       void cache.invalidateQueries({ queryKey: ['conversations'] })
     },
     onError: (error) => notices.error(error, t('messageNotSent')),
-    onSettled: (_data, _error, _text) => {
+    onSettled: (_data) => {
       const id = _data?.id
       if (id) void cache.invalidateQueries({ queryKey: ['conversation', id] })
     },
   })
+  const addPhotos = async (files: File[]) => {
+    setPhotoSelectionBusy(true)
+    try {
+      const prepared = await preparePhotoFiles(files, photos)
+      setPhotos((current) => [...current, ...prepared])
+    } catch (error) {
+      notices.error(error, t('photosNotAdded'))
+    } finally {
+      setPhotoSelectionBusy(false)
+    }
+  }
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const text = draft.trim()
-    if (text && !start.isPending) start.mutate(text)
+    if ((text || photos.length > 0) && !start.isPending) start.mutate({ text, selectedPhotos: photos })
   }
   const name = session.data?.display_name?.trim().split(/\s+/)[0]
 
@@ -99,11 +133,19 @@ export function HomePage() {
             <h1 id="home-title">{name ? t('homeGreeting').replace('{name}', name) : t('homeGreetingFallback')}</h1>
             <p>{t('homeSubtitle')}</p>
             <form className="home-composer" onSubmit={submit}>
-              <Sparkles aria-hidden="true" />
+              <PhotoPreviewStrip photos={photos} disabled={start.isPending} onRemove={(id) => setPhotos((current) => current.filter((photo) => photo.id !== id))} />
+              <div className="home-composer-tools">
+                <Sparkles aria-hidden="true" />
+                {session.data?.supports_photo_uploads === true && <PhotoPickerButton
+                  className="home-photo-picker"
+                  disabled={start.isPending || photoSelectionBusy}
+                  onSelect={(files) => void addPhotos(files)}
+                />}
+              </div>
               <textarea rows={2} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() }
               }} placeholder={t('homePlaceholder')} aria-label={t('homePlaceholder')} disabled={start.isPending} />
-              <button disabled={!draft.trim() || start.isPending} aria-label={t('send')}><ArrowUp /></button>
+              <button className="home-send-button" disabled={(!draft.trim() && photos.length === 0) || start.isPending} aria-label={t('send')}><ArrowUp /></button>
             </form>
             <span className="home-composer-hint">{t('homeComposerHint')}</span>
           </section>

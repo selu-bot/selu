@@ -576,3 +576,51 @@
     ::view-transition-group(ask-selu-composer), ::view-transition-old(ask-selu-composer), ::view-transition-new(ask-selu-composer) { animation: none !important; }
   }
 }
+
+@layer components {
+  .photo-input { display: none; }
+  .composer { flex-wrap: wrap; }
+  .photo-preview-strip { display: flex; min-width: 0; gap: 8px; overflow-x: auto; padding: 1px 1px 3px; scrollbar-width: thin; }
+  .composer > .photo-preview-strip { flex: 0 0 100%; }
+  .photo-preview { position: relative; width: 72px; height: 60px; flex: 0 0 auto; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--hover); }
+  .photo-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .photo-preview-remove { position: absolute; top: 3px; right: 3px; display: grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 1px solid color-mix(in srgb, white 35%, transparent); border-radius: 10px; color: white; background: rgba(25, 22, 22, .72); box-shadow: 0 4px 10px rgba(0, 0, 0, .2); cursor: pointer; backdrop-filter: blur(8px); }
+  .photo-preview-remove:hover:not(:disabled), .photo-preview-remove:focus-visible { background: rgba(25, 22, 22, .9); }
+  .photo-preview-remove:disabled { cursor: wait; opacity: .55; }
+  .photo-preview-remove svg { width: 15px; height: 15px; }
+  .home-composer > .photo-preview-strip { grid-column: 1 / -1; width: 100%; }
+  .home-composer-tools { display: flex; align-self: center; align-items: center; gap: 3px; }
+  .home-composer-tools > svg { width: 20px; height: 20px; color: var(--coral); }
+  .home-composer .home-photo-picker { display: grid; width: 34px; height: 34px; place-items: center; padding: 0; border: 0; border-radius: 11px; color: var(--muted); background: transparent; box-shadow: none; cursor: pointer; }
+  .home-composer .home-photo-picker:hover:not(:disabled), .home-composer .home-photo-picker:focus-visible { color: var(--ink); background: var(--hover); }
+  .home-composer .home-photo-picker:disabled { cursor: wait; opacity: .45; }
+  .home-composer .home-photo-picker svg { width: 17px; height: 17px; }
+}
+
+@layer responsive {
+  @media (max-width: 760px) {
+    .photo-preview { width: 66px; height: 56px; }
+    .photo-preview-remove { width: 34px; height: 34px; }
+    .home-composer-tools { gap: 0; }
+  }
+}
+
+@layer components {
+  .message-row.has-attachments .message-content { width: min(680px, calc(100% - 45px)); }
+  .message-row.is-user.has-attachments .message-content { width: min(580px, 82%); max-width: none; }
+  .message-attachments { display: grid; width: min(520px, 100%); grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-bottom: 7px; }
+  .message-attachments.is-single { grid-template-columns: minmax(0, 1fr); }
+  .message-row.is-user .message-attachments { margin-left: auto; padding: 4px; border-radius: 18px 18px 5px 18px; background: linear-gradient(145deg, color-mix(in srgb, var(--blush) 14%, var(--canvas-elevated)), color-mix(in srgb, var(--coral) 13%, var(--canvas-elevated))); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--coral) 13%, var(--line)); }
+  .message-photo { display: block; min-width: 0; overflow: hidden; border-radius: 13px; color: inherit; background: var(--hover); }
+  .message-photo:focus-visible { outline: none; box-shadow: var(--focus); }
+  .message-photo img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+  .message-attachments.is-single .message-photo img { max-height: 420px; aspect-ratio: auto; object-fit: contain; }
+}
+
+@layer responsive {
+  @media (max-width: 760px) {
+    .message-row.is-user.has-attachments .message-content { width: 88%; max-width: none; }
+    .message-attachments { width: min(430px, 100%); }
+    .message-attachments.is-single .message-photo img { max-height: 55dvh; }
+  }
+}

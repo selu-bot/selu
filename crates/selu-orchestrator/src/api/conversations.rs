@@ -503,6 +503,16 @@ fn decode_photos(photos: Vec<PhotoUpload>) -> Result<Vec<InboundAttachmentInput>
         .collect()
 }
 
+fn validate_photo_command(
+    text: &str,
+    attachments: &[InboundAttachmentInput],
+) -> Result<(), &'static str> {
+    if !attachments.is_empty() && commands::is_command(text) {
+        return Err("conversation.photo_command");
+    }
+    Ok(())
+}
+
 #[derive(Serialize)]
 struct SendMessageResponse {
     run: ConversationRun,
@@ -560,10 +570,10 @@ async fn send_message(
         }
     };
     // Commands don't accept images; never silently discard a photo.
-    if !attachments.is_empty() && commands::is_command(&text) {
+    if let Err(code) = validate_photo_command(&text, &attachments) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "code": "conversation.photo_command" })),
+            Json(serde_json::json!({ "code": code })),
         )
             .into_response();
     }
@@ -615,33 +625,35 @@ async fn send_message(
         return internal_error(error);
     }
 
-    // The engine persists this message shortly after the run begins. Publish
-    // the accepted logical message now so every subscribed device shows the
-    // same optimistic state, keyed by the stable client-generated ID.
-    let message = conversations::ConversationMessage {
-        id: request.client_message_id.clone(),
-        role: "user".to_owned(),
-        content: text.clone(),
-        created_at,
-        tool_calls: None,
-        tool_call_id: None,
-        attachments: None,
-        compacted: false,
-    };
-    if let Err(error) = state
-        .conversation_events
-        .publish(
-            &state.db,
-            &user.user_id,
-            &conversation_id,
-            Some(&run_id),
-            "message.created",
-            Some(&request.client_message_id),
-            serde_json::json!({ "message": message }),
-        )
-        .await
-    {
-        return internal_error(error);
+    // Text-only messages have no artifact persistence dependency and keep the
+    // immediate event timing older clients expect. Photo messages are emitted
+    // by the engine once their stable artifact references are durable.
+    if attachments.is_empty() {
+        let message = conversations::ConversationMessage {
+            id: request.client_message_id.clone(),
+            role: "user".to_owned(),
+            content: text.clone(),
+            created_at: created_at.clone(),
+            tool_calls: None,
+            tool_call_id: None,
+            attachments: None,
+            compacted: false,
+        };
+        if let Err(error) = state
+            .conversation_events
+            .publish(
+                &state.db,
+                &user.user_id,
+                &conversation_id,
+                Some(&run_id),
+                "message.created",
+                Some(&request.client_message_id),
+                serde_json::json!({ "message": message }),
+            )
+            .await
+        {
+            return internal_error(error);
+        }
     }
 
     if commands::is_command(&text) {
@@ -986,6 +998,24 @@ async fn notify_run_finished(
     }
 }
 
+fn persisted_user_message(
+    id: String,
+    content: String,
+    created_at: String,
+    attachments: Vec<crate::agents::artifacts::ArtifactRef>,
+) -> conversations::ConversationMessage {
+    conversations::ConversationMessage {
+        id,
+        role: "user".to_owned(),
+        content,
+        created_at,
+        tool_calls: None,
+        tool_call_id: None,
+        attachments: (!attachments.is_empty()).then(|| serde_json::json!(attachments)),
+        compacted: false,
+    }
+}
+
 async fn handle_engine_event(
     state: &AppState,
     user_id: &str,
@@ -993,22 +1023,52 @@ async fn handle_engine_event(
     run_id: &str,
     event: LoopEvent,
 ) {
-    let (event_type, payload) = match event {
-        LoopEvent::Token(text) => ("message.text_delta", serde_json::json!({ "text": text })),
-        LoopEvent::AssistantPartFinished => ("message.part_finished", serde_json::json!({})),
-        LoopEvent::CapabilityStatus(label) => {
-            ("run.progress", serde_json::json!({ "label": label }))
+    let (event_type, entity_id, payload) = match event {
+        LoopEvent::UserMessagePersisted {
+            id,
+            content,
+            created_at,
+            attachments,
+        } => {
+            let entity_id = id.clone();
+            let message = persisted_user_message(id, content, created_at, attachments);
+            (
+                "message.created",
+                entity_id,
+                serde_json::json!({ "message": message }),
+            )
         }
+        LoopEvent::Token(text) => (
+            "message.text_delta",
+            run_id.to_owned(),
+            serde_json::json!({ "text": text }),
+        ),
+        LoopEvent::AssistantPartFinished => (
+            "message.part_finished",
+            run_id.to_owned(),
+            serde_json::json!({}),
+        ),
+        LoopEvent::CapabilityStatus(label) => (
+            "run.progress",
+            run_id.to_owned(),
+            serde_json::json!({ "label": label }),
+        ),
         LoopEvent::Artifacts(artifacts) => (
             "message.artifacts",
+            run_id.to_owned(),
             serde_json::json!({ "artifacts": artifacts }),
         ),
-        LoopEvent::Done => ("run.output_finished", serde_json::json!({})),
+        LoopEvent::Done => (
+            "run.output_finished",
+            run_id.to_owned(),
+            serde_json::json!({}),
+        ),
         // Clients only get a stable code; the engine's message is for the log.
         LoopEvent::Error(message) => {
             tracing::warn!(run_id, "Agent reported an error during the run: {message}");
             (
                 "run.error",
+                run_id.to_owned(),
                 serde_json::json!({ "code": "conversation.agent_failed" }),
             )
         }
@@ -1038,6 +1098,7 @@ async fn handle_engine_event(
             .await;
             (
                 "approval.requested",
+                run_id.to_owned(),
                 serde_json::json!({
                     "approval_id": approval_id,
                     "tool_name": request.tool_display_name,
@@ -1052,13 +1113,18 @@ async fn handle_engine_event(
             approval_id,
         } => (
             "approval.queued",
+            run_id.to_owned(),
             serde_json::json!({
                 "approval_id": approval_id,
                 "tool_name": tool_display_name,
                 "message": approval_message,
             }),
         ),
-        LoopEvent::ToolMessage(_) => ("conversation.changed", serde_json::json!({})),
+        LoopEvent::ToolMessage(_) => (
+            "conversation.changed",
+            run_id.to_owned(),
+            serde_json::json!({}),
+        ),
     };
     if let Err(error) = state
         .conversation_events
@@ -1068,7 +1134,7 @@ async fn handle_engine_event(
             conversation_id,
             Some(run_id),
             event_type,
-            Some(run_id),
+            Some(&entity_id),
             payload,
         )
         .await
@@ -1319,11 +1385,50 @@ mod photo_tests {
     }
 
     #[test]
+    fn rejects_photos_with_slash_commands() {
+        let attachments = decode_photos(vec![photo("image/jpeg", &[0xff, 0xd8, 0xff])]).unwrap();
+        assert_eq!(
+            validate_photo_command("/help", &attachments),
+            Err("conversation.photo_command")
+        );
+        assert!(validate_photo_command("Help with 1/2 cup", &attachments).is_ok());
+        assert!(validate_photo_command("/help", &[]).is_ok());
+    }
+
+    #[test]
     fn filename_is_only_a_display_label() {
         let mut input = photo("image/jpeg", &[0xff, 0xd8, 0xff]);
         input.filename = "../folder/\nphoto.jpg".into();
         let result = decode_photos(vec![input]).unwrap();
         assert!(!result[0].filename.contains('/'));
         assert!(!result[0].filename.contains('\n'));
+    }
+
+    #[test]
+    fn persisted_photo_event_message_includes_artifact_references() {
+        let message = persisted_user_message(
+            "message-1".into(),
+            "".into(),
+            "2026-09-08T12:00:00.000".into(),
+            vec![crate::agents::artifacts::ArtifactRef {
+                artifact_id: "artifact-1".into(),
+                filename: "garden.jpg".into(),
+                mime_type: "image/jpeg".into(),
+                size_bytes: 4,
+            }],
+        );
+        let payload = serde_json::json!({ "message": message });
+
+        assert_eq!(payload["message"]["id"], "message-1");
+        assert_eq!(payload["message"]["content"], "");
+        assert_eq!(
+            payload["message"]["attachments"][0]["artifact_id"],
+            "artifact-1"
+        );
+        assert_eq!(
+            payload["message"]["attachments"][0]["filename"],
+            "garden.jpg"
+        );
+        assert!(!payload["message"]["attachments"].is_null());
     }
 }
