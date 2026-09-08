@@ -2899,3 +2899,39 @@ entries:
       SeluAPIClient and stable v1 message IDs. Advanced backend administration
       remains outside the app. Full implementation and validation notes are in
       ../selu-ios/docs/CHAT_READINESS.md.
+
+  - id: 2026-09-08-sqlite-readiness-capability-errors
+    date: 2026-09-08
+    pr:
+    area: capabilities
+    type: changed
+    audience: developers
+    summary: "Selu now verifies SQLite readiness and treats legacy capability error payloads as failures"
+    affected_files:
+      - crates/selu-orchestrator/src/persistence/db.rs
+      - crates/selu-orchestrator/src/main.rs
+      - crates/selu-orchestrator/src/api/mod.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/capabilities/grpc.rs
+    docs_sections:
+      - user-guide/self-hosting/docker
+      - developer-guide/capabilities/container-guidelines
+      - reference/api
+    details: |
+      Every pooled SQLite connection now enables WAL mode, foreign-key
+      enforcement, and a bounded busy timeout. Selu verifies those settings at
+      startup and reuses the primary pool for egress logging. The `/api/health`
+      readiness response now returns HTTP 503 when the database cannot be read,
+      so the updater cannot accept a persistence-broken deployment as healthy.
+
+      Capability invocation failures now remain structured tool errors instead
+      of successful text results. For compatibility with older capability
+      images, a non-empty top-level `error` in `result_json` is treated as a
+      failed invocation without exposing the raw capability error. Capability
+      authors should still use `InvokeResponse.error` for failures.
+
+      Self-hosted deployments should keep the SQLite database and its WAL/SHM
+      sidecars together on storage with reliable local locking semantics. Do
+      not replace or remove sidecar files while Selu is running; prefer a
+      Docker-managed volume over a macOS Docker Desktop bind mount for the
+      database directory.

@@ -1682,10 +1682,7 @@ where
     // If the user already approved this call, skip policy lookup and invoke.
     if approved {
         let invoke_start = Instant::now();
-        let result = invoke_fn().await.unwrap_or_else(|e| {
-            warn!(tool = %namespaced_name, "Pre-approved tool invocation failed: {e}");
-            format!("Tool error: {}", e)
-        });
+        let result = invoke_fn().await?;
         let invoke_ms = invoke_start.elapsed().as_millis();
         if invoke_ms > 10_000 {
             warn!(
@@ -1730,10 +1727,7 @@ where
     match policy {
         Some(ToolPolicy::Allow) => {
             let invoke_start = Instant::now();
-            let result = invoke_fn().await.unwrap_or_else(|e| {
-                warn!(tool = %namespaced_name, "Tool invocation failed: {e}");
-                format!("Tool error: {}", e)
-            });
+            let result = invoke_fn().await?;
             let invoke_ms = invoke_start.elapsed().as_millis();
             if invoke_ms > 10_000 {
                 warn!(
@@ -1805,10 +1799,7 @@ where
                 } => {
                     if user_confirmed_this_turn {
                         let invoke_start = Instant::now();
-                        let result = invoke_fn().await.unwrap_or_else(|e| {
-                            warn!(tool = %namespaced_name, "Tool invocation failed after user-turn confirmation: {e}");
-                            format!("Tool error: {}", e)
-                        });
+                        let result = invoke_fn().await?;
                         let invoke_ms = invoke_start.elapsed().as_millis();
                         info!(
                             tool = %namespaced_name,

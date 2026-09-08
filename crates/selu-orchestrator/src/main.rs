@@ -102,8 +102,7 @@ async fn main() -> Result<()> {
 
     // Egress log: channel + background drain task
     let (egress_log_tx, egress_log_rx) = egress_proxy::new_log_channel(1024);
-    let log_db = persistence::db::connect(&cfg.database.url).await?;
-    tokio::spawn(egress_proxy::drain_egress_log(log_db, egress_log_rx));
+    tokio::spawn(egress_proxy::drain_egress_log(db.clone(), egress_log_rx));
 
     tokio::spawn(async move {
         if let Err(e) = egress_proxy::run_proxy(egress_addr, proxy_registry, egress_log_tx).await {
