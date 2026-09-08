@@ -46,11 +46,10 @@ export function AboutPage() {
 
   return <AppPageShell active="about-you" width="wide">
     <PageHeader eyebrow={copy.eyebrow} title={copy.title} description={copy.description} actions={<Button variant="primary" leadingIcon={<Pencil />} onClick={() => setProfileOpen(true)}>{copy.editProfile}</Button>} />
-    {profile.isPending || facts.isPending ? <ManagementLoading cards={3} /> : <>
+    {profile.isPending || facts.isPending ? <ManagementLoading cards={2} /> : <>
       {profile.data && <OverviewGrid>
         <OverviewCard icon={<UserRound />} status={<StatusBadge tone={profile.data.is_admin ? 'info' : 'neutral'}>{profile.data.is_admin ? copy.administrator : copy.member}</StatusBadge>} title={profile.data.display_name} description={`@${profile.data.username}`} meta={copy.accountSince.replace('{date}', formatDate(profile.data.created_at, language))} actions={<Button size="sm" onClick={() => setProfileOpen(true)}>{copy.editProfile}</Button>} />
         <OverviewCard icon={<Clock3 />} title={profile.data.timezone} description={profile.data.language === 'de' ? copy.german : copy.english} meta={copy.profileDescription} />
-        <OverviewCard icon={<Brain />} title={copy.remembered} description={copy.rememberedDescription} meta={`${facts.data?.length ?? 0}`} actions={<Button size="sm" leadingIcon={<Plus />} onClick={() => setFactEditor('new')}>{copy.addFact}</Button>} />
       </OverviewGrid>}
       <ManagementSection title={copy.remembered} description={copy.rememberedDescription} actions={<Button size="sm" leadingIcon={<Plus />} onClick={() => setFactEditor('new')}>{copy.addFact}</Button>}>
         {facts.data?.length ? <div className="about-facts">{facts.data.map((item) => <article className="about-fact" key={item.id}><div><span>{item.category || copy.personal}</span><p>{item.fact}</p><small>{copy.updated.replace('{date}', formatDate(item.updated_at, language))}</small></div><div className="about-fact-actions"><Button size="sm" variant="ghost" onClick={() => setFactEditor(item)} leadingIcon={<Pencil />}>{copy.editTitle}</Button><Button size="sm" variant="ghost" onClick={() => setDeleting(item)} leadingIcon={<Trash2 />}>{copy.remove}</Button></div></article>)}</div> : <EmptyState icon={<Brain />} title={copy.noFacts} description={copy.noFactsBody} action={<Button variant="primary" leadingIcon={<Plus />} onClick={() => setFactEditor('new')}>{copy.addFact}</Button>} />}

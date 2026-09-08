@@ -104,7 +104,7 @@ function NoticeStack({ notices, onDismiss }: { notices: Notice[]; onDismiss: (id
       const Icon = ICONS[notice.kind]
       return <div
         key={notice.id}
-        className={`notice is-${notice.kind}`}
+        className={`notice is-${notice.kind}${notice.body ? ' has-body' : ''}`}
         role={notice.kind === 'error' ? 'alert' : 'status'}
         aria-live={notice.kind === 'error' ? 'assertive' : 'polite'}
       >

@@ -57,7 +57,6 @@
   .final-section-stack { display: grid; gap: 16px; }
   .final-inline-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 9px; }
   .final-inline-fields > .selu-ui-field { flex: 1 1 160px; }
-  .final-code { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; }
   .final-back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; color: var(--ink-soft); font-size: 12px; font-weight: 700; text-decoration: none; }
   .final-back svg { width: 16px; height: 16px; }
   .final-danger-zone { border-color: color-mix(in srgb, var(--coral) 32%, var(--line)); }

@@ -1,4 +1,6 @@
 .settings-pairing { display: grid; gap: 17px; }
+.settings-address-fields { display: flex; align-items: center; gap: 8px; }
+.settings-address-fields .selu-ui-control { min-width: 0; flex: 1; }
 .settings-copy { display: flex; align-items: center; gap: 8px; }
 .settings-copy code { min-width: 0; flex: 1; overflow-wrap: anywhere; padding: 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--canvas); font: 600 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .settings-list { display: grid; }
@@ -9,4 +11,4 @@
 .settings-list span { display: grid; min-width: 0; gap: 3px; }
 .settings-list strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; }
 .settings-list small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 520px) { .settings-copy { align-items: stretch; flex-direction: column; } .settings-list > div { grid-template-columns: auto minmax(0, 1fr) auto; } .settings-list > div > .selu-ui-button:last-child { grid-column: 3; } }
+@media (max-width: 520px) { .settings-copy, .settings-address-fields { align-items: stretch; flex-direction: column; } .settings-list > div { grid-template-columns: auto minmax(0, 1fr) auto; } .settings-list > div > .selu-ui-button:last-child { grid-column: 3; } }
