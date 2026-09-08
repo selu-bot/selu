@@ -58,6 +58,13 @@ async fn main() -> Result<()> {
     );
 
     let db = persistence::db::connect(&cfg.database.url).await?;
+    let interrupted_runs = services::conversation_recovery::reconcile_orphaned_runs(&db).await?;
+    if interrupted_runs > 0 {
+        warn!(
+            interrupted_runs,
+            "Interrupted conversation runs orphaned by the previous process"
+        );
+    }
 
     // ── Ensure installed agents directory exists ──────────────────────────────
     tokio::fs::create_dir_all(&cfg.installed_agents_dir).await?;
