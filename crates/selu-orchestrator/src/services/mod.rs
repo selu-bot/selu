@@ -3,6 +3,7 @@ pub mod agents;
 pub mod auth;
 pub mod automations;
 pub mod cache_admin;
+pub mod conversation_recovery;
 pub mod conversations;
 pub mod feedback;
 pub mod jobs;
