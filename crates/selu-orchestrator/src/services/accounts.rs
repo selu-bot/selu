@@ -731,7 +731,7 @@ pub async fn create_pairing_token(
         .to_string();
     let mut tx = db.begin().await.map_err(internal)?;
     sqlx::query!(
-        "DELETE FROM mobile_setup_tokens WHERE user_id = ? AND (used = 1 OR expires_at <= datetime('now'))",
+        "DELETE FROM mobile_setup_tokens WHERE user_id = ?",
         owner_user_id
     )
     .execute(&mut *tx)
@@ -1142,6 +1142,32 @@ mod tests {
         let remaining = expires_at.and_utc() - Utc::now();
         assert!(remaining > Duration::minutes(4));
         assert!(remaining <= Duration::minutes(5));
+    }
+
+    #[tokio::test]
+    async fn creating_pairing_token_invalidates_previous_live_token() {
+        let db = test_db().await;
+        let owner = create_user(&db, user("owner", true)).await.unwrap();
+        let first = create_pairing_token(&db, &owner.id).await.unwrap();
+        let second = create_pairing_token(&db, &owner.id).await.unwrap();
+
+        let first_row = sqlx::query!(
+            "SELECT user_id, used, expires_at FROM mobile_setup_tokens WHERE token = ?",
+            first.token
+        )
+        .fetch_optional(&db)
+        .await
+        .unwrap();
+        let second_row = sqlx::query!(
+            "SELECT user_id, used, expires_at FROM mobile_setup_tokens WHERE token = ?",
+            second.token
+        )
+        .fetch_optional(&db)
+        .await
+        .unwrap();
+
+        assert!(first_row.is_none());
+        assert_eq!(second_row.unwrap().user_id, owner.id);
     }
 
     #[test]

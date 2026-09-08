@@ -1,4 +1,3 @@
-.settings-pairing { display: grid; gap: 17px; }
 .settings-address-fields { display: flex; align-items: center; gap: 8px; }
 .settings-address-fields .selu-ui-control { min-width: 0; flex: 1; }
 .settings-copy { display: flex; align-items: center; gap: 8px; }
@@ -11,4 +10,26 @@
 .settings-list span { display: grid; min-width: 0; gap: 3px; }
 .settings-list strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; }
 .settings-list small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-@media (max-width: 520px) { .settings-copy, .settings-address-fields { align-items: stretch; flex-direction: column; } .settings-list > div { grid-template-columns: auto minmax(0, 1fr) auto; } .settings-list > div > .selu-ui-button:last-child { grid-column: 3; } }
+.settings-pairing, .settings-pairing__scan { display: grid; min-width: 0; }
+.settings-pairing { gap: 16px; }
+.settings-pairing__scan { gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.settings-pairing__scan-title { margin: 0; color: var(--ink); font-size: 13px; font-weight: 720; line-height: 1.45; }
+.settings-pairing__scan > .management-muted { margin: 0; }
+.mobile-pairing-qr { box-sizing: border-box; display: grid; width: 100%; min-width: 0; justify-items: center; gap: 12px; padding: 16px; border: 1px solid color-mix(in srgb, var(--coral) 32%, var(--line)); border-radius: 16px; background: color-mix(in srgb, var(--coral) 5%, var(--panel)); }
+.mobile-pairing-qr__code { box-sizing: border-box; display: grid; width: fit-content; max-width: 100%; place-items: center; padding: 12px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent), var(--shadow-soft); }
+.mobile-pairing-qr__code svg { display: block; width: min(224px, 100%); max-width: 100%; height: auto; background: #fff; }
+.mobile-pairing-qr__timer { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.45; text-align: center; }
+.mobile-pairing-qr__timer time { color: var(--coral-deep); font-variant-numeric: tabular-nums; font-weight: 760; }
+.mobile-pairing-qr--expired { border-color: color-mix(in srgb, var(--coral-deep) 36%, var(--line)); background: color-mix(in srgb, var(--coral) 8%, var(--panel)); }
+.mobile-pairing-qr__expired { margin: 0; color: var(--coral-deep); font-size: 12px; font-weight: 720; line-height: 1.5; text-align: center; }
+.mobile-pairing-qr__regenerate { min-height: 40px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; color: var(--ink-soft); background: var(--panel-solid); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.mobile-pairing-qr__regenerate:hover:not(:disabled) { color: var(--ink); background: var(--hover); }
+.mobile-pairing-qr__regenerate:focus-visible { outline: 0; box-shadow: var(--focus); }
+.mobile-pairing-qr__regenerate:disabled { cursor: default; opacity: .55; }
+@media (max-width: 520px) {
+  .settings-copy, .settings-address-fields { align-items: stretch; flex-direction: column; }
+  .settings-list > div { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .settings-list > div > .selu-ui-button:last-child { grid-column: 3; }
+  .settings-pairing__scan, .mobile-pairing-qr { padding: 12px; }
+  .mobile-pairing-qr__code { padding: 10px; }
+}

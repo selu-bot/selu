@@ -2815,3 +2815,29 @@ entries:
       visible while Selu restarts and reconnects. The About you page no longer
       repeats its remembered-details section, and single-line notifications
       are vertically centered.
+
+  - id: 2026-09-08-mobile-pairing-qr-restored
+    date: "2026-09-08"
+    pr:
+    area: ui
+    type: changed
+    audience: users
+    summary: "Restores QR-code pairing for the mobile app"
+    affected_files:
+      - ui/package.json
+      - ui/package-lock.json
+      - ui/src/features/settings/mobilePairing.ts
+      - ui/src/features/settings/MobilePairingQr.tsx
+      - ui/src/features/settings/MobilePairingQr.test.tsx
+      - ui/src/features/settings/SettingsPage.tsx
+      - ui/src/features/settings/SettingsPage.css
+    docs_sections:
+      - getting-started/first-conversation
+      - user-guide/security/credentials
+    details: |
+      Settings -> Mobile app once again offers a QR code that users can scan
+      with the Selu mobile app to pair their phone. The one-time code and Selu
+      server address remain visible with copy controls as manual fallbacks.
+      QR and manual pairing use the same one-time credentials and retain the
+      existing five-minute expiration limit; creating another code invalidates
+      the previous pairing attempt.
