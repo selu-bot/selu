@@ -80,3 +80,65 @@ describe('ConversationMessage photos', () => {
     expect(html).not.toContain('/api/v1/artifacts/document')
   })
 })
+
+
+describe('ConversationMessage tool activity', () => {
+  it('shows metadata-free tool placeholders as friendly activity rows', () => {
+    const html = render({
+      role: 'assistant',
+      content: '[calling web-browser__search]\n[calling delegate_to_agent]',
+      tool_calls: undefined,
+    })
+
+    expect(html).toContain('role="list"')
+    expect(html).toContain('Searched the web')
+    expect(html).toContain('Brought in additional help')
+    expect(html).not.toContain('[calling')
+    expect(html).not.toContain('web-browser__search')
+    expect(html).not.toContain('delegate_to_agent')
+  })
+
+  it('prefers structured tool names and safely labels unknown tools', () => {
+    const html = render({
+      role: 'assistant',
+      content: '[calling persisted_placeholder]',
+      tool_calls: [{ name: 'memory_search' }, { name: 'private_internal_tool' }],
+    })
+
+    expect(html).toContain('Checked saved information')
+    expect(html).toContain('Completed another step')
+    expect(html).not.toContain('persisted_placeholder')
+    expect(html).not.toContain('private_internal_tool')
+  })
+
+  it('keeps ordinary assistant replies that merely mention a tool call', () => {
+    const html = render({ role: 'assistant', content: 'I saw [calling support] in the notes.' })
+
+    expect(html).toContain('message-surface')
+    expect(html).toContain('I saw [calling support] in the notes.')
+    expect(html).not.toContain('tool-activity-list')
+  })
+})
+
+
+describe('ConversationMessage localized tool activity', () => {
+  it('renders German activity labels', async () => {
+    Object.assign(document, { documentElement: { lang: 'en' } })
+    const { setLanguage } = await import('../i18n')
+    setLanguage('de')
+    try {
+      const html = render({
+        role: 'assistant',
+        content: '[calling persisted_placeholder]',
+        tool_calls: [{ name: 'web-browser__search' }, { name: 'delegate_to_agent' }],
+      })
+
+      expect(html).toContain('Im Web gesucht')
+      expect(html).toContain('Weitere Unterstützung hinzugezogen')
+      expect(html).not.toContain('web-browser__search')
+      expect(html).not.toContain('delegate_to_agent')
+    } finally {
+      setLanguage('en')
+    }
+  })
+})
