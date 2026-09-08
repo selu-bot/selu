@@ -4,11 +4,12 @@ use std::{collections::VecDeque, convert::Infallible, time::Duration};
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response, Sse},
     routing::{get, post},
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures::stream;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -17,7 +18,7 @@ use uuid::Uuid;
 use crate::{
     agents::{
         access,
-        engine::{ChannelKind, TurnParams, run_turn},
+        engine::{ChannelKind, InboundAttachmentInput, TurnParams, run_turn},
         improvement, router as agent_router,
     },
     api::auth::ApiPrincipal,
@@ -38,7 +39,7 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/api/v1/conversations/{conversation_id}/messages",
-            post(send_message),
+            post(send_message).layer(DefaultBodyLimit::max(18 * 1024 * 1024)),
         )
         .route(
             "/api/v1/conversations/{conversation_id}/feedback",
@@ -46,6 +47,10 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/v1/commands", get(list_commands))
         .route("/api/v1/events", get(events))
+        .route(
+            "/api/v1/artifacts/{artifact_id}",
+            get(crate::api::artifacts::download_authenticated),
+        )
         .route(
             "/api/v1/approvals/{approval_id}/decision",
             post(decide_approval),
@@ -57,6 +62,7 @@ struct SessionResponse {
     display_name: String,
     is_admin: bool,
     language: String,
+    supports_photo_uploads: bool,
 }
 
 async fn session(user: ApiPrincipal) -> Json<SessionResponse> {
@@ -64,6 +70,7 @@ async fn session(user: ApiPrincipal) -> Json<SessionResponse> {
         display_name: user.display_name.clone(),
         is_admin: user.is_admin,
         language: user.language.clone(),
+        supports_photo_uploads: true,
     })
 }
 
@@ -329,14 +336,21 @@ async fn snapshot(
         return StatusCode::NOT_FOUND.into_response();
     };
 
-    let (messages, runs, latest, latest_turn_rating) = tokio::join!(
+    // Establish the replay boundary before reading the snapshot. Reading the
+    // cursor concurrently with messages can skip an event committed between them.
+    let event_cursor = match sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT MAX(id) FROM conversation_events WHERE user_id = ?",
+    )
+    .bind(&user.user_id)
+    .fetch_one(&state.db)
+    .await
+    {
+        Ok(value) => value.unwrap_or(0),
+        Err(error) => return internal_error(error.into()),
+    };
+    let (messages, runs, latest_turn_rating) = tokio::join!(
         conversations::list_messages(&state.db, &conversation_id, 200),
         conversations::list_runs(&state.db, &conversation_id),
-        sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT MAX(id) FROM conversation_events WHERE user_id = ?"
-        )
-        .bind(&user.user_id)
-        .fetch_one(&state.db),
         improvement::latest_turn_rating(&state.db, &user.user_id, &conversation_id),
     );
     // A missing rating must never block the conversation from loading.
@@ -344,8 +358,8 @@ async fn snapshot(
         tracing::warn!(conversation_id, "Could not load turn rating: {error:#}");
         None
     });
-    match (messages, runs, latest) {
-        (Ok(messages), Ok(runs), Ok(event_cursor)) => {
+    match (messages, runs) {
+        (Ok(messages), Ok(runs)) => {
             let pending_approval = if let Some(run) =
                 runs.iter().find(|run| run.status == "waiting_for_approval")
             {
@@ -387,12 +401,11 @@ async fn snapshot(
                 runs,
                 pending_approval,
                 latest_turn_rating,
-                event_cursor: event_cursor.unwrap_or(0),
+                event_cursor,
             })
             .into_response()
         }
-        (Err(error), _, _) | (_, Err(error), _) => internal_error(error),
-        (_, _, Err(error)) => internal_error(error.into()),
+        (Err(error), _) | (_, Err(error)) => internal_error(error),
     }
 }
 
@@ -427,6 +440,77 @@ async fn list_commands(
 struct SendMessageRequest {
     text: String,
     client_message_id: String,
+    #[serde(default)]
+    attachments: Vec<PhotoUpload>,
+}
+
+#[derive(Deserialize)]
+struct PhotoUpload {
+    filename: String,
+    mime_type: String,
+    data_base64: String,
+}
+
+/// Bound both encoded and decoded sizes before allocating or starting a run.
+/// Native clients normalize photos to JPEG; PNG, GIF and WebP are also accepted.
+fn decode_photos(photos: Vec<PhotoUpload>) -> Result<Vec<InboundAttachmentInput>, &'static str> {
+    const MAX_PHOTO: usize = 2 * 1024 * 1024;
+    const MAX_TOTAL: usize = 12 * 1024 * 1024;
+    if photos.len() > 10 {
+        return Err("conversation.too_many_photos");
+    }
+    let mut total = 0;
+    photos
+        .into_iter()
+        .map(|photo| {
+            if photo.data_base64.len() > MAX_PHOTO.div_ceil(3) * 4 {
+                return Err("conversation.photo_too_large");
+            }
+            let data = STANDARD
+                .decode(&photo.data_base64)
+                .map_err(|_| "conversation.invalid_photo")?;
+            total += data.len();
+            if data.len() > MAX_PHOTO || total > MAX_TOTAL {
+                return Err("conversation.photo_too_large");
+            }
+            let valid = match photo.mime_type.as_str() {
+                "image/jpeg" => data.starts_with(&[0xff, 0xd8, 0xff]),
+                "image/png" => data.starts_with(b"\x89PNG\r\n\x1a\n"),
+                "image/gif" => data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a"),
+                "image/webp" => data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP"),
+                _ => false,
+            };
+            if !valid {
+                return Err("conversation.invalid_photo");
+            }
+            // A filename is a display label, never a filesystem path.
+            let filename: String = photo
+                .filename
+                .chars()
+                .filter(|c| !c.is_control() && *c != '/' && *c != '\\')
+                .take(120)
+                .collect();
+            Ok(InboundAttachmentInput {
+                filename: if filename.is_empty() {
+                    "photo".to_owned()
+                } else {
+                    filename
+                },
+                mime_type: photo.mime_type,
+                data,
+            })
+        })
+        .collect()
+}
+
+fn validate_photo_command(
+    text: &str,
+    attachments: &[InboundAttachmentInput],
+) -> Result<(), &'static str> {
+    if !attachments.is_empty() && commands::is_command(text) {
+        return Err("conversation.photo_command");
+    }
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -443,7 +527,9 @@ async fn send_message(
     Json(request): Json<SendMessageRequest>,
 ) -> Response {
     let text = request.text.trim().to_owned();
-    if text.is_empty() || Uuid::parse_str(&request.client_message_id).is_err() {
+    if (text.is_empty() && request.attachments.is_empty())
+        || Uuid::parse_str(&request.client_message_id).is_err()
+    {
         return (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
@@ -472,6 +558,24 @@ async fn send_message(
             id: row.0, client_message_id: request.client_message_id, status: row.1, error_code: row.2,
             created_at: row.3, started_at: row.4, completed_at: row.5,
         }}).into_response();
+    }
+    let attachments = match decode_photos(request.attachments) {
+        Ok(attachments) => attachments,
+        Err(code) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "code": code })),
+            )
+                .into_response();
+        }
+    };
+    // Commands don't accept images; never silently discard a photo.
+    if let Err(code) = validate_photo_command(&text, &attachments) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "code": code })),
+        )
+            .into_response();
     }
     let active: i64 = match sqlx::query_scalar(
         "SELECT COUNT(*) FROM conversation_runs WHERE thread_id = ? AND status IN ('queued','running','waiting_for_approval','cancelling')",
@@ -521,33 +625,35 @@ async fn send_message(
         return internal_error(error);
     }
 
-    // The engine persists this message shortly after the run begins. Publish
-    // the accepted logical message now so every subscribed device shows the
-    // same optimistic state, keyed by the stable client-generated ID.
-    let message = conversations::ConversationMessage {
-        id: request.client_message_id.clone(),
-        role: "user".to_owned(),
-        content: text.clone(),
-        created_at,
-        tool_calls: None,
-        tool_call_id: None,
-        attachments: None,
-        compacted: false,
-    };
-    if let Err(error) = state
-        .conversation_events
-        .publish(
-            &state.db,
-            &user.user_id,
-            &conversation_id,
-            Some(&run_id),
-            "message.created",
-            Some(&request.client_message_id),
-            serde_json::json!({ "message": message }),
-        )
-        .await
-    {
-        return internal_error(error);
+    // Text-only messages have no artifact persistence dependency and keep the
+    // immediate event timing older clients expect. Photo messages are emitted
+    // by the engine once their stable artifact references are durable.
+    if attachments.is_empty() {
+        let message = conversations::ConversationMessage {
+            id: request.client_message_id.clone(),
+            role: "user".to_owned(),
+            content: text.clone(),
+            created_at: created_at.clone(),
+            tool_calls: None,
+            tool_call_id: None,
+            attachments: None,
+            compacted: false,
+        };
+        if let Err(error) = state
+            .conversation_events
+            .publish(
+                &state.db,
+                &user.user_id,
+                &conversation_id,
+                Some(&run_id),
+                "message.created",
+                Some(&request.client_message_id),
+                serde_json::json!({ "message": message }),
+            )
+            .await
+        {
+            return internal_error(error);
+        }
     }
 
     if commands::is_command(&text) {
@@ -568,6 +674,7 @@ async fn send_message(
             run_id,
             request.client_message_id,
             text,
+            attachments,
         ));
     }
     Json(SendMessageResponse { run }).into_response()
@@ -713,6 +820,7 @@ async fn execute_run(
     run_id: String,
     client_message_id: String,
     text: String,
+    attachments: Vec<InboundAttachmentInput>,
 ) {
     if let Err(error) =
         set_run_status(&state, &user_id, &conversation_id, &run_id, "running", None).await
@@ -749,7 +857,7 @@ async fn execute_run(
             skip_user_persist: false,
             client_message_id: Some(client_message_id),
             enable_streaming: true,
-            inbound_attachments: Vec::new(),
+            inbound_attachments: attachments,
             delegation_trace: Vec::new(),
             location_context: None,
         },
@@ -890,6 +998,24 @@ async fn notify_run_finished(
     }
 }
 
+fn persisted_user_message(
+    id: String,
+    content: String,
+    created_at: String,
+    attachments: Vec<crate::agents::artifacts::ArtifactRef>,
+) -> conversations::ConversationMessage {
+    conversations::ConversationMessage {
+        id,
+        role: "user".to_owned(),
+        content,
+        created_at,
+        tool_calls: None,
+        tool_call_id: None,
+        attachments: (!attachments.is_empty()).then(|| serde_json::json!(attachments)),
+        compacted: false,
+    }
+}
+
 async fn handle_engine_event(
     state: &AppState,
     user_id: &str,
@@ -897,22 +1023,52 @@ async fn handle_engine_event(
     run_id: &str,
     event: LoopEvent,
 ) {
-    let (event_type, payload) = match event {
-        LoopEvent::Token(text) => ("message.text_delta", serde_json::json!({ "text": text })),
-        LoopEvent::AssistantPartFinished => ("message.part_finished", serde_json::json!({})),
-        LoopEvent::CapabilityStatus(label) => {
-            ("run.progress", serde_json::json!({ "label": label }))
+    let (event_type, entity_id, payload) = match event {
+        LoopEvent::UserMessagePersisted {
+            id,
+            content,
+            created_at,
+            attachments,
+        } => {
+            let entity_id = id.clone();
+            let message = persisted_user_message(id, content, created_at, attachments);
+            (
+                "message.created",
+                entity_id,
+                serde_json::json!({ "message": message }),
+            )
         }
+        LoopEvent::Token(text) => (
+            "message.text_delta",
+            run_id.to_owned(),
+            serde_json::json!({ "text": text }),
+        ),
+        LoopEvent::AssistantPartFinished => (
+            "message.part_finished",
+            run_id.to_owned(),
+            serde_json::json!({}),
+        ),
+        LoopEvent::CapabilityStatus(label) => (
+            "run.progress",
+            run_id.to_owned(),
+            serde_json::json!({ "label": label }),
+        ),
         LoopEvent::Artifacts(artifacts) => (
             "message.artifacts",
+            run_id.to_owned(),
             serde_json::json!({ "artifacts": artifacts }),
         ),
-        LoopEvent::Done => ("run.output_finished", serde_json::json!({})),
+        LoopEvent::Done => (
+            "run.output_finished",
+            run_id.to_owned(),
+            serde_json::json!({}),
+        ),
         // Clients only get a stable code; the engine's message is for the log.
         LoopEvent::Error(message) => {
             tracing::warn!(run_id, "Agent reported an error during the run: {message}");
             (
                 "run.error",
+                run_id.to_owned(),
                 serde_json::json!({ "code": "conversation.agent_failed" }),
             )
         }
@@ -942,6 +1098,7 @@ async fn handle_engine_event(
             .await;
             (
                 "approval.requested",
+                run_id.to_owned(),
                 serde_json::json!({
                     "approval_id": approval_id,
                     "tool_name": request.tool_display_name,
@@ -956,13 +1113,18 @@ async fn handle_engine_event(
             approval_id,
         } => (
             "approval.queued",
+            run_id.to_owned(),
             serde_json::json!({
                 "approval_id": approval_id,
                 "tool_name": tool_display_name,
                 "message": approval_message,
             }),
         ),
-        LoopEvent::ToolMessage(_) => ("conversation.changed", serde_json::json!({})),
+        LoopEvent::ToolMessage(_) => (
+            "conversation.changed",
+            run_id.to_owned(),
+            serde_json::json!({}),
+        ),
     };
     if let Err(error) = state
         .conversation_events
@@ -972,7 +1134,7 @@ async fn handle_engine_event(
             conversation_id,
             Some(run_id),
             event_type,
-            Some(run_id),
+            Some(&entity_id),
             payload,
         )
         .await
@@ -1168,4 +1330,105 @@ fn internal_error(error: anyhow::Error) -> Response {
         Json(serde_json::json!({ "code": "conversation.unavailable" })),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod photo_tests {
+    use super::*;
+
+    fn photo(mime: &str, bytes: &[u8]) -> PhotoUpload {
+        PhotoUpload {
+            filename: "photo.jpg".into(),
+            mime_type: mime.into(),
+            data_base64: STANDARD.encode(bytes),
+        }
+    }
+
+    #[test]
+    fn old_text_clients_need_no_attachment_field() {
+        let value: SendMessageRequest = serde_json::from_value(serde_json::json!({
+            "text": "Hello", "client_message_id": Uuid::new_v4().to_string()
+        }))
+        .unwrap();
+        assert!(value.attachments.is_empty());
+    }
+
+    #[test]
+    fn validates_photo_type_and_content() {
+        assert!(decode_photos(vec![photo("image/jpeg", &[0xff, 0xd8, 0xff, 0xd9])]).is_ok());
+        assert!(decode_photos(vec![photo("image/png", b"not a PNG")]).is_err());
+        assert!(decode_photos(vec![photo("image/svg+xml", b"<svg/>")]).is_err());
+        assert!(
+            decode_photos(vec![PhotoUpload {
+                filename: "p".into(),
+                mime_type: "image/jpeg".into(),
+                data_base64: "%%%".into()
+            }])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn enforces_photo_count_and_size_limits() {
+        assert!(matches!(
+            decode_photos(
+                (0..11)
+                    .map(|_| photo("image/jpeg", &[0xff, 0xd8, 0xff]))
+                    .collect()
+            ),
+            Err("conversation.too_many_photos")
+        ));
+        assert!(matches!(
+            decode_photos(vec![photo("image/jpeg", &vec![0xff; 2 * 1024 * 1024 + 1])]),
+            Err("conversation.photo_too_large")
+        ));
+    }
+
+    #[test]
+    fn rejects_photos_with_slash_commands() {
+        let attachments = decode_photos(vec![photo("image/jpeg", &[0xff, 0xd8, 0xff])]).unwrap();
+        assert_eq!(
+            validate_photo_command("/help", &attachments),
+            Err("conversation.photo_command")
+        );
+        assert!(validate_photo_command("Help with 1/2 cup", &attachments).is_ok());
+        assert!(validate_photo_command("/help", &[]).is_ok());
+    }
+
+    #[test]
+    fn filename_is_only_a_display_label() {
+        let mut input = photo("image/jpeg", &[0xff, 0xd8, 0xff]);
+        input.filename = "../folder/\nphoto.jpg".into();
+        let result = decode_photos(vec![input]).unwrap();
+        assert!(!result[0].filename.contains('/'));
+        assert!(!result[0].filename.contains('\n'));
+    }
+
+    #[test]
+    fn persisted_photo_event_message_includes_artifact_references() {
+        let message = persisted_user_message(
+            "message-1".into(),
+            "".into(),
+            "2026-09-08T12:00:00.000".into(),
+            vec![crate::agents::artifacts::ArtifactRef {
+                artifact_id: "artifact-1".into(),
+                filename: "garden.jpg".into(),
+                mime_type: "image/jpeg".into(),
+                size_bytes: 4,
+            }],
+        );
+        let payload = serde_json::json!({ "message": message });
+
+        assert_eq!(payload["message"]["id"], "message-1");
+        assert_eq!(payload["message"]["content"], "");
+        assert_eq!(
+            payload["message"]["attachments"][0]["artifact_id"],
+            "artifact-1"
+        );
+        assert_eq!(
+            payload["message"]["attachments"][0]["filename"],
+            "garden.jpg"
+        );
+        assert!(!payload["message"]["attachments"].is_null());
+    }
 }

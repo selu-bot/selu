@@ -11,8 +11,9 @@ import { BrandMark } from '../../components/BrandMark'
 import { Composer } from '../../components/Composer'
 import { ConversationList } from '../../components/ConversationList'
 import { ConversationMenu, DeleteConversationDialog, RenameConversationDialog } from '../../components/ConversationActions'
-import { createClientId } from '../../shared/clientId'
 import { dedupeConversations, prependConversation, removeConversation, replaceConversation, type ConversationPages } from '../../shared/conversations'
+import { photoUploadPayload, preparePhotoFiles, type SelectedPhoto } from '../../shared/photoUploads'
+import { failedSendQueryKey, messageIdForSend, type RetryableSend } from '../../shared/sendRetry'
 import { useAppChrome } from '../shell/useAppChrome'
 
 type ConversationDialog = { kind: 'rename' } | { kind: 'delete' } | null
@@ -24,6 +25,9 @@ export function ChatPage({ conversationId }: { conversationId: string | null }) 
   const navigate = useNavigate()
   const notices = useNotices()
   const [draft, setDraft] = useState('')
+  const [photos, setPhotos] = useState<SelectedPhoto[]>([])
+  const [retryMessageId, setRetryMessageId] = useState<string | null>(null)
+  const [photoSelectionBusy, setPhotoSelectionBusy] = useState(false)
   const [mobileConversation, setMobileConversation] = useState(Boolean(conversationId))
   const { navigation, navCollapsed, language, openMobileNavigation, session } = useAppChrome('conversations')
   const [streamedParts, setStreamedParts] = useState<Record<string, string[]>>({})
@@ -49,6 +53,18 @@ export function ChatPage({ conversationId }: { conversationId: string | null }) 
     queryFn: () => api.snapshot(selected!),
     enabled: selected !== null,
   })
+  const failedSend = useQuery<RetryableSend | null>({
+    queryKey: failedSendQueryKey(selected ?? ''),
+    queryFn: () => Promise.resolve(null),
+    enabled: false,
+  })
+  useEffect(() => {
+    if (!selected || !failedSend.data) return
+    setDraft(failedSend.data.text)
+    setPhotos(failedSend.data.photos)
+    setRetryMessageId(failedSend.data.messageId)
+    cache.setQueryData(failedSendQueryKey(selected), null)
+  }, [cache, failedSend.data, selected])
 
   useEffect(() => {
     const cursor = snapshot.data?.event_cursor
@@ -70,17 +86,29 @@ export function ChatPage({ conversationId }: { conversationId: string | null }) 
   }, [snapshot.data?.messages.length, streamedText, streamedParts, progressItems, showJump])
 
   const send = useMutation({
-    mutationFn: ({ text, messageId }: { text: string; messageId: string }) => api.send(selected!, text, messageId),
-    onMutate: ({ text, messageId }) => {
+    mutationFn: ({ text, messageId, selectedPhotos }: { text: string; messageId: string; selectedPhotos: SelectedPhoto[] }) => api.send(selected!, text, messageId, photoUploadPayload(selectedPhotos)),
+    onMutate: ({ text, messageId, selectedPhotos }) => {
       cache.setQueryData<Snapshot>(['conversation', selected], (old) => old ? {
         ...old,
         messages: old.messages.some((message) => message.id === messageId) ? old.messages : [...old.messages, {
-          id: messageId, role: 'user', content: text, created_at: new Date().toISOString(), compacted: false,
+          id: messageId,
+          role: 'user',
+          content: text,
+          created_at: new Date().toISOString(),
+          compacted: false,
+          attachments: selectedPhotos.map(({ filename, mime_type, preview_url, size_bytes }) => ({ filename, mime_type, preview_url, size_bytes })),
         }],
       } : old)
       setDraft('')
+      setPhotos([])
+      setRetryMessageId(null)
     },
-    onError: (error, variables) => { setDraft(variables.text); notices.error(error, t('messageNotSent')) },
+    onError: (error, variables) => {
+      setDraft(variables.text)
+      setPhotos(variables.selectedPhotos)
+      setRetryMessageId(variables.messageId)
+      notices.error(error, t('messageNotSent'))
+    },
     onSettled: () => void cache.invalidateQueries({ queryKey: ['conversations'] }),
   })
 
@@ -146,10 +174,22 @@ export function ChatPage({ conversationId }: { conversationId: string | null }) 
   const conversationTitleRef = useRef<string>(title)
   useEffect(() => { conversationTitleRef.current = title }, [title])
 
+  const addPhotos = async (files: File[]) => {
+    setPhotoSelectionBusy(true)
+    try {
+      const prepared = await preparePhotoFiles(files, photos)
+      setRetryMessageId(null)
+      setPhotos((current) => [...current, ...prepared])
+    } catch (error) {
+      notices.error(error, t('photosNotAdded'))
+    } finally {
+      setPhotoSelectionBusy(false)
+    }
+  }
   const submit = () => {
     const text = draft.trim()
-    if (!selected || !text || active || send.isPending) return
-    send.mutate({ text, messageId: createClientId() })
+    if (!selected || (!text && photos.length === 0) || active || send.isPending) return
+    send.mutate({ text, messageId: messageIdForSend(retryMessageId), selectedPhotos: photos })
   }
 
   return <main className={`selu-shell${navCollapsed ? ' nav-collapsed' : ''}${mobileConversation ? ' mobile-chat-open' : ''}`}>
@@ -182,7 +222,19 @@ export function ChatPage({ conversationId }: { conversationId: string | null }) 
           <StreamingMessage parts={streamedParts[selected] ?? []} text={streamedText[selected] ?? ''} />
         </div></div>
         {showJump && <button className="jump-to-latest" onClick={() => { messageViewport.current?.scrollTo({ top: messageViewport.current.scrollHeight, behavior: 'smooth' }); setShowJump(false) }}><ArrowDown />{t('jumpToLatest')}</button>}
-        <Composer value={draft} onChange={setDraft} onSend={submit} disabled={send.isPending || active} busy={active} commands={commands.data?.commands ?? []} />
+        <Composer
+          value={draft}
+          photos={photos}
+          supportsPhotoUploads={session.data?.supports_photo_uploads === true}
+          photoSelectionBusy={photoSelectionBusy}
+          onChange={(value) => { setDraft(value); setRetryMessageId(null) }}
+          onAddPhotos={(files) => void addPhotos(files)}
+          onRemovePhoto={(id) => { setRetryMessageId(null); setPhotos((current) => current.filter((photo) => photo.id !== id)) }}
+          onSend={submit}
+          disabled={send.isPending || active}
+          busy={active}
+          commands={commands.data?.commands ?? []}
+        />
       </>}
       {dialog?.kind === 'rename' && selected && <RenameConversationDialog initialTitle={conversation?.title ?? ''} busy={renameConversation.isPending} error={renameConversation.error ? describeError(renameConversation.error).body : null} onCancel={() => setDialog(null)} onSave={(next) => renameConversation.mutate({ id: selected, title: next })} />}
       {dialog?.kind === 'delete' && selected && <DeleteConversationDialog title={title} blocked={active} busy={deleteConversation.isPending} error={deleteConversation.error ? describeError(deleteConversation.error).body : null} onCancel={() => setDialog(null)} onConfirm={() => deleteConversation.mutate(selected)} />}

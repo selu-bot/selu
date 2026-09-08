@@ -291,14 +291,34 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         let now_ms = chrono::Utc::now()
             .format("%Y-%m-%dT%H:%M:%S%.3f")
             .to_string();
-        if let Err(e) = sqlx::query!(
+        match sqlx::query!(
             "INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             msg_id, pipe_id, session_id, thread_id, user_role, effective_user_text, now_ms
         )
         .execute(&state.db)
         .await
         {
-            error!("Failed to persist user message: {e}");
+            Ok(_) => {
+                if !inbound_attachment_refs.is_empty() {
+                    let attachment_json = serde_json::to_string(&inbound_attachment_refs)?;
+                    sqlx::query(
+                        "UPDATE messages SET attachments_json = ? WHERE id = ? AND role = 'user'",
+                    )
+                    .bind(attachment_json)
+                    .bind(&msg_id)
+                    .execute(&state.db)
+                    .await?;
+                    let _ = tx
+                        .send(LoopEvent::UserMessagePersisted {
+                            id: msg_id,
+                            content: effective_text.clone(),
+                            created_at: now_ms,
+                            attachments: inbound_attachment_refs.clone(),
+                        })
+                        .await;
+                }
+            }
+            Err(e) => error!("Failed to persist user message: {e}"),
         }
     }
     let user_persist_ms = user_persist_start.elapsed().as_millis();
@@ -2398,7 +2418,8 @@ fn confirmation_only_sender(parent_tx: LoopSender) -> LoopSender {
                 | LoopEvent::AssistantPartFinished
                 | LoopEvent::Artifacts(_)
                 | LoopEvent::Done
-                | LoopEvent::ToolMessage(_) => {}
+                | LoopEvent::ToolMessage(_)
+                | LoopEvent::UserMessagePersisted { .. } => {}
                 // Forward errors so the parent stream can surface delegation
                 // failures instead of silently swallowing them.
                 LoopEvent::Error(_) => {

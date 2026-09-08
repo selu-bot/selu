@@ -1,18 +1,24 @@
-import { ArrowUp, CornerDownLeft, LockKeyhole, Slash } from 'lucide-react'
+import { ArrowUp, CornerDownLeft, ImagePlus, LockKeyhole, Slash, X } from 'lucide-react'
 import { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { SlashCommand } from '../api'
 import { t } from '../i18n'
+import { PHOTO_ACCEPT, type SelectedPhoto } from '../shared/photoUploads'
 
 type ComposerProps = {
   value: string
   disabled: boolean
   busy: boolean
   commands: SlashCommand[]
+  photos: SelectedPhoto[]
+  supportsPhotoUploads: boolean
+  photoSelectionBusy?: boolean
   onChange: (value: string) => void
+  onAddPhotos: (files: File[]) => void
+  onRemovePhoto: (id: string) => void
   onSend: () => void
 }
 
-export function Composer({ value, disabled, busy, commands, onChange, onSend }: ComposerProps) {
+export function Composer({ value, disabled, busy, commands, photos, supportsPhotoUploads, photoSelectionBusy = false, onChange, onAddPhotos, onRemovePhoto, onSend }: ComposerProps) {
   const field = useRef<HTMLTextAreaElement>(null)
   const [highlight, setHighlight] = useState(0)
   const [dismissed, setDismissed] = useState(false)
@@ -35,7 +41,7 @@ export function Composer({ value, disabled, busy, commands, onChange, onSend }: 
   }
   const submit = (event?: FormEvent) => {
     event?.preventDefault()
-    if (!disabled && value.trim()) onSend()
+    if (!disabled && (value.trim() || photos.length > 0)) onSend()
   }
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (suggestions.length) {
@@ -50,9 +56,16 @@ export function Composer({ value, disabled, busy, commands, onChange, onSend }: 
     }
   }
   const menuOpen = suggestions.length > 0
+  const canSend = Boolean(value.trim() || photos.length)
 
   return <div className="composer-wrap">
     <form className="composer" onSubmit={submit}>
+      <PhotoPreviewStrip photos={photos} disabled={disabled} onRemove={onRemovePhoto} />
+      {supportsPhotoUploads && <PhotoPickerButton
+        className="composer-tool photo-picker-button"
+        disabled={disabled || photoSelectionBusy}
+        onSelect={onAddPhotos}
+      />}
       {commands.length > 0 && <button
         type="button"
         className="composer-tool"
@@ -75,7 +88,7 @@ export function Composer({ value, disabled, busy, commands, onChange, onSend }: 
         aria-activedescendant={menuOpen ? `command-option-${highlight}` : undefined}
         disabled={disabled}
       />
-      <button className="send-button" disabled={disabled || !value.trim()} aria-label={t('send')}>
+      <button className="send-button" disabled={disabled || !canSend} aria-label={t('send')}>
         <ArrowUp />
       </button>
       <div className="composer-glow" aria-hidden="true" />
@@ -103,6 +116,50 @@ export function Composer({ value, disabled, busy, commands, onChange, onSend }: 
       {commands.length > 0 && <span><Slash />{t('commandsHint')}</span>}
       <span><LockKeyhole />{t('privateByDesign')}</span>
     </div>
+  </div>
+}
+
+export function PhotoPickerButton({ className, disabled, onSelect }: { className: string; disabled: boolean; onSelect: (files: File[]) => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  return <>
+    <input
+      ref={input}
+      className="photo-input"
+      type="file"
+      accept={PHOTO_ACCEPT}
+      multiple
+      disabled={disabled}
+      onChange={(event) => {
+        const files = Array.from(event.currentTarget.files ?? [])
+        event.currentTarget.value = ''
+        if (files.length) onSelect(files)
+      }}
+    />
+    <button
+      type="button"
+      className={className}
+      aria-label={t('addPhotos')}
+      title={t('addPhotos')}
+      disabled={disabled}
+      onClick={() => input.current?.click()}
+    ><ImagePlus /></button>
+  </>
+}
+
+export function PhotoPreviewStrip({ photos, disabled, onRemove }: { photos: SelectedPhoto[]; disabled: boolean; onRemove: (id: string) => void }) {
+  if (!photos.length) return null
+  return <div className="photo-preview-strip" role="list" aria-label={t('selectedPhotos')}>
+    {photos.map((photo) => <div className="photo-preview" role="listitem" key={photo.id}>
+      <img src={photo.preview_url} alt={photo.filename} />
+      <button
+        type="button"
+        className="photo-preview-remove"
+        aria-label={`${t('removePhoto')}: ${photo.filename}`}
+        title={t('removePhoto')}
+        disabled={disabled}
+        onClick={() => onRemove(photo.id)}
+      ><X /></button>
+    </div>)}
   </div>
 }
 

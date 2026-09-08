@@ -4,6 +4,7 @@ import { createAppRouter, resolveAuthRedirect } from './app/router'
 import { startHomeConversation } from './features/home/HomePage'
 import { translations } from './i18n'
 import { appPath, normalizeBasePath } from './shared/paths'
+import type { RetryableSend } from './shared/sendRetry'
 import { prefersReducedMotion } from './shared/transitions'
 import type { Conversation, Message } from './api'
 
@@ -65,6 +66,62 @@ describe('Home conversation handoff', () => {
       'send:conversation-42:Help me prepare for tomorrow:message-7',
       'navigate:conversation-42',
     ])
+  })
+
+  it('starts and navigates a photo-only conversation', async () => {
+    const events: string[] = []
+    let shown: Message | undefined
+    const attachments = [{ filename: 'garden.jpg', mime_type: 'image/jpeg', data_base64: '/9j/' }]
+    const optimisticAttachments = [{ filename: 'garden.jpg', mime_type: 'image/jpeg', preview_url: 'data:image/jpeg;base64,/9j/', size_bytes: 3 }]
+    await startHomeConversation({
+      text: '',
+      attachments,
+      optimisticAttachments,
+      create: async () => conversation,
+      send: async (id, text, messageId, sentPhotos) => { events.push(`send:${id}:${text}:${messageId}:${sentPhotos?.[0]?.filename}`) },
+      showOptimistically: (_conversation, message) => { shown = message; events.push(`optimistic:${message.content}`) },
+      navigate: async (id) => { events.push(`navigate:${id}`) },
+      messageId: () => 'message-photo',
+    })
+    expect(shown?.attachments).toEqual(optimisticAttachments)
+    expect(events).toEqual([
+      'optimistic:',
+      'send:conversation-42::message-photo:garden.jpg',
+      'navigate:conversation-42',
+    ])
+  })
+
+  it('hands an ambiguous failure to Chat with the original message ID and photos', async () => {
+    const events: string[] = []
+    const failure = new TypeError('network interrupted')
+    const selectedPhotos = [{
+      id: 'photo-1', filename: 'retry.jpg', mime_type: 'image/jpeg', size_bytes: 3,
+      data_base64: '/9j/', preview_url: 'data:image/jpeg;base64,/9j/',
+    }]
+    let retryDraft: RetryableSend | undefined
+    await expect(startHomeConversation({
+      text: 'Keep this draft',
+      create: async () => conversation,
+      send: async (_id, _text, messageId) => { events.push(`send:${messageId}`); throw failure },
+      showOptimistically: () => { events.push('optimistic') },
+      navigate: async () => { events.push('navigate') },
+      onSendError: (failedConversation, messageId) => {
+        retryDraft = { text: 'Keep this draft', messageId, photos: selectedPhotos }
+        events.push(`retry:${failedConversation.id}:${messageId}`)
+      },
+      messageId: () => 'stable-message-id',
+    })).rejects.toBe(failure)
+    expect(events).toEqual([
+      'optimistic',
+      'send:stable-message-id',
+      'navigate',
+      'retry:conversation-42:stable-message-id',
+    ])
+    expect(retryDraft).toEqual({
+      text: 'Keep this draft',
+      messageId: 'stable-message-id',
+      photos: selectedPhotos,
+    })
   })
 })
 

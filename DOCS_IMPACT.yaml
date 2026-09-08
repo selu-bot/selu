@@ -2841,3 +2841,61 @@ entries:
       QR and manual pairing use the same one-time credentials and retain the
       existing five-minute expiration limit; creating another code invalidates
       the previous pairing attempt.
+
+  - id: 2026-09-08-ios-chat-and-photo-sharing
+    date: 2026-09-08
+    pr:
+    area: ios-chat
+    type: changed
+    audience: both
+    summary: "Polished native chat, resilient retries, and restored photo sharing through the conversation API"
+    affected_files:
+      - crates/selu-orchestrator/src/api/conversations.rs
+      - crates/selu-orchestrator/src/api/artifacts.rs
+      - crates/selu-orchestrator/src/agents/engine.rs
+      - crates/selu-orchestrator/src/llm/tool_loop.rs
+      - ui/src/api.ts
+      - ui/src/components/Composer.tsx
+      - ui/src/components/ConversationMessage.tsx
+      - ui/src/features/chat/ChatPage.tsx
+      - ui/src/features/home/HomePage.tsx
+      - ui/src/notices.tsx
+      - ui/src/style.css
+      - ../selu-ios/Selu/Views/Chat/ConversationStore.swift
+      - ../selu-ios/Selu/Views/Chat/ConversationRootView.swift
+      - ../selu-ios/SeluShare/ShareViewController.swift
+      - ../selu-ios/docs/CHAT_READINESS.md
+    docs_sections:
+      - user-guide/channels/web-chat
+      - reference/api
+    details: |
+      Native chat now keeps per-conversation drafts in memory, allows drafting while
+      a run is active, preserves reading position, offers jump-to-latest, and shows
+      reconnect and recoverable send states. Retries reuse the client message UUID
+      and reconcile accepted runs. Large text, Reduce Motion, English and German
+      are supported. The phone retains schedule overview, pause and confirmed
+      deletion; schedule changes are requested in chat. Unsupported raw cron editing
+      and the ineffective location-attachment setting have been removed.
+      The v1 session response adds supports_photo_uploads. Message POST accepts an
+      optional attachments array of filename, mime_type and data_base64. Text-only
+      clients remain compatible; photo-only messages are accepted. Limits are 10
+      photos, 2 MiB per photo, 12 MiB decoded total and 18 MiB JSON body. JPEG, PNG,
+      GIF and WebP signatures are checked. Photos with slash commands are rejected.
+      New error codes are conversation.invalid_photo, conversation.photo_too_large,
+      conversation.too_many_photos and conversation.photo_command. Native clients
+      check capability support before sending so older servers cannot silently
+      drop photos. Deploy these backend changes before enabling native photo sends.
+      GET /api/v1/artifacts/{artifact_id} is session-authenticated and owner-scoped
+      for both memory and disk artifacts. User message attachment metadata persists
+      across reloads. Photo-bearing message.created events are published only after
+      those artifact references are durable, so other open clients render photos
+      without waiting for the run to finish.
+      The web SPA now offers the same capability-gated photo flow on Home and in
+      conversations: removable local previews, photo-only sends, authenticated
+      persisted-photo rendering and English/German guidance for every photo error.
+      Failed sends retain their text, photos and original client message UUID;
+      changing the restored draft starts a new logical message instead.
+      The iOS Photos picker and Share extension both use the shared
+      SeluAPIClient and stable v1 message IDs. Advanced backend administration
+      remains outside the app. Full implementation and validation notes are in
+      ../selu-ios/docs/CHAT_READINESS.md.

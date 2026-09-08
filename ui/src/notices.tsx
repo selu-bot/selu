@@ -121,17 +121,27 @@ const KNOWN_CODES: Record<string, TranslationKey> = {
   'conversation.approval_expired': 'errorApprovalExpired',
   'conversation.invalid_title': 'errorInvalidTitle',
   'conversation.feedback_unavailable': 'errorFeedbackUnavailable',
+  'conversation.invalid_photo': 'errorInvalidPhoto',
+  'conversation.photo_too_large': 'errorPhotoTooLarge',
+  'conversation.too_many_photos': 'errorTooManyPhotos',
+  'conversation.photo_command': 'errorPhotoCommand',
   'session.expired': 'errorSessionExpired',
 }
 
 /** Translate any thrown value into a title and plain-language explanation. */
 export function describeError(error: unknown, fallbackTitle: string = t('somethingWentWrong')): { title: string; body: string } {
   const title = fallbackTitle
+  const code = errorCode(error)
+  if (code && KNOWN_CODES[code]) return { title, body: t(KNOWN_CODES[code]) }
   if (error instanceof ApiError) {
-    if (error.code && KNOWN_CODES[error.code]) return { title, body: t(KNOWN_CODES[error.code]) }
     if (error.status === 404 || error.status === 405) return { title, body: t('errorNotAvailable') }
     if (error.status >= 500) return { title, body: t('errorServer') }
   }
   if (error instanceof TypeError) return { title, body: t('errorOffline') }
   return { title, body: t('tryAgain') }
+}
+
+function errorCode(error: unknown) {
+  if (!error || typeof error !== 'object' || !('code' in error)) return undefined
+  return typeof error.code === 'string' ? error.code : undefined
 }

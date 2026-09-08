@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO web_sessions (id, user_id, expires_at) VALUES (?, ?, datetime('now', '+1 day'))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3f724cdae16307c137ddebf50a136fa6f68d2fef45abf10bf8074d9f9325053a"
+}
