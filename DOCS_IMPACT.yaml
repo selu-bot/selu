@@ -2844,7 +2844,7 @@ entries:
 
   - id: 2026-09-08-ios-chat-and-photo-sharing
     date: 2026-09-08
-    pr:
+    pr: 49
     area: ios-chat
     type: changed
     audience: both
