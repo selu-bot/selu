@@ -300,6 +300,14 @@ pub async fn run_turn(state: &AppState, params: TurnParams, tx: LoopSender) -> R
         {
             error!("Failed to persist user message: {e}");
         }
+        if !inbound_attachment_refs.is_empty() {
+            let attachment_json = serde_json::to_string(&inbound_attachment_refs)?;
+            sqlx::query("UPDATE messages SET attachments_json = ? WHERE id = ? AND role = 'user'")
+                .bind(attachment_json)
+                .bind(&msg_id)
+                .execute(&state.db)
+                .await?;
+        }
     }
     let user_persist_ms = user_persist_start.elapsed().as_millis();
 
