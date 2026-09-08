@@ -88,6 +88,25 @@ pub fn router(state: AppState) -> Router<AppState> {
         .with_state(state)
 }
 
-async fn health() -> &'static str {
-    "ok"
+async fn health(
+    axum::extract::State(state): axum::extract::State<AppState>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+
+    match sqlx::query_scalar::<_, String>(
+        "SELECT value FROM instance_meta WHERE key = 'instance_id'",
+    )
+    .fetch_one(&state.db)
+    .await
+    {
+        Ok(_) => (axum::http::StatusCode::OK, "ok").into_response(),
+        Err(error) => {
+            tracing::error!(%error, "Health check failed: persistence unavailable");
+            (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                "storage unavailable",
+            )
+                .into_response()
+        }
+    }
 }

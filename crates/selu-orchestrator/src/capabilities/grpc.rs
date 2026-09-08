@@ -123,12 +123,42 @@ impl CapabilityGrpcClient {
 
         let result = String::from_utf8(response.result_json.to_vec())
             .map_err(|_| anyhow!("Capability returned non-UTF8 result_json"))?;
+        let result = Self::validate_result_json(&self.capability_id, tool_name, result)?;
 
         debug!(
             capability = %self.capability_id,
             tool = %tool_name,
             "Tool invocation complete"
         );
+
+        Ok(result)
+    }
+
+    pub(crate) fn validate_result_json(
+        capability_id: &str,
+        tool_name: &str,
+        result: String,
+    ) -> Result<String> {
+        let reported_error = serde_json::from_str::<Value>(&result)
+            .ok()
+            .and_then(|value| value.as_object().cloned())
+            .and_then(|object| object.get("error").cloned())
+            .is_some_and(|error| match error {
+                Value::Null | Value::Bool(false) => false,
+                Value::String(message) => !message.trim().is_empty(),
+                _ => true,
+            });
+
+        if reported_error {
+            warn!(
+                capability = %capability_id,
+                tool = %tool_name,
+                "Capability returned a legacy error in result_json"
+            );
+            return Err(anyhow!(
+                "Capability '{capability_id}' tool '{tool_name}' reported an error"
+            ));
+        }
 
         Ok(result)
     }

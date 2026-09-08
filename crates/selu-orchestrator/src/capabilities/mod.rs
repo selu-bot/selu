@@ -1,6 +1,8 @@
 pub mod discovery;
 pub mod egress_proxy;
 pub mod grpc;
+#[cfg(test)]
+mod grpc_tests;
 pub mod manifest;
 pub mod runner;
 
