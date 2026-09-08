@@ -342,8 +342,10 @@
   .primary-button svg { width: 16px; }
 
   .notice-region { position: fixed; z-index: 60; top: 18px; right: 18px; display: grid; gap: 8px; width: min(360px, calc(100vw - 24px)); pointer-events: none; }
-  .notice { display: flex; align-items: flex-start; gap: 11px; padding: 12px 10px 12px 14px; border: 1px solid var(--line); border-radius: 15px; color: var(--ink); background: var(--canvas-elevated); box-shadow: var(--shadow); pointer-events: auto; animation: toast-arrive .3s cubic-bezier(.18, .8, .25, 1) both; }
-  .notice > svg { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 1px; }
+  .notice { display: flex; align-items: center; gap: 11px; padding: 12px 10px 12px 14px; border: 1px solid var(--line); border-radius: 15px; color: var(--ink); background: var(--canvas-elevated); box-shadow: var(--shadow); pointer-events: auto; animation: toast-arrive .3s cubic-bezier(.18, .8, .25, 1) both; }
+  .notice.has-body { align-items: flex-start; }
+  .notice > svg { width: 18px; height: 18px; flex: 0 0 auto; }
+  .notice.has-body > svg { margin-top: 1px; }
   .notice > span { display: grid; flex: 1; min-width: 0; gap: 2px; font-size: 12px; line-height: 1.4; }
   .notice strong { font-weight: 700; }
   .notice small { color: var(--ink-soft); font-size: 11.5px; line-height: 1.45; }

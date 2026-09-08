@@ -2790,3 +2790,28 @@ entries:
       Empty Bedrock responses become failed runs rather than blank assistant
       messages. Static fallback catalogues include Claude Fable 5.1 and
       GPT-5.6 Sol Bedrock inference profiles.
+
+  - id: 2026-09-07-ui-settings-cleanup
+    date: "2026-09-07"
+    pr: 47
+    area: ui
+    type: changed
+    audience: users
+    summary: "Moves the public web address to Settings and makes update progress visible immediately"
+    affected_files:
+      - ui/src/features/settings/SettingsPage.tsx
+      - ui/src/features/settings/SettingsPage.css
+      - ui/src/features/updates/UpdatesPage.tsx
+      - ui/src/features/about/AboutPage.tsx
+      - ui/src/features/management/final-management.css
+      - ui/src/notices.tsx
+      - ui/src/style.css
+    docs_sections:
+      - user-guide/self-hosting/updating
+    details: |
+      Administrators now manage Selu's public web address from the general
+      Settings page instead of the system update settings. Starting an update
+      or rollback immediately shows in-page progress and keeps that progress
+      visible while Selu restarts and reconnects. The About you page no longer
+      repeats its remembered-details section, and single-line notifications
+      are vertically centered.

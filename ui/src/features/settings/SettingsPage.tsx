@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { Boxes, Copy, KeyRound, LockKeyhole, Plus, RefreshCw, Settings2, Smartphone, Trash2 } from 'lucide-react'
-import { api } from '../../api'
+import { Boxes, Copy, Globe2, KeyRound, LockKeyhole, Plus, RefreshCw, Smartphone, Trash2 } from 'lucide-react'
+import { ApiError, api } from '../../api'
 import { defineTranslations, useLanguage, useTranslations } from '../../i18n'
 import { useNotices, useQueryErrorNotice } from '../../notices'
 import { Button, ConfirmDialog, EmptyState, Field, Input, PageHeader, SecretField, StatusBadge } from '../../shared/ui'
 import { AppPageShell } from '../shell/AppPageShell'
 import { ManagementLoading, ManagementSheet, OverviewCard, OverviewGrid } from '../management/Management'
+import { updatesApi, type UpdateSettings } from '../updates/api'
 import { settingsApi, type CacheVolume, type PairingToken, type SecretMetadata } from './api'
 import './SettingsPage.css'
 
@@ -16,28 +17,73 @@ const messages = defineTranslations({
 }, {
   eyebrow: 'Dein Selu', title: 'Einstellungen', description: 'Anmeldung, mobile App, private Angaben und gespeicherte Dateien – zusammen und verständlich erklärt.', account: 'Kontosicherheit', accountBody: 'Ändere dein Passwort und melde andere Sitzungen ab.', changePassword: 'Passwort ändern', mobile: 'Mobile App', mobileBody: 'Verbinde dein Handy mit einem einmaligen Code, der fünf Minuten gilt.', pair: 'Handy verbinden', privateDetails: 'Private Angaben', privateBody: 'Sichere Werte, die Selu verwenden kann, ohne sie anzuzeigen.', manage: 'Verwalten', storedFiles: 'Gespeicherte Dateien', storageBody: 'Temporäre Dateien, die Selu bei Bedarf sicher neu erstellen kann.', review: 'Ansehen', sharedDetails: 'Gemeinsame private Angaben', sharedBody: 'Sichere Werte, die für dieses ganze Selu verfügbar sind.', systemUpdates: 'Systemaktualisierungen', updatesBody: 'Prüfe, installiere oder widerrufe Selu-Aktualisierungen.', openUpdates: 'Aktualisierungen öffnen', currentPassword: 'Aktuelles Passwort', newPassword: 'Neues Passwort', confirmPassword: 'Neues Passwort wiederholen', passwordHint: 'Verwende mindestens 8 Zeichen.', passwordMismatch: 'Die neuen Passwörter stimmen nicht überein.', passwordSaved: 'Passwort geändert', sessionsRevoked: '{count} weitere Sitzungen wurden abgemeldet.', savePassword: 'Passwort ändern', pairingTitle: 'Mobile App verbinden', pairingDescription: 'Erstelle einen Code und gib ihn innerhalb von fünf Minuten in der Selu-App ein.', createCode: 'Verbindungscode erstellen', newCode: 'Neuen Code erstellen', code: 'Einmaliger Code', server: 'Selu-Adresse', expires: 'Gültig bis {date}', copied: 'Kopiert', copy: 'Kopieren', copyFailed: 'Kopieren nicht möglich', copyFailedBody: 'Markiere den Wert und kopiere ihn manuell.', pairingPrivate: 'Jede Person mit diesem Code könnte sich in den nächsten fünf Minuten verbinden. Halte ihn privat.', secretsTitle: 'Private Angaben', systemSecretsTitle: 'Gemeinsame private Angaben', secretsDescription: 'Selu speichert Werte verschlüsselt. Vorhandene Werte können ersetzt oder entfernt, aber nie angezeigt werden.', addSecret: 'Private Angabe hinzufügen', helper: 'Helfer', helperHint: 'Der Helfer, zu dem dieser Wert gehört, zum Beispiel calendar oder github.', valueName: 'Name', valueNameHint: 'Eine kurze Bezeichnung wie token oder api_key.', secretValue: 'Privater Wert', secretHint: 'Dieser Wert wird verschlüsselt und danach nicht mehr angezeigt.', replace: 'Ersetzen', remove: 'Entfernen', saveSecret: 'Wert speichern', secretSaved: 'Private Angabe gespeichert', deleteSecretTitle: 'Diese private Angabe entfernen?', deleteSecretBody: 'Selu kann diesen Wert danach nicht mehr verwenden.', secretDeleted: 'Private Angabe entfernt', noSecrets: 'Keine privaten Angaben gespeichert', noSecretsBody: 'Füge nur dann eine hinzu, wenn ein Helfer danach fragt.', storageTitle: 'Gespeicherte Dateien', storageDescription: 'Diese Dateien beschleunigen wiederkehrende Aufgaben. Das Entfernen ist sicher; Selu erstellt sie bei Bedarf neu.', unknownSize: 'Größe nicht verfügbar', lastUsed: 'Zuletzt verwendet: {date}', deleteCacheTitle: 'Diese gespeicherten Dateien entfernen?', deleteCacheBody: 'Die Dateien werden gelöscht. Selu erstellt sie möglicherweise beim nächsten Lauf neu.', cacheDeleted: 'Gespeicherte Dateien entfernt', noCache: 'Keine gespeicherten Dateien', noCacheBody: 'Temporäre Helferdateien erscheinen hier, sobald Selu sie erstellt.', savedCount: '{count} gespeichert', cancel: 'Abbrechen', close: 'Bereich schließen', save: 'Speichern', required: 'Fülle alle erforderlichen Felder aus.', show: 'Wert anzeigen', hide: 'Wert ausblenden', loadError: 'Einstellungen konnten nicht geladen werden', saveError: 'Deine Änderung wurde nicht gespeichert',
 })
+
+const addressMessages = defineTranslations({
+  title: 'Public web address', description: 'The secure address people and messaging services use to reach this Selu.', manage: 'Manage address', notSet: 'Not set', current: 'Current browser address: {address}', label: 'Public web address', hint: 'Use a full http or https address without a path.', useCurrent: 'Use current address', save: 'Save address', saved: 'Public web address saved', invalid: 'Enter a full http or https address without a path, such as https://selu.example.com.', saveFailed: 'The public web address was not saved', cancel: 'Cancel', close: 'Close panel',
+}, {
+  title: 'Öffentliche Webadresse', description: 'Die sichere Adresse, über die Personen und Nachrichtendienste dieses Selu erreichen.', manage: 'Adresse verwalten', notSet: 'Nicht festgelegt', current: 'Aktuelle Browseradresse: {address}', label: 'Öffentliche Webadresse', hint: 'Verwende eine vollständige http- oder https-Adresse ohne Pfad.', useCurrent: 'Aktuelle Adresse verwenden', save: 'Adresse speichern', saved: 'Öffentliche Webadresse gespeichert', invalid: 'Gib eine vollständige http- oder https-Adresse ohne Pfad ein, zum Beispiel https://selu.example.com.', saveFailed: 'Die öffentliche Webadresse wurde nicht gespeichert', cancel: 'Abbrechen', close: 'Bereich schließen',
+})
 type Copy = { [K in keyof typeof messages.en]: string }
-type Sheet = 'password' | 'mobile' | 'user-secrets' | 'system-secrets' | 'storage' | null
+type AddressCopy = { [K in keyof typeof addressMessages.en]: string }
+type Sheet = 'password' | 'mobile' | 'user-secrets' | 'system-secrets' | 'public-address' | 'storage' | null
 
 export function SettingsPage() {
-  const copy = useTranslations(messages), language = useLanguage(), notices = useNotices(), cache = useQueryClient()
+  const copy = useTranslations(messages), addressCopy = useTranslations(addressMessages), language = useLanguage(), notices = useNotices(), cache = useQueryClient()
   const session = useQuery({ queryKey: ['session'], queryFn: api.session, staleTime: 60_000 })
   const userSecrets = useQuery({ queryKey: ['secrets', 'user'], queryFn: settingsApi.userSecrets })
   const systemSecrets = useQuery({ queryKey: ['secrets', 'system'], queryFn: settingsApi.systemSecrets, enabled: session.data?.is_admin === true })
+  const updateSettings = useQuery({ queryKey: ['system-updates', 'settings'], queryFn: updatesApi.settings, enabled: session.data?.is_admin === true, retry: false })
   const storage = useQuery({ queryKey: ['cache-volumes'], queryFn: settingsApi.cacheVolumes })
-  useQueryErrorNotice(userSecrets.error ?? systemSecrets.error ?? storage.error, copy.loadError)
+  useQueryErrorNotice(userSecrets.error ?? systemSecrets.error ?? updateSettings.error ?? storage.error, copy.loadError)
   const [sheet, setSheet] = useState<Sheet>(null), [pairing, setPairing] = useState<PairingToken | null>(null)
   const pair = useMutation({ mutationFn: settingsApi.createPairingToken, onSuccess: setPairing, onError: (error) => notices.error(error, copy.saveError) })
   const close = () => { setSheet(null); setPairing(null) }
   const cards = [<OverviewCard key="account" icon={<LockKeyhole />} title={copy.account} description={copy.accountBody} actions={<Button size="sm" onClick={() => setSheet('password')}>{copy.changePassword}</Button>} />, <OverviewCard key="mobile" icon={<Smartphone />} title={copy.mobile} description={copy.mobileBody} actions={<Button size="sm" onClick={() => setSheet('mobile')}>{copy.pair}</Button>} />, <OverviewCard key="user-secrets" icon={<KeyRound />} status={<StatusBadge>{copy.savedCount.replace('{count}', String(userSecrets.data?.length ?? 0))}</StatusBadge>} title={copy.privateDetails} description={copy.privateBody} actions={<Button size="sm" onClick={() => setSheet('user-secrets')}>{copy.manage}</Button>} />, <OverviewCard key="storage" icon={<Boxes />} status={<StatusBadge>{String(storage.data?.length ?? 0)}</StatusBadge>} title={copy.storedFiles} description={copy.storageBody} actions={<Button size="sm" onClick={() => setSheet('storage')}>{copy.review}</Button>} />]
-  if (session.data?.is_admin) cards.push(<OverviewCard key="system-secrets" icon={<KeyRound />} status={<StatusBadge tone="info">{copy.savedCount.replace('{count}', String(systemSecrets.data?.length ?? 0))}</StatusBadge>} title={copy.sharedDetails} description={copy.sharedBody} actions={<Button size="sm" onClick={() => setSheet('system-secrets')}>{copy.manage}</Button>} />, <OverviewCard key="updates" icon={<RefreshCw />} title={copy.systemUpdates} description={copy.updatesBody} actions={<Link className="selu-ui-button is-secondary is-sm" to="/app/updates">{copy.openUpdates}</Link>} />)
+  if (session.data?.is_admin) cards.push(<OverviewCard key="system-secrets" icon={<KeyRound />} status={<StatusBadge tone="info">{copy.savedCount.replace('{count}', String(systemSecrets.data?.length ?? 0))}</StatusBadge>} title={copy.sharedDetails} description={copy.sharedBody} actions={<Button size="sm" onClick={() => setSheet('system-secrets')}>{copy.manage}</Button>} />, <OverviewCard key="public-address" icon={<Globe2 />} title={addressCopy.title} description={updateSettings.data?.public_origin || updateSettings.data?.current_origin || addressCopy.notSet} meta={addressCopy.description} actions={<Button size="sm" disabled={!updateSettings.data} onClick={() => setSheet('public-address')}>{addressCopy.manage}</Button>} />, <OverviewCard key="updates" icon={<RefreshCw />} title={copy.systemUpdates} description={copy.updatesBody} actions={<Link className="selu-ui-button is-secondary is-sm" to="/app/updates">{copy.openUpdates}</Link>} />)
   return <AppPageShell active="settings" width="wide"><PageHeader eyebrow={copy.eyebrow} title={copy.title} description={copy.description} />{userSecrets.isPending || storage.isPending ? <ManagementLoading /> : <OverviewGrid>{cards}</OverviewGrid>}
     <PasswordSheet open={sheet === 'password'} copy={copy} onClose={close} />
     <MobileSheet open={sheet === 'mobile'} copy={copy} pairing={pairing} busy={pair.isPending} onCreate={() => pair.mutate()} onClose={close} language={language} notices={notices} />
     <SecretsSheet open={sheet === 'user-secrets'} system={false} copy={copy} items={userSecrets.data ?? []} onClose={close} onChanged={() => cache.invalidateQueries({ queryKey: ['secrets', 'user'] })} />
     <SecretsSheet open={sheet === 'system-secrets'} system copy={copy} items={systemSecrets.data ?? []} onClose={close} onChanged={() => cache.invalidateQueries({ queryKey: ['secrets', 'system'] })} />
+    <PublicAddressSheet open={sheet === 'public-address'} copy={addressCopy} settings={updateSettings.data} onClose={close} onSaved={() => { close(); void cache.invalidateQueries({ queryKey: ['system-updates', 'settings'] }) }} />
     <StorageSheet open={sheet === 'storage'} copy={copy} items={storage.data ?? []} language={language} onClose={close} onChanged={() => cache.invalidateQueries({ queryKey: ['cache-volumes'] })} />
   </AppPageShell>
+}
+
+function PublicAddressSheet({ open, copy, settings, onClose, onSaved }: { open: boolean; copy: AddressCopy; settings?: UpdateSettings; onClose: () => void; onSaved: () => void }) {
+  const notices = useNotices(), [origin, setOrigin] = useState(settings?.public_origin ?? ''), [validationError, setValidationError] = useState('')
+  useEffect(() => { if (open && settings) { setOrigin(settings.public_origin); setValidationError('') } }, [open, settings])
+  const save = useMutation({
+    mutationFn: (public_origin: string) => updatesApi.save({ public_origin }),
+    onSuccess: () => { notices.success(copy.saved); onSaved() },
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'invalid_public_origin') setValidationError(copy.invalid)
+      else notices.error(error, copy.saveFailed)
+    },
+  })
+  if (!settings) return null
+  const submit = () => {
+    const nextOrigin = origin.trim()
+    if (!isValidPublicOrigin(nextOrigin)) { setValidationError(copy.invalid); return }
+    setValidationError('')
+    save.mutate(nextOrigin)
+  }
+  return <ManagementSheet open={open} title={copy.title} description={copy.description} closeLabel={copy.close} onClose={onClose} busy={save.isPending} actions={<><Button onClick={onClose}>{copy.cancel}</Button><Button variant="primary" loading={save.isPending} onClick={submit}>{copy.save}</Button></>}>
+    <div className="management-form">
+      {validationError && <div className="management-inline-error" role="alert">{validationError}</div>}
+      <Field label={copy.label} hint={<>{copy.hint}<br />{copy.current.replace('{address}', settings.current_origin)}</>}><div className="settings-address-fields"><Input type="url" value={origin} onChange={(event) => { setOrigin(event.target.value); setValidationError('') }} placeholder="https://selu.example.com" /><Button size="sm" onClick={() => { setOrigin(settings.current_origin); setValidationError('') }}>{copy.useCurrent}</Button></div></Field>
+    </div>
+  </ManagementSheet>
+}
+
+export function isValidPublicOrigin(value: string) {
+  if (!value) return true
+  try {
+    const url = new URL(value)
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname) && !url.username && !url.password && url.pathname === '/' && !url.search && !url.hash
+  } catch {
+    return false
+  }
 }
 
 function PasswordSheet({ open, copy, onClose }: { open: boolean; copy: Copy; onClose: () => void }) { const notices = useNotices(), form = useRef<HTMLFormElement>(null), [current, setCurrent] = useState(''), [next, setNext] = useState(''), [confirm, setConfirm] = useState(''), [error, setError] = useState(''); useEffect(() => { if (open) { setCurrent(''); setNext(''); setConfirm(''); setError('') } }, [open]); const change = useMutation({ mutationFn: () => settingsApi.changePassword(current, next), onSuccess: (receipt) => { notices.success(copy.passwordSaved, copy.sessionsRevoked.replace('{count}', String(receipt.other_sessions_revoked))); onClose() }, onError: (problem) => notices.error(problem, copy.saveError) }); const submit = (event: FormEvent) => { event.preventDefault(); if (next.length < 8 || next !== confirm || !current) { setError(next !== confirm ? copy.passwordMismatch : copy.required); return } change.mutate() }; return <ManagementSheet open={open} title={copy.changePassword} description={copy.accountBody} closeLabel={copy.close} onClose={onClose} busy={change.isPending} actions={<><Button onClick={onClose}>{copy.cancel}</Button><Button variant="primary" loading={change.isPending} onClick={() => form.current?.requestSubmit()}>{copy.savePassword}</Button></>}><form ref={form} className="management-form" onSubmit={submit}>{error && <div className="management-inline-error">{error}</div>}<Field label={copy.currentPassword}><SecretField value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" showLabel={copy.show} hideLabel={copy.hide} /></Field><Field label={copy.newPassword} hint={copy.passwordHint}><SecretField value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" showLabel={copy.show} hideLabel={copy.hide} /></Field><Field label={copy.confirmPassword}><SecretField value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" showLabel={copy.show} hideLabel={copy.hide} /></Field></form></ManagementSheet> }
