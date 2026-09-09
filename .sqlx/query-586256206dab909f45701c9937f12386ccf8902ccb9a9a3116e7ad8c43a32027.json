@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO agent_package_revisions\n                 (id, agent_id, version, package_path, state, retain_until)\n                 VALUES (?, ?, ?, NULL, 'failed', datetime('now', '+7 days'))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "586256206dab909f45701c9937f12386ccf8902ccb9a9a3116e7ad8c43a32027"
+}

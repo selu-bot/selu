@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE docker_storage_state\n             SET last_cleanup_at = datetime('now'), updated_at = datetime('now')\n             WHERE id = 'global'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "c5c72e72fcafa95edf7413a2ebb577d62bf5baa1add28098a9c65d12406eeab3"
+}

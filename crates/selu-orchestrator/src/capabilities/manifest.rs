@@ -332,6 +332,41 @@ impl CapabilityManifest {
     }
 }
 
+/// Strictly load every capability in a staged agent package. Any unreadable
+/// manifest or duplicate capability ID rejects the whole package.
+pub async fn load_for_agent_strict(agent_dir: &Path) -> Result<Vec<CapabilityManifest>> {
+    let caps_dir = agent_dir.join("capabilities");
+    if !caps_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut caps = Vec::new();
+    let mut ids = std::collections::HashSet::new();
+    let mut entries = fs::read_dir(&caps_dir)
+        .await
+        .with_context(|| format!("Cannot read capabilities dir: {}", caps_dir.display()))?;
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let file_type = entry.file_type().await.with_context(|| {
+            format!("Cannot inspect staged capability entry: {}", path.display())
+        })?;
+        if !file_type.is_dir() {
+            continue;
+        }
+        let capability = load_from_dir(&path)
+            .await
+            .with_context(|| format!("Invalid staged capability in {}", path.display()))?;
+        if !ids.insert(capability.id.clone()) {
+            return Err(anyhow::anyhow!(
+                "Duplicate staged capability id '{}'",
+                capability.id
+            ));
+        }
+        caps.push(capability);
+    }
+    Ok(caps)
+}
+
 /// Load all capabilities declared in an agent's capabilities/ subdirectory
 pub async fn load_for_agent(agent_dir: &Path) -> Result<Vec<CapabilityManifest>> {
     let caps_dir = agent_dir.join("capabilities");
@@ -480,6 +515,57 @@ tools: []
         assert!(loaded.sharing_policy().is_none());
 
         let _ = fs::remove_dir_all(&dir).await;
+    }
+
+    async fn make_agent_capability(agent_dir: &Path, directory: &str, yaml: &str) {
+        let capability_dir = agent_dir.join("capabilities").join(directory);
+        fs::create_dir_all(&capability_dir).await.unwrap();
+        fs::write(capability_dir.join("manifest.yaml"), yaml)
+            .await
+            .unwrap();
+    }
+
+    fn basic_manifest(id: &str) -> String {
+        format!("id: {id}\nclass: tool\nimage: example/{id}:1\ntools: []\n")
+    }
+
+    #[tokio::test]
+    async fn strict_loading_rejects_malformed_manifest_but_tolerant_loading_skips_it() {
+        let agent_dir =
+            std::env::temp_dir().join(format!("selu-agent-test-{}", uuid::Uuid::new_v4()));
+        make_agent_capability(&agent_dir, "valid", &basic_manifest("valid-cap")).await;
+        make_agent_capability(&agent_dir, "broken", "id: [not valid yaml").await;
+
+        let tolerant = load_for_agent(&agent_dir).await.unwrap();
+        assert_eq!(tolerant.len(), 1);
+        assert_eq!(tolerant[0].id, "valid-cap");
+
+        let error = load_for_agent_strict(&agent_dir)
+            .await
+            .expect_err("staged loading must reject a malformed manifest");
+        assert!(error.to_string().contains("Invalid staged capability"));
+
+        let _ = fs::remove_dir_all(&agent_dir).await;
+    }
+
+    #[tokio::test]
+    async fn strict_loading_rejects_duplicate_capability_ids() {
+        let agent_dir =
+            std::env::temp_dir().join(format!("selu-agent-test-{}", uuid::Uuid::new_v4()));
+        let manifest = basic_manifest("duplicate-cap");
+        make_agent_capability(&agent_dir, "first", &manifest).await;
+        make_agent_capability(&agent_dir, "second", &manifest).await;
+
+        let error = load_for_agent_strict(&agent_dir)
+            .await
+            .expect_err("staged loading must reject duplicate capability IDs");
+        assert!(
+            error
+                .to_string()
+                .contains("Duplicate staged capability id 'duplicate-cap'")
+        );
+
+        let _ = fs::remove_dir_all(&agent_dir).await;
     }
 
     #[tokio::test]

@@ -76,6 +76,17 @@ async fn main() -> Result<()> {
     // ── Backfill built-in tool policies for all agents (handles upgrades) ─────
     agents::bundled::backfill_builtin_policies(&db).await?;
 
+    // ── Reconcile interrupted package activations before loading code ─────────
+    let recovered_activations =
+        agents::marketplace::reconcile_agent_package_activations(&db, &cfg.installed_agents_dir)
+            .await?;
+    if recovered_activations > 0 {
+        warn!(
+            recovered_activations,
+            "Recovered interrupted agent package activation(s) before startup"
+        );
+    }
+
     // ── Load installed agents from DB + filesystem ────────────────────────────
     let mut agent_defs = agents::loader::load_installed(&db, &cfg.installed_agents_dir).await?;
 
@@ -110,7 +121,17 @@ async fn main() -> Result<()> {
         }
     });
 
-    let runner = CapabilityRunner::new(egress_registry, &cfg.egress_proxy_addr)?;
+    let updater_client = updater::client::SidecarUpdaterClient::from_config(&cfg)?;
+    let docker_storage = services::docker_storage::DockerStorage::with_updater(
+        db.clone(),
+        &cfg.installed_agents_dir,
+        updater_client,
+    );
+    let runner = CapabilityRunner::new(
+        egress_registry,
+        &cfg.egress_proxy_addr,
+        docker_storage.clone(),
+    )?;
     if let Err(e) = runner.ensure_networks().await {
         warn!(
             "Capability Docker setup unavailable at startup; continuing without capability network preflight: {e:#}"
@@ -130,6 +151,7 @@ async fn main() -> Result<()> {
         db,
         cfg.clone(),
         agent_defs,
+        docker_storage,
         cap_engine,
         channel_registry,
         cred_store,
@@ -138,6 +160,10 @@ async fn main() -> Result<()> {
 
     api::connectors::domain::backfill_connector_secrets(&state.db, &state.credentials).await?;
     services::system_updates::hydrate_public_origin_override(&state).await;
+
+    if let Err(error) = state.docker_storage.bootstrap().await {
+        tracing::error!(%error, "Managed Docker image registry bootstrap failed; cleanup remains blocked");
+    }
 
     // Best-effort dynamic capability tool sync at startup.
     {
@@ -201,6 +227,30 @@ async fn main() -> Result<()> {
                 }
                 Ok(_) => {}
                 Err(e) => tracing::error!("Idle session cleanup error: {e}"),
+            }
+        }
+    });
+
+    // Managed Docker image cleanup: starts conservatively after five minutes,
+    // then runs daily. The service itself refuses deletion unless bootstrap is ready.
+    let image_cleanup_state = state.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+        loop {
+            interval.tick().await;
+            match image_cleanup_state.docker_storage.cleanup(true, None).await {
+                Ok(report) if report.reclaimed_image_count.unwrap_or_default() > 0 => {
+                    info!(
+                        images = report.reclaimed_image_count.unwrap_or_default(),
+                        bytes = report.reclaimed_bytes.unwrap_or_default(),
+                        "Cleaned expired Selu-managed Docker images"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(%error, "Automatic managed image cleanup failed closed")
+                }
             }
         }
     });
@@ -290,6 +340,7 @@ async fn main() -> Result<()> {
                 &autoupdate_state.agents,
                 &autoupdate_state.capabilities,
                 &autoupdate_state.credentials,
+                &autoupdate_state.docker_storage,
             )
             .await
             {

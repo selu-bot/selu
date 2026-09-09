@@ -6,7 +6,7 @@ use std::path::Path;
 use tokio::fs;
 
 use crate::agents::localization::{self, AgentI18nConfig, AgentLocaleBundle};
-use crate::capabilities::manifest::{CapabilityManifest, load_for_agent};
+use crate::capabilities::manifest::{CapabilityManifest, load_for_agent, load_for_agent_strict};
 
 // ── Routing mode ──────────────────────────────────────────────────────────────
 
@@ -287,6 +287,14 @@ pub async fn load_installed(
 /// Public so that the marketplace installer can use it after extracting an
 /// agent archive.
 pub async fn load_one(dir: &Path) -> Result<AgentDefinition> {
+    load_one_with_mode(dir, false).await
+}
+
+pub async fn load_one_strict(dir: &Path) -> Result<AgentDefinition> {
+    load_one_with_mode(dir, true).await
+}
+
+async fn load_one_with_mode(dir: &Path, strict_capabilities: bool) -> Result<AgentDefinition> {
     let yaml_path = dir.join("agent.yaml");
     let md_path = dir.join("agent.md");
 
@@ -307,8 +315,13 @@ pub async fn load_one(dir: &Path) -> Result<AgentDefinition> {
     agent.localized_system_prompts =
         localization::load_localized_markdown_files(dir, "agent").await?;
 
-    // Load capability manifests from capabilities/ subdirectory
-    let cap_list = load_for_agent(dir).await.unwrap_or_default();
+    // Startup remains tolerant for already-installed packages, while staged
+    // marketplace revisions fail closed on every malformed or duplicate manifest.
+    let cap_list = if strict_capabilities {
+        load_for_agent_strict(dir).await?
+    } else {
+        load_for_agent(dir).await.unwrap_or_default()
+    };
     agent.capability_manifests = cap_list.into_iter().map(|m| (m.id.clone(), m)).collect();
 
     Ok(agent)
@@ -316,13 +329,34 @@ pub async fn load_one(dir: &Path) -> Result<AgentDefinition> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SessionConfig, SessionIsolationMode};
+    use super::{SessionConfig, SessionIsolationMode, load_one, load_one_strict};
 
     #[test]
     fn session_config_defaults_to_shared_isolation() {
         let cfg = SessionConfig::default();
         assert_eq!(cfg.isolation, SessionIsolationMode::Shared);
         assert!(!cfg.requires_thread_isolation());
+    }
+
+    #[tokio::test]
+    async fn staged_loading_is_strict_while_startup_loading_remains_tolerant() {
+        let dir = std::env::temp_dir().join(format!("selu-loader-test-{}", uuid::Uuid::new_v4()));
+        let capability_dir = dir.join("capabilities").join("broken");
+        tokio::fs::create_dir_all(&capability_dir).await.unwrap();
+        tokio::fs::write(dir.join("agent.yaml"), "id: test-agent\nname: Test Agent\n")
+            .await
+            .unwrap();
+        tokio::fs::write(capability_dir.join("manifest.yaml"), "id: [broken")
+            .await
+            .unwrap();
+
+        let tolerant = load_one(&dir)
+            .await
+            .expect("startup loading should skip a malformed existing capability");
+        assert!(tolerant.capability_manifests.is_empty());
+        assert!(load_one_strict(&dir).await.is_err());
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 
     #[test]

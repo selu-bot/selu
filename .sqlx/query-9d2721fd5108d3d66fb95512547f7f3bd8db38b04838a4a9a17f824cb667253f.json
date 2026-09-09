@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) AS \"count!: i64\" FROM managed_docker_image_refs\n             WHERE agent_revision_id = ? AND image_ref = ? AND image_id <> ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "count!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9d2721fd5108d3d66fb95512547f7f3bd8db38b04838a4a9a17f824cb667253f"
+}

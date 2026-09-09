@@ -460,6 +460,11 @@ async fn update_status(
                 previous_digest: None,
                 previous_version: None,
                 previous_build: None,
+                storage_metadata_ready: false,
+                storage_metadata_generated_at: None,
+                storage_cleanup_block_reason: Some("storage_metadata_unavailable".to_string()),
+                managed_repositories: Vec::new(),
+                protected_image_refs: Vec::new(),
             }),
         );
     }
@@ -486,6 +491,8 @@ async fn update_status(
                 .await
                 .unwrap_or_default();
     }
+    let storage_metadata =
+        engine::storage_metadata(&state, &runtime.status, runtime.active_job_id.is_some()).await;
     (
         StatusCode::OK,
         Json(StatusResponse {
@@ -537,6 +544,11 @@ async fn update_status(
             } else {
                 Some(runtime.previous_build)
             },
+            storage_metadata_ready: storage_metadata.ready,
+            storage_metadata_generated_at: storage_metadata.generated_at,
+            storage_cleanup_block_reason: storage_metadata.cleanup_block_reason,
+            managed_repositories: storage_metadata.managed_repositories,
+            protected_image_refs: storage_metadata.protected_image_refs,
         }),
     )
 }

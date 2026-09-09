@@ -599,6 +599,7 @@ async fn check_for_updates_via_sidecar(
 }
 
 async fn apply_update_via_sidecar(state: &AppState, settings: &UpdateSettings) -> Result<()> {
+    let _maintenance_lease = state.docker_storage.shared_lease().await;
     let metadata = fetch_release_metadata(state, &settings.release_channel).await?;
     if metadata.tag.trim().is_empty() {
         return Err(anyhow!("Release metadata did not include a tag"));
@@ -731,6 +732,7 @@ async fn apply_update_via_sidecar(state: &AppState, settings: &UpdateSettings) -
 }
 
 async fn rollback_update_via_sidecar(state: &AppState, current: &UpdateState) -> Result<()> {
+    let _maintenance_lease = state.docker_storage.shared_lease().await;
     if current.previous_version.trim().is_empty() {
         return Err(anyhow!("No previous version is available for rollback"));
     }
@@ -1439,6 +1441,11 @@ mod tests {
             previous_digest: None,
             previous_version: None,
             previous_build: None,
+            storage_metadata_ready: false,
+            storage_metadata_generated_at: None,
+            storage_cleanup_block_reason: None,
+            managed_repositories: Vec::new(),
+            protected_image_refs: Vec::new(),
         }
     }
 

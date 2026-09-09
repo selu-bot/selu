@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT agent_id AS \"agent_id!\", version AS \"version!\"\n             FROM agent_package_revisions WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "agent_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "agent_package_revisions",
+            "name": "agent_id"
+          }
+        }
+      },
+      {
+        "name": "version!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "agent_package_revisions",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "122ce5eed58674d04cb017bb5b4cf24b9834c599a5568dc71c4c2e3fc40a29e2"
+}

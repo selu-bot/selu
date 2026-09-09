@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE agents SET display_name = ?, version = ?, source_url = ?,\n                 setup_complete = 0 WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "87cf2ca2f549f03e493e1e7344b2f38434227479569b60a686d1addf4ee86b4c"
+}

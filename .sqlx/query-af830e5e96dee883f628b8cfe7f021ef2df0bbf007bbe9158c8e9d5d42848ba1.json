@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE agent_package_revisions\n             SET state = 'failed', retain_until = datetime('now', '+7 days'),\n                 updated_at = datetime('now')\n             WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "af830e5e96dee883f628b8cfe7f021ef2df0bbf007bbe9158c8e9d5d42848ba1"
+}

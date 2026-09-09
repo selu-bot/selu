@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT last_cleanup_at FROM docker_storage_state WHERE id = 'global'",
+  "describe": {
+    "columns": [
+      {
+        "name": "last_cleanup_at",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_storage_state",
+            "name": "last_cleanup_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e30b1fde0d50a77303a6eff8b41381d7b4a4f884a1d100b8b2f43dd29d0518f7"
+}

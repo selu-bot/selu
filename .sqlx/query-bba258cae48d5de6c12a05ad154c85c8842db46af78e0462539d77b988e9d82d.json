@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO agent_package_revisions\n             (id, agent_id, version, package_path, state)\n             VALUES (?, ?, ?, ?, 'current')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "bba258cae48d5de6c12a05ad154c85c8842db46af78e0462539d77b988e9d82d"
+}

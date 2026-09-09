@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM managed_docker_images WHERE image_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c4a4eeac224f19cb8b876be333ff305a1a024ffbf7cc5b66c6688466a347a0e8"
+}

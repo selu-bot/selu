@@ -114,6 +114,92 @@ pub async fn sync_dynamic_tools_for_agent(
     }
 }
 
+/// Validate staged dynamic capabilities without changing discovery or policy
+/// records. Capabilities that still need a required system credential are
+/// intentionally deferred to the setup flow; every runnable capability must
+/// start and return a valid, duplicate-free discovery payload before activation.
+pub async fn validate_dynamic_tools_for_agent(
+    engine: &CapabilityEngine,
+    cred_store: &CredentialStore,
+    agent_id: &str,
+    manifests: &HashMap<String, CapabilityManifest>,
+) -> Result<()> {
+    for (capability_id, manifest) in manifests {
+        if manifest.tool_source != ToolSource::Dynamic {
+            continue;
+        }
+        if !required_system_credentials_available(cred_store, manifest).await? {
+            debug!(
+                agent_id = %agent_id,
+                capability_id = %capability_id,
+                "Deferring staged dynamic capability validation until setup credentials are available"
+            );
+            continue;
+        }
+
+        let mut last_error = None;
+        let mut discovered = None;
+        for _attempt in 0..2 {
+            match discover_tools_once(
+                engine,
+                cred_store,
+                agent_id,
+                manifest,
+                manifests,
+                capability_id,
+                true,
+            )
+            .await
+            {
+                Ok(tools) => {
+                    discovered = Some(tools);
+                    break;
+                }
+                Err(error) => last_error = Some(error),
+            }
+        }
+
+        let discovered = discovered.ok_or_else(|| {
+            last_error.unwrap_or_else(|| anyhow!("unknown discovery validation error"))
+        })?;
+        validate_discovered_tools(&discovered).with_context(|| {
+            format!(
+                "Staged dynamic capability '{}' returned an invalid discovery payload",
+                capability_id
+            )
+        })?;
+    }
+
+    Ok(())
+}
+
+async fn required_system_credentials_available(
+    cred_store: &CredentialStore,
+    manifest: &CapabilityManifest,
+) -> Result<bool> {
+    for declaration in &manifest.credentials {
+        if declaration.scope != crate::capabilities::manifest::CredentialScope::System
+            || !declaration.required
+        {
+            continue;
+        }
+        if cred_store
+            .get_system(&manifest.id, &declaration.name)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to read system credential '{}' for capability '{}'",
+                    declaration.name, manifest.id
+                )
+            })?
+            .is_none()
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 pub async fn sync_dynamic_tools_for_all_agents(
     db: &SqlitePool,
     engine: &CapabilityEngine,
@@ -163,7 +249,17 @@ pub async fn sync_dynamic_tools_for_capability(
     let mut discovered: Option<Vec<DiscoveryTool>> = None;
 
     for _attempt in 0..2 {
-        match discover_tools_once(engine, cred_store, manifest, manifests, capability_id).await {
+        match discover_tools_once(
+            engine,
+            cred_store,
+            agent_id,
+            manifest,
+            manifests,
+            capability_id,
+            false,
+        )
+        .await
+        {
             Ok(tools) => {
                 discovered = Some(tools);
                 break;
@@ -199,15 +295,7 @@ pub async fn sync_dynamic_tools_for_capability(
         }
     };
 
-    let mut seen = HashSet::new();
-    for tool in &discovered {
-        if !seen.insert(tool.name.clone()) {
-            return Err(anyhow!(
-                "Discovery payload contains duplicate tool name '{}'",
-                tool.name
-            ));
-        }
-    }
+    validate_discovered_tools(&discovered)?;
 
     let new_names: HashSet<String> = discovered.iter().map(|t| t.name.clone()).collect();
     let added: Vec<String> = new_names.difference(&old_names).cloned().collect();
@@ -319,9 +407,11 @@ pub async fn sync_dynamic_tools_for_capability(
 async fn discover_tools_once(
     engine: &CapabilityEngine,
     cred_store: &CredentialStore,
+    agent_id: &str,
     manifest: &CapabilityManifest,
     manifests: &HashMap<String, CapabilityManifest>,
     capability_id: &str,
+    maintenance_lease_held: bool,
 ) -> Result<Vec<DiscoveryTool>> {
     let mut creds = serde_json::Map::new();
     for decl in &manifest.credentials {
@@ -351,17 +441,33 @@ async fn discover_tools_once(
     }
 
     let session_id = format!("discovery-{}-{}", capability_id, Uuid::new_v4().simple());
-    let invoke_result = engine
-        .invoke_direct(
-            manifests,
-            capability_id,
-            &manifest.discovery_tool_name,
-            serde_json::json!({}),
-            Value::Object(creds),
-            &session_id,
-            "tool-discovery",
-        )
-        .await;
+    let invoke_result = if maintenance_lease_held {
+        engine
+            .invoke_direct_with_maintenance_lease(
+                agent_id,
+                manifests,
+                capability_id,
+                &manifest.discovery_tool_name,
+                serde_json::json!({}),
+                Value::Object(creds),
+                &session_id,
+                "tool-discovery",
+            )
+            .await
+    } else {
+        engine
+            .invoke_direct(
+                agent_id,
+                manifests,
+                capability_id,
+                &manifest.discovery_tool_name,
+                serde_json::json!({}),
+                Value::Object(creds),
+                &session_id,
+                "tool-discovery",
+            )
+            .await
+    };
 
     engine.close_session(&session_id).await;
 
@@ -393,6 +499,19 @@ fn parse_discovery_payload(payload: &str) -> Result<Vec<DiscoveryTool>> {
     Ok(tools)
 }
 
+fn validate_discovered_tools(discovered: &[DiscoveryTool]) -> Result<()> {
+    let mut seen = HashSet::new();
+    for tool in discovered {
+        if !seen.insert(tool.name.clone()) {
+            return Err(anyhow!(
+                "Discovery payload contains duplicate tool name '{}'",
+                tool.name
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn normalize_policy(value: Option<&str>) -> Option<String> {
     match value {
         Some("allow") => Some("allow".to_string()),
@@ -404,7 +523,7 @@ fn normalize_policy(value: Option<&str>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_policy, parse_discovery_payload};
+    use super::{normalize_policy, parse_discovery_payload, validate_discovered_tools};
 
     #[test]
     fn parse_discovery_payload_accepts_array() {
@@ -430,6 +549,28 @@ mod tests {
         let payload = r#"{ "tools": [] }"#;
         let err = parse_discovery_payload(payload).expect_err("payload should fail");
         assert!(err.to_string().contains("JSON array"));
+    }
+
+    #[test]
+    fn validate_discovered_tools_rejects_duplicate_names() {
+        let payload = r#"
+        [
+          {
+            "name": "saveItem",
+            "description": "Save an item",
+            "input_schema": { "type": "object", "properties": {} }
+          },
+          {
+            "name": "saveItem",
+            "description": "Save another item",
+            "input_schema": { "type": "object", "properties": {} }
+          }
+        ]
+        "#;
+
+        let tools = parse_discovery_payload(payload).expect("payload should parse");
+        let error = validate_discovered_tools(&tools).expect_err("duplicates should fail");
+        assert!(error.to_string().contains("duplicate tool name 'saveItem'"));
     }
 
     #[test]

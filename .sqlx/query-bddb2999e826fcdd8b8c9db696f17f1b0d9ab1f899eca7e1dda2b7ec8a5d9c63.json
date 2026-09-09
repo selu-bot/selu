@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO agents (\n                id, display_name, version, source_url, is_bundled, setup_complete,\n                autonomy_level, max_tool_loop_iterations, max_delegation_hops, auto_update\n             ) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "bddb2999e826fcdd8b8c9db696f17f1b0d9ab1f899eca7e1dda2b7ec8a5d9c63"
+}

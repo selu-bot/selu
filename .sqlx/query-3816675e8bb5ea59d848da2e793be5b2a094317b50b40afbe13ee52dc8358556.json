@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT is_bundled FROM agents WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "is_bundled",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "agents",
+            "name": "is_bundled"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3816675e8bb5ea59d848da2e793be5b2a094317b50b40afbe13ee52dc8358556"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE docker_storage_state\n             SET bootstrap_status = 'blocked', blocked_reason = ?,\n                 updated_at = datetime('now') WHERE id = 'global'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "193c5c2ee98802c4aaac965b0b88908a3b499d74c147111b1d4cd3bb7ed34c69"
+}

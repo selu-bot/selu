@@ -5,6 +5,7 @@ pub mod automations;
 pub mod cache_admin;
 pub mod conversation_recovery;
 pub mod conversations;
+pub mod docker_storage;
 pub mod feedback;
 pub mod jobs;
 pub mod pipes;
