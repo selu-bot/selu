@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, CalendarDays, Search } from 'lucide-react'
 import { api, type Conversation } from '../../api'
 import { SaveTopicDialog } from '../../components/ConversationActions'
 import { t, useLanguage } from '../../i18n'
 import { useNotices, useQueryErrorNotice } from '../../notices'
 import { dedupeConversations, replaceConversation, type ConversationPages } from '../../shared/conversations'
+import { dateKeyInTimeZone, isSameDayInTimeZone } from '../../shared/dateTime'
 import { AppPageShell } from '../shell/AppPageShell'
-import { formatDayHeading, isSameLocalDay, localDateKey, TimelineEntry } from './HomePage'
+import { formatDayHeading, TimelineEntry } from './HomePage'
 
 export function SavedTopicsPage() {
   return <ConversationArchivePage mode="saved" />
@@ -24,20 +25,22 @@ function ConversationArchivePage({ mode }: { mode: 'saved' | 'past' }) {
   const [query, setQuery] = useState('')
   const [saveTarget, setSaveTarget] = useState<Conversation | null>(null)
   const queryKey = ['conversation-archive', mode] as const
+  const session = useQuery({ queryKey: ['session'], queryFn: api.session, staleTime: Infinity })
+  const timezone = session.data?.timezone ?? 'UTC'
   const conversations = useInfiniteQuery({
     queryKey,
     queryFn: ({ pageParam }) => api.listConversations(pageParam || undefined, mode === 'saved' ? true : undefined),
     initialPageParam: '',
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   })
-  useQueryErrorNotice(conversations.error)
+  useQueryErrorNotice(session.error ?? conversations.error)
   const items = useMemo(() => {
     const all = dedupeConversations(conversations.data?.pages.flatMap((page) => page.conversations) ?? [])
-    const scoped = mode === 'past' ? all.filter((item) => !isSameLocalDay(item.last_activity_at, new Date())) : all
+    const scoped = mode === 'past' ? all.filter((item) => !isSameDayInTimeZone(item.last_activity_at, Date.now(), timezone)) : all
     const term = query.trim().toLocaleLowerCase()
     return scoped.filter((item) => !term || [item.title, item.preview, item.channel_name].some((value) => value?.toLocaleLowerCase().includes(term)))
-  }, [conversations.data, mode, query])
-  const groups = useMemo(() => groupByDay(items), [items])
+  }, [conversations.data, mode, query, timezone])
+  const groups = useMemo(() => groupByDay(items, timezone), [items, timezone])
 
   const save = useMutation({
     mutationFn: ({ conversation, title }: { conversation: Conversation; title: string }) => api.setConversationSaved(conversation.id, true, title),
@@ -78,11 +81,12 @@ function ConversationArchivePage({ mode }: { mode: 'saved' | 'past' }) {
       </label>
       <div className="archive-groups">
         {groups.map((group) => <section key={group.key} className="archive-day">
-          <h2>{formatDayHeading(group.date)}</h2>
+          <h2>{formatDayHeading(group.anchor, timezone)}</h2>
           <div className="timeline-list">
             {group.items.map((conversation) => <TimelineEntry
               key={conversation.id}
               conversation={conversation}
+              timezone={timezone}
               onSave={mode === 'past' && !conversation.saved_at ? () => setSaveTarget(conversation) : undefined}
               onUnsave={mode === 'saved' ? () => unsave.mutate(conversation) : undefined}
             />)}
@@ -103,18 +107,18 @@ function ConversationArchivePage({ mode }: { mode: 'saved' | 'past' }) {
   </AppPageShell>
 }
 
-function groupByDay(items: Conversation[]) {
-  const groups = new Map<string, { key: string; date: Date; items: Conversation[] }>()
+function groupByDay(items: Conversation[], timezone: string) {
+  const groups = new Map<string, { key: string; anchor: string; items: Conversation[] }>()
   for (const item of items) {
     const date = new Date(item.last_activity_at)
     if (Number.isNaN(date.valueOf())) continue
-    const key = localDateKey(date)
-    const group = groups.get(key) ?? { key, date, items: [] }
+    const key = dateKeyInTimeZone(date, timezone)
+    const group = groups.get(key) ?? { key, anchor: item.last_activity_at, items: [] }
     group.items.push(item)
     groups.set(key, group)
   }
   return [...groups.values()]
-    .sort((left, right) => right.date.valueOf() - left.date.valueOf())
+    .sort((left, right) => right.key.localeCompare(left.key))
     .map((group) => ({ ...group, items: group.items.sort((left, right) => new Date(right.last_activity_at).valueOf() - new Date(left.last_activity_at).valueOf()) }))
 }
 

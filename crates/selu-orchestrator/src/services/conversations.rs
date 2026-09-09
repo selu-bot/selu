@@ -9,6 +9,8 @@ use serde_json::Value;
 use sqlx::SqlitePool;
 use tokio::sync::broadcast;
 
+use crate::services::timestamps;
+
 pub const EVENT_CHANNEL_CAPACITY: usize = 512;
 
 #[derive(Clone)]
@@ -111,7 +113,7 @@ impl ListCursor {
             .filter(|(activity, id)| !activity.is_empty() && !id.is_empty())
             .context("malformed conversation list cursor")?;
         Ok(Self {
-            last_activity_at: last_activity_at.to_owned(),
+            last_activity_at: timestamps::canonical_utc(last_activity_at)?,
             id: id.to_owned(),
         })
     }
@@ -179,6 +181,42 @@ pub struct ConversationRun {
     pub completed_at: Option<String>,
 }
 
+fn canonical_optional(value: Option<String>) -> Result<Option<String>> {
+    value.as_deref().map(timestamps::canonical_utc).transpose()
+}
+
+impl ConversationSummary {
+    fn canonicalized(mut self) -> Result<Self> {
+        self.created_at = timestamps::canonical_utc(&self.created_at)?;
+        self.last_activity_at = timestamps::canonical_utc(&self.last_activity_at)?;
+        self.saved_at = canonical_optional(self.saved_at)?;
+        Ok(self)
+    }
+}
+
+impl ConversationMessage {
+    fn canonicalized(mut self) -> Result<Self> {
+        self.created_at = timestamps::canonical_utc(&self.created_at)?;
+        Ok(self)
+    }
+}
+
+impl ConversationRun {
+    pub fn canonicalized(mut self) -> Result<Self> {
+        self.created_at = timestamps::canonical_utc(&self.created_at)?;
+        self.started_at = canonical_optional(self.started_at)?;
+        self.completed_at = canonical_optional(self.completed_at)?;
+        Ok(self)
+    }
+}
+
+impl ConversationEvent {
+    fn canonicalized(mut self) -> Result<Self> {
+        self.created_at = timestamps::canonical_utc(&self.created_at)?;
+        Ok(self)
+    }
+}
+
 pub async fn list_conversations(
     db: &SqlitePool,
     user_id: &str,
@@ -195,14 +233,15 @@ pub async fn list_conversations(
     let rows = sqlx::query_as::<_, (String, String, String, Option<String>, String, String, Option<String>, String, String, Option<String>, Option<String>, Option<String>, i64)>(
         r#"WITH ranked AS (
                SELECT t.id, t.pipe_id, p.name, t.title, t.status, t.thread_kind, t.schedule_id, t.created_at,
-                      COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id = t.id), t.created_at) AS last_activity_at,
+                      COALESCE((SELECT m.created_at FROM messages m WHERE m.thread_id = t.id
+                                ORDER BY julianday(m.created_at) DESC, m.id DESC LIMIT 1), t.created_at) AS last_activity_at,
                       (SELECT r.id FROM conversation_runs r
                        WHERE r.thread_id = t.id AND r.status IN ('queued','running','waiting_for_approval','cancelling')
-                       ORDER BY r.created_at DESC LIMIT 1) AS active_run_id,
+                       ORDER BY julianday(r.created_at) DESC, r.id DESC LIMIT 1) AS active_run_id,
                       t.saved_at,
                       (SELECT NULLIF(TRIM(m.content), '') FROM messages m
                        WHERE m.thread_id = t.id AND m.role IN ('user','assistant') AND TRIM(m.content) <> ''
-                       ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
+                       ORDER BY julianday(m.created_at) DESC, m.id DESC LIMIT 1) AS preview,
                       (SELECT COUNT(*) FROM messages m
                        WHERE m.thread_id = t.id AND m.role IN ('user','assistant') AND TRIM(m.content) <> '') AS message_count
                FROM threads t JOIN pipes p ON p.id = t.pipe_id
@@ -215,8 +254,9 @@ pub async fn list_conversations(
            SELECT id, pipe_id, name, title, status, thread_kind, schedule_id, created_at,
                   last_activity_at, active_run_id, saved_at, preview, message_count
            FROM ranked
-           WHERE (? IS NULL OR last_activity_at < ? OR (last_activity_at = ? AND id < ?))
-           ORDER BY last_activity_at DESC, id DESC
+           WHERE (? IS NULL OR julianday(last_activity_at) < julianday(?)
+                  OR (julianday(last_activity_at) = julianday(?) AND id < ?))
+           ORDER BY julianday(last_activity_at) DESC, id DESC
            LIMIT ?"#,
     )
     .bind(user_id)
@@ -234,23 +274,26 @@ pub async fn list_conversations(
 
     let mut conversations: Vec<ConversationSummary> = rows
         .into_iter()
-        .map(|r| ConversationSummary {
-            id: r.0,
-            channel_id: r.1,
-            channel_name: r.2,
-            title: r.3,
-            status: r.4,
-            can_save: r.5 != "schedule",
-            kind: r.5,
-            schedule_id: r.6,
-            created_at: r.7,
-            last_activity_at: r.8,
-            active_run_id: r.9,
-            saved_at: r.10,
-            preview: r.11,
-            message_count: r.12,
+        .map(|r| {
+            ConversationSummary {
+                id: r.0,
+                channel_id: r.1,
+                channel_name: r.2,
+                title: r.3,
+                status: r.4,
+                can_save: r.5 != "schedule",
+                kind: r.5,
+                schedule_id: r.6,
+                created_at: r.7,
+                last_activity_at: r.8,
+                active_run_id: r.9,
+                saved_at: r.10,
+                preview: r.11,
+                message_count: r.12,
+            }
+            .canonicalized()
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     let next_cursor = if conversations.len() as i64 > limit {
         conversations.truncate(limit as usize);
         conversations.last().map(|last| ListCursor {
@@ -342,14 +385,15 @@ pub async fn get_conversation(
 ) -> Result<Option<ConversationSummary>> {
     let row = sqlx::query_as::<_, (String, String, String, Option<String>, String, String, Option<String>, String, String, Option<String>, Option<String>, Option<String>, i64)>(
         r#"SELECT t.id, t.pipe_id, p.name, t.title, t.status, t.thread_kind, t.schedule_id, t.created_at,
-                  COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id = t.id), t.created_at) AS last_activity_at,
+                  COALESCE((SELECT m.created_at FROM messages m WHERE m.thread_id = t.id
+                            ORDER BY julianday(m.created_at) DESC, m.id DESC LIMIT 1), t.created_at) AS last_activity_at,
                   (SELECT r.id FROM conversation_runs r
                    WHERE r.thread_id = t.id AND r.status IN ('queued','running','waiting_for_approval','cancelling')
-                   ORDER BY r.created_at DESC LIMIT 1) AS active_run_id,
+                   ORDER BY julianday(r.created_at) DESC, r.id DESC LIMIT 1) AS active_run_id,
                   t.saved_at,
                   (SELECT NULLIF(TRIM(m.content), '') FROM messages m
                    WHERE m.thread_id = t.id AND m.role IN ('user','assistant') AND TRIM(m.content) <> ''
-                   ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
+                   ORDER BY julianday(m.created_at) DESC, m.id DESC LIMIT 1) AS preview,
                   (SELECT COUNT(*) FROM messages m
                    WHERE m.thread_id = t.id AND m.role IN ('user','assistant') AND TRIM(m.content) <> '') AS message_count
            FROM threads t JOIN pipes p ON p.id = t.pipe_id
@@ -360,7 +404,7 @@ pub async fn get_conversation(
     .fetch_optional(db)
     .await
     .context("load conversation")?;
-    Ok(row.map(|r| ConversationSummary {
+    row.map(|r| ConversationSummary {
         id: r.0,
         channel_id: r.1,
         channel_name: r.2,
@@ -375,7 +419,9 @@ pub async fn get_conversation(
         saved_at: r.10,
         preview: r.11,
         message_count: r.12,
-    }))
+    })
+    .map(ConversationSummary::canonicalized)
+    .transpose()
 }
 
 pub async fn list_messages(
@@ -384,7 +430,7 @@ pub async fn list_messages(
     limit: i64,
 ) -> Result<Vec<ConversationMessage>> {
     let rows = sqlx::query_as::<_, (String, String, String, String, Option<String>, Option<String>, Option<String>, i64)>(
-        "SELECT id, role, content, created_at, tool_calls_json, tool_call_id, attachments_json, compacted FROM messages WHERE thread_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+        "SELECT id, role, content, created_at, tool_calls_json, tool_call_id, attachments_json, compacted FROM messages WHERE thread_id = ? ORDER BY julianday(created_at) DESC, id DESC LIMIT ?",
     )
     .bind(conversation_id)
     .bind(limit.clamp(1, 200))
@@ -392,42 +438,46 @@ pub async fn list_messages(
     .await
     .context("list conversation messages")?;
 
-    Ok(rows
-        .into_iter()
+    rows.into_iter()
         .rev()
-        .map(|r| ConversationMessage {
-            id: r.0,
-            role: r.1,
-            content: r.2,
-            created_at: r.3,
-            tool_calls: r.4.and_then(|v| serde_json::from_str(&v).ok()),
-            tool_call_id: r.5,
-            attachments: r.6.and_then(|v| serde_json::from_str(&v).ok()),
-            compacted: r.7 != 0,
+        .map(|r| {
+            ConversationMessage {
+                id: r.0,
+                role: r.1,
+                content: r.2,
+                created_at: r.3,
+                tool_calls: r.4.and_then(|v| serde_json::from_str(&v).ok()),
+                tool_call_id: r.5,
+                attachments: r.6.and_then(|v| serde_json::from_str(&v).ok()),
+                compacted: r.7 != 0,
+            }
+            .canonicalized()
         })
-        .collect())
+        .collect()
 }
 
 pub async fn list_runs(db: &SqlitePool, conversation_id: &str) -> Result<Vec<ConversationRun>> {
     let rows = sqlx::query_as::<_, (String, String, String, Option<String>, String, Option<String>, Option<String>)>(
-        "SELECT id, client_message_id, status, error_code, created_at, started_at, completed_at FROM conversation_runs WHERE thread_id = ? ORDER BY created_at DESC LIMIT 20",
+        "SELECT id, client_message_id, status, error_code, created_at, started_at, completed_at FROM conversation_runs WHERE thread_id = ? ORDER BY julianday(created_at) DESC, id DESC LIMIT 20",
     )
     .bind(conversation_id)
     .fetch_all(db)
     .await
     .context("list conversation runs")?;
-    Ok(rows
-        .into_iter()
-        .map(|r| ConversationRun {
-            id: r.0,
-            client_message_id: r.1,
-            status: r.2,
-            error_code: r.3,
-            created_at: r.4,
-            started_at: r.5,
-            completed_at: r.6,
+    rows.into_iter()
+        .map(|r| {
+            ConversationRun {
+                id: r.0,
+                client_message_id: r.1,
+                status: r.2,
+                error_code: r.3,
+                created_at: r.4,
+                started_at: r.5,
+                completed_at: r.6,
+            }
+            .canonicalized()
         })
-        .collect())
+        .collect()
 }
 
 pub async fn list_events(
@@ -445,23 +495,26 @@ pub async fn list_events(
             "SELECT id, user_id, thread_id, run_id, event_type, entity_id, payload_json, created_at FROM conversation_events WHERE user_id = ? AND id > ? ORDER BY id ASC LIMIT 500",
         ).bind(user_id).bind(after).fetch_all(db).await?
     };
-    Ok(rows
-        .into_iter()
-        .filter_map(|r| {
-            serde_json::from_str::<Value>(&r.6)
-                .ok()
-                .map(|payload| ConversationEvent {
-                    id: r.0,
-                    user_id: r.1,
-                    conversation_id: r.2,
-                    run_id: r.3,
-                    event_type: r.4,
-                    entity_id: r.5,
-                    payload,
-                    created_at: r.7,
-                })
-        })
-        .collect())
+    let mut events = Vec::with_capacity(rows.len());
+    for row in rows {
+        let Ok(payload) = serde_json::from_str::<Value>(&row.6) else {
+            continue;
+        };
+        events.push(
+            ConversationEvent {
+                id: row.0,
+                user_id: row.1,
+                conversation_id: row.2,
+                run_id: row.3,
+                event_type: row.4,
+                entity_id: row.5,
+                payload,
+                created_at: row.7,
+            }
+            .canonicalized()?,
+        );
+    }
+    Ok(events)
 }
 
 #[cfg(test)]
@@ -507,13 +560,70 @@ mod tests {
     #[test]
     fn cursor_round_trips_and_rejects_garbage() {
         let cursor = ListCursor {
-            last_activity_at: "2026-09-04T07:16:46.906".into(),
+            last_activity_at: "2026-09-04T07:16:46.906Z".into(),
             id: "abc".into(),
         };
         assert_eq!(ListCursor::decode(&cursor.encode()).unwrap(), cursor);
+        let legacy = ListCursor::decode("2026-09-04 07:16:46|legacy").unwrap();
+        assert_eq!(legacy.last_activity_at, "2026-09-04T07:16:46.000Z");
         assert!(ListCursor::decode("").is_err());
         assert!(ListCursor::decode("no-separator").is_err());
         assert!(ListCursor::decode("|missing-activity").is_err());
+    }
+
+    #[tokio::test]
+    async fn mixed_timestamp_formats_are_canonical_and_paginate_by_instant() {
+        let db = setup_db().await;
+        let (user_id, pipe_id) = seed_user_and_pipe(&db).await;
+        let oldest = seed_thread(
+            &db,
+            &user_id,
+            &pipe_id,
+            "2026-09-08 21:30:00",
+            "conversation",
+        )
+        .await;
+        let middle = seed_thread(
+            &db,
+            &user_id,
+            &pipe_id,
+            "2026-09-08T23:45:00+02:00",
+            "conversation",
+        )
+        .await;
+        let newest = seed_thread(
+            &db,
+            &user_id,
+            &pipe_id,
+            "2026-09-08T21:50:00.000Z",
+            "conversation",
+        )
+        .await;
+
+        let first = list_conversations(&db, &user_id, 2, None, None)
+            .await
+            .unwrap();
+        assert_eq!(
+            first
+                .conversations
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![newest.as_str(), middle.as_str()]
+        );
+        assert!(
+            first
+                .conversations
+                .iter()
+                .all(|item| item.created_at.ends_with('Z'))
+        );
+
+        let second = list_conversations(&db, &user_id, 2, first.next_cursor.as_ref(), None)
+            .await
+            .unwrap();
+        assert_eq!(second.conversations.len(), 1);
+        assert_eq!(second.conversations[0].id, oldest);
+        assert!(second.next_cursor.is_none());
     }
 
     #[tokio::test]

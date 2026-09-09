@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, username, display_name, password_hash, is_admin FROM users WHERE username = ?",
+  "query": "SELECT id, username, display_name, password_hash, is_admin, timezone FROM users WHERE username = ?",
   "describe": {
     "columns": [
       {
@@ -57,6 +57,17 @@
             "name": "is_admin"
           }
         }
+      },
+      {
+        "name": "timezone",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "timezone"
+          }
+        }
       }
     ],
     "parameters": {
@@ -67,8 +78,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "be0f30a4a5f11c70b8a8255ba88a5aa37491ba5978678a90872e4dfd2479e5df"
+  "hash": "03303060adfcd24888cf27d776fd1d133f91b069112b82156f0f1919e2d808c9"
 }

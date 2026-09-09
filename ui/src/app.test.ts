@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
 import { createAppRouter, resolveAuthRedirect } from './app/router'
-import { formatDayHeading, isSameLocalDay, localDateKey, startHomeConversation } from './features/home/HomePage'
+import { formatDayHeading, startHomeConversation } from './features/home/HomePage'
+import { dateKeyInTimeZone, isSameDayInTimeZone, toDateTimeLocalInTimeZone } from './shared/dateTime'
 import { setLanguage, translations } from './i18n'
 import { appPath, normalizeBasePath } from './shared/paths'
 import type { RetryableSend } from './shared/sendRetry'
@@ -127,23 +128,33 @@ describe('Home conversation handoff', () => {
   })
 })
 
-describe('Today timeline', () => {
-  it('groups activity by the viewer’s local calendar day', () => {
-    const reference = new Date(2026, 8, 8, 23, 30)
-    const sameDay = new Date(2026, 8, 8, 0, 5).toISOString()
-    const priorDay = new Date(2026, 8, 7, 23, 59).toISOString()
-    expect(localDateKey(reference)).toBe('2026-09-08')
-    expect(isSameLocalDay(sameDay, reference)).toBe(true)
-    expect(isSameLocalDay(priorDay, reference)).toBe(false)
+describe('Continuous Dayline timezone handling', () => {
+  it('groups Today and Past by the authenticated timezone across midnight', () => {
+    const reference = '2026-09-09T00:30:00Z'
+    const activity = '2026-09-08T21:45:00Z'
+    expect(dateKeyInTimeZone(reference, 'America/Los_Angeles')).toBe('2026-09-08')
+    expect(dateKeyInTimeZone(reference, 'Europe/Berlin')).toBe('2026-09-09')
+    expect(isSameDayInTimeZone(activity, reference, 'America/Los_Angeles')).toBe(true)
+    expect(isSameDayInTimeZone(activity, reference, 'Europe/Berlin')).toBe(false)
   })
 
-  it('formats day headings in Selu’s selected language', () => {
-    const date = new Date(2026, 8, 9, 12)
+  it('formats spring-forward instants without inventing the skipped local hour', () => {
+    expect(toDateTimeLocalInTimeZone('2026-03-29T00:30:00Z', 'Europe/Berlin')).toBe('2026-03-29T01:30')
+    expect(toDateTimeLocalInTimeZone('2026-03-29T01:30:00Z', 'Europe/Berlin')).toBe('2026-03-29T03:30')
+  })
+
+  it('displays one-shot values in the selected automation timezone', () => {
+    expect(toDateTimeLocalInTimeZone('2026-11-01T05:30:00Z', 'America/New_York')).toBe('2026-11-01T01:30')
+    expect(toDateTimeLocalInTimeZone('2026-11-01T05:30:00Z', 'UTC')).toBe('2026-11-01T05:30')
+  })
+
+  it('formats day headings in Selu’s selected language and timezone', () => {
+    const instant = '2026-09-08T22:30:00Z'
     try {
       setLanguage('de')
-      expect(formatDayHeading(date)).toContain('Mittwoch')
+      expect(formatDayHeading(instant, 'Europe/Berlin')).toContain('Mittwoch')
       setLanguage('en')
-      expect(formatDayHeading(date)).toContain('Wednesday')
+      expect(formatDayHeading(instant, 'America/Los_Angeles')).toContain('Tuesday')
     } finally {
       setLanguage('en')
     }

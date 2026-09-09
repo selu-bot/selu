@@ -200,6 +200,7 @@ export function ChatPage({ conversationId }: { conversationId: string | null }) 
       onLoadMore={() => void conversations.fetchNextPage()}
       onSelect={(id) => void navigate({ to: '/app/conversations/$conversationId', params: { conversationId: id } })}
       onCreate={() => createConversation.mutate()} onOpenNavigation={openMobileNavigation}
+      language={language} timezone={session.data?.timezone ?? 'UTC'}
     />
     <section className="chat-workspace" aria-label={title}>
       <div className="ambient-light" aria-hidden="true" />
@@ -216,7 +217,7 @@ export function ChatPage({ conversationId }: { conversationId: string | null }) 
         }}><div className="message-column">
           {isSchedule && <div className="conversation-intro"><CalendarClock /><span>{t('scheduleHint')}</span></div>}
           {snapshot.isLoading && <MessageSkeleton />}
-          {visibleMessages.map((message) => <ConversationMessage key={message.id} message={message} feedback={message.id === latestReplyId ? { rating: snapshot.data?.latest_turn_rating ?? null, busy: rateTurn.isPending, onRate: (rating) => rateTurn.mutate({ id: selected, rating }) } : undefined} />)}
+          {visibleMessages.map((message) => <ConversationMessage key={message.id} message={message} language={language} timezone={session.data?.timezone ?? 'UTC'} feedback={message.id === latestReplyId ? { rating: snapshot.data?.latest_turn_rating ?? null, busy: rateTurn.isPending, onRate: (rating) => rateTurn.mutate({ id: selected, rating }) } : undefined} />)}
           <ActivityTrail items={selectedProgress} active={active} />
           {snapshot.data?.pending_approval && <ApprovalCard approval={snapshot.data.pending_approval} busy={decideApproval.isPending} onDecision={(approved) => decideApproval.mutate({ id: snapshot.data!.pending_approval!.approval_id, approved })} />}
           <StreamingMessage parts={streamedParts[selected] ?? []} text={streamedText[selected] ?? ''} />

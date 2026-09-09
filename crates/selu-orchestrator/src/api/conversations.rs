@@ -62,6 +62,7 @@ struct SessionResponse {
     display_name: String,
     is_admin: bool,
     language: String,
+    timezone: String,
     supports_photo_uploads: bool,
 }
 
@@ -70,6 +71,7 @@ async fn session(user: ApiPrincipal) -> Json<SessionResponse> {
         display_name: user.display_name.clone(),
         is_admin: user.is_admin,
         language: user.language.clone(),
+        timezone: user.timezone.clone(),
         supports_photo_uploads: true,
     })
 }
@@ -602,10 +604,14 @@ async fn send_message(
     if let Ok(Some(row)) = sqlx::query_as::<_, (String, String, Option<String>, String, Option<String>, Option<String>)>(
         "SELECT id, status, error_code, created_at, started_at, completed_at FROM conversation_runs WHERE user_id = ? AND client_message_id = ?",
     ).bind(&user.user_id).bind(&request.client_message_id).fetch_optional(&state.db).await {
-        return Json(SendMessageResponse { run: ConversationRun {
+        let run = ConversationRun {
             id: row.0, client_message_id: request.client_message_id, status: row.1, error_code: row.2,
             created_at: row.3, started_at: row.4, completed_at: row.5,
-        }}).into_response();
+        };
+        return match run.canonicalized() {
+            Ok(run) => Json(SendMessageResponse { run }).into_response(),
+            Err(error) => internal_error(error),
+        };
     }
     let attachments = match decode_photos(request.attachments) {
         Ok(attachments) => attachments,

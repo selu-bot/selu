@@ -12,7 +12,7 @@ export type Automation = {
 export type TimingInput =
   | { type: 'natural_language'; text: string; timezone?: string }
   | { type: 'cron'; cron_expression: string; description?: string; timezone?: string }
-  | { type: 'one_shot'; fire_at: string; description?: string; timezone?: string }
+  | { type: 'one_shot'; fire_at?: string; local_fire_at?: string; description?: string; timezone?: string }
 export type AutomationInput = { name: string; prompt: string; agent_id?: string; pipe_ids: string[]; timing: TimingInput }
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 export const automationsApi = {
