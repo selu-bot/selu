@@ -2975,7 +2975,7 @@ entries:
 
   - id: 2026-09-08-safe-docker-image-cleanup
     date: "2026-09-08"
-    pr:
+    pr: 55
     area: api
     type: added
     audience: both
