@@ -79,6 +79,8 @@ struct ListQuery {
     limit: Option<i64>,
     /// Opaque keyset cursor returned as `next_cursor` by the previous page.
     before: Option<String>,
+    /// When present, return only saved or unsaved conversations.
+    saved: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -114,6 +116,7 @@ async fn list(
         &user.user_id,
         query.limit.unwrap_or(50),
         cursor.as_ref(),
+        query.saved,
     )
     .await
     {
@@ -129,10 +132,11 @@ async fn list(
 #[derive(Deserialize)]
 struct UpdateConversationRequest {
     title: Option<String>,
+    saved: Option<bool>,
 }
 
-/// Rename a conversation. Titles are user-facing labels only; the agent never
-/// reads them, so any non-empty text is accepted.
+/// Update user-facing conversation metadata. Saving is reversible and only
+/// applies to ordinary conversations; schedule threads remain automation-owned.
 async fn update(
     user: ApiPrincipal,
     State(state): State<AppState>,
@@ -142,26 +146,70 @@ async fn update(
     if !owns_conversation(&state, &user, &conversation_id).await {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let title: String = request
-        .title
-        .unwrap_or_default()
-        .trim()
-        .chars()
-        .take(120)
-        .collect();
-    if title.is_empty() {
+    let title = match request.title {
+        Some(value) => {
+            let value: String = value.trim().chars().take(120).collect();
+            if value.is_empty() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "code": "conversation.invalid_title" })),
+                )
+                    .into_response();
+            }
+            Some(value)
+        }
+        None => None,
+    };
+    if title.is_none() && request.saved.is_none() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "code": "conversation.invalid_title" })),
+            Json(serde_json::json!({ "code": "conversation.no_changes" })),
         )
             .into_response();
     }
-    if let Err(error) = sqlx::query("UPDATE threads SET title = ? WHERE id = ? AND user_id = ?")
-        .bind(&title)
+    if request.saved.is_some() {
+        let kind = match sqlx::query_scalar::<_, String>(
+            "SELECT thread_kind FROM threads WHERE id = ? AND user_id = ?",
+        )
         .bind(&conversation_id)
         .bind(&user.user_id)
-        .execute(&state.db)
+        .fetch_optional(&state.db)
         .await
+        {
+            Ok(Some(kind)) => kind,
+            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Err(error) => return internal_error(error.into()),
+        };
+        if kind == "schedule" {
+            return (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({
+                    "code": "conversation.schedule_cannot_be_saved"
+                })),
+            )
+                .into_response();
+        }
+    }
+    let saved = request.saved.map(i64::from);
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    if let Err(error) = sqlx::query(
+        r#"UPDATE threads
+           SET title = COALESCE(?, title),
+               saved_at = CASE
+                   WHEN ? IS NULL THEN saved_at
+                   WHEN ? = 1 THEN COALESCE(saved_at, ?)
+                   ELSE NULL
+               END
+           WHERE id = ? AND user_id = ?"#,
+    )
+    .bind(&title)
+    .bind(saved)
+    .bind(saved)
+    .bind(&now)
+    .bind(&conversation_id)
+    .bind(&user.user_id)
+    .execute(&state.db)
+    .await
     {
         return internal_error(error.into());
     }
@@ -174,7 +222,7 @@ async fn update(
             None,
             "conversation.changed",
             Some(&conversation_id),
-            serde_json::json!({ "title": title }),
+            serde_json::json!({ "title": title, "saved": request.saved }),
         )
         .await
     {
@@ -594,12 +642,37 @@ async fn send_message(
     }
 
     let run_id = Uuid::new_v4().to_string();
+    let created_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let mut tx = match state.db.begin().await {
+        Ok(tx) => tx,
+        Err(error) => return internal_error(error.into()),
+    };
     if let Err(error) = sqlx::query(
-        "INSERT INTO conversation_runs (id, thread_id, user_id, client_message_id, status) VALUES (?, ?, ?, ?, 'queued')",
-    ).bind(&run_id).bind(&conversation_id).bind(&user.user_id).bind(&request.client_message_id).execute(&state.db).await {
+        "UPDATE threads SET started_at = COALESCE(started_at, ?) WHERE id = ? AND user_id = ?",
+    )
+    .bind(&created_at)
+    .bind(&conversation_id)
+    .bind(&user.user_id)
+    .execute(&mut *tx)
+    .await
+    {
         return internal_error(error.into());
     }
-    let created_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    if let Err(error) = sqlx::query(
+        "INSERT INTO conversation_runs (id, thread_id, user_id, client_message_id, status) VALUES (?, ?, ?, ?, 'queued')",
+    )
+    .bind(&run_id)
+    .bind(&conversation_id)
+    .bind(&user.user_id)
+    .bind(&request.client_message_id)
+    .execute(&mut *tx)
+    .await
+    {
+        return internal_error(error.into());
+    }
+    if let Err(error) = tx.commit().await {
+        return internal_error(error.into());
+    }
     let run = ConversationRun {
         id: run_id.clone(),
         client_message_id: request.client_message_id.clone(),

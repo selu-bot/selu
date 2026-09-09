@@ -111,7 +111,7 @@ mod tests {
             .execute(&db)
             .await
             .unwrap();
-        sqlx::query("INSERT INTO threads (id, pipe_id, session_id, user_id, status, thread_kind) VALUES (?, ?, 'session', ?, 'active', 'conversation')")
+        sqlx::query("INSERT INTO threads (id, pipe_id, session_id, user_id, status, thread_kind, started_at) VALUES (?, ?, 'session', ?, 'active', 'conversation', CURRENT_TIMESTAMP)")
             .bind(&thread_id)
             .bind(&pipe_id)
             .bind(&user_id)
@@ -198,7 +198,7 @@ mod tests {
             None
         );
         assert_eq!(
-            list_conversations(&db, &user_id, 10, None)
+            list_conversations(&db, &user_id, 10, None, None)
                 .await
                 .unwrap()
                 .conversations[0]

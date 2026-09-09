@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Bookmark, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { FormEvent, useEffect, useId, useRef, useState } from 'react'
 import { t } from '../i18n'
 
@@ -75,6 +75,43 @@ export function RenameConversationDialog({ initialTitle, busy, error, onCancel, 
       <div className="dialog-actions">
         <button type="button" onClick={onCancel} disabled={busy}>{t('cancel')}</button>
         <button type="submit" className="is-primary" disabled={busy || !title.trim()}>{t('save')}</button>
+      </div>
+    </form>
+  </Modal>
+}
+
+type SaveTopicProps = {
+  initialTitle: string
+  busy: boolean
+  onCancel: () => void
+  onSave: (title: string) => void
+}
+
+export function SaveTopicDialog({ initialTitle, busy, onCancel, onSave }: SaveTopicProps) {
+  const [title, setTitle] = useState(initialTitle)
+  const headingId = useId()
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    const next = title.trim()
+    if (next && !busy) onSave(next)
+  }
+  return <Modal labelledBy={headingId} onClose={onCancel}>
+    <form className="dialog-card" onSubmit={submit}>
+      <span className="dialog-symbol" aria-hidden="true"><Bookmark /></span>
+      <h2 id={headingId}>{t('nameTopic')}</h2>
+      <p>{t('nameTopicHint')}</p>
+      <input
+        autoFocus
+        value={title}
+        maxLength={120}
+        placeholder={t('titlePlaceholder')}
+        aria-label={t('nameTopic')}
+        onChange={(event) => setTitle(event.target.value)}
+        onFocus={(event) => event.target.select()}
+      />
+      <div className="dialog-actions">
+        <button type="button" onClick={onCancel} disabled={busy}>{t('cancel')}</button>
+        <button type="submit" className="is-primary" disabled={busy || !title.trim()}>{t('saveTopic')}</button>
       </div>
     </form>
   </Modal>

@@ -5,9 +5,14 @@ export type Conversation = {
   title: string | null
   status: string
   kind: string
+  schedule_id?: string | null
   created_at: string
   last_activity_at: string
   active_run_id: string | null
+  saved_at?: string | null
+  can_save?: boolean
+  preview?: string | null
+  message_count?: number
 }
 
 export type MessageAttachment = {
@@ -88,11 +93,20 @@ export const api = {
   }),
   logout: () => apiRequest<void>('/api/v1/auth/logout', { method: 'POST' }),
   session: () => apiRequest<Session>('/api/v1/session'),
-  listConversations: (before?: string) => apiRequest<ConversationPage>(
-    `/api/v1/conversations?limit=${CONVERSATION_PAGE_SIZE}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
-  ),
+  listConversations: (before?: string, saved?: boolean) => {
+    const params = new URLSearchParams({ limit: String(CONVERSATION_PAGE_SIZE) })
+    if (before) params.set('before', before)
+    if (saved !== undefined) params.set('saved', String(saved))
+    return apiRequest<ConversationPage>(`/api/v1/conversations?${params}`)
+  },
+  updateConversation: (id: string, input: { title?: string; saved?: boolean }) => apiRequest<Conversation>(`/api/v1/conversations/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  }),
   renameConversation: (id: string, title: string) => apiRequest<Conversation>(`/api/v1/conversations/${id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
+  }),
+  setConversationSaved: (id: string, saved: boolean, title?: string) => apiRequest<Conversation>(`/api/v1/conversations/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saved, ...(title ? { title } : {}) }),
   }),
   deleteConversation: (id: string) => apiRequest<void>(`/api/v1/conversations/${id}`, { method: 'DELETE' }),
   snapshot: (id: string) => apiRequest<Snapshot>(`/api/v1/conversations/${id}`),

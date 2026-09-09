@@ -2935,3 +2935,40 @@ entries:
       not replace or remove sidecar files while Selu is running; prefer a
       Docker-managed volume over a macOS Docker Desktop bind mount for the
       database directory.
+  - id: 2026-09-09-today-with-selu
+    date: "2026-09-09"
+    pr: 54
+    area: ui
+    type: changed
+    audience: both
+    summary: "Web and mobile conversations now use a chronological Today timeline with named saved topics and searchable past days"
+    affected_files:
+      - crates/selu-orchestrator/src/api/conversations.rs
+      - crates/selu-orchestrator/src/services/conversations.rs
+      - crates/selu-orchestrator/migrations/0064_conversation_lifecycle.sql
+      - ui/src/features/home/HomePage.tsx
+      - ui/src/features/home/ConversationArchivePage.tsx
+    docs_sections:
+      - reference/api
+      - user-guide/channels/web-chat
+      - user-guide/automations
+    details: |
+      The authenticated web experience now opens on Today with Selu: one local-day,
+      chronological timeline containing ordinary conversations and scheduled results,
+      plus upcoming automations using their real next_run_at values. Saved topics and
+      searchable Past days are first-class destinations.
+
+      Ordinary conversations can be saved with a recognizable name and later removed
+      from Saved. Scheduled-result threads remain automation-owned: they expose stable
+      schedule_id linkage, never offer topic saving, and the API rejects save or unsave
+      attempts with HTTP 409 and code conversation.schedule_cannot_be_saved.
+
+      The v1 conversation DTO adds schedule_id, saved_at, can_save, preview, and
+      message_count. GET /api/v1/conversations accepts an optional saved=true|false
+      filter. PATCH accepts the additive saved boolean alongside the existing optional
+      title. Existing clients remain compatible because all response fields and request
+      behavior are additive.
+
+      Empty ordinary conversations stay provisional and are omitted from visible
+      history until their first message is durably accepted. History is retained; no
+      automatic deletion policy was added.

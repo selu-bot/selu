@@ -1,5 +1,5 @@
 import {
-  Bot, CalendarClock, Database, Globe2, Heart, Home, LogOut,
+  Bot, Bookmark, CalendarClock, Database, Globe2, Heart, History, Home, LogOut,
   MessageCircle, MoonStar, PanelLeftClose, PanelLeftOpen, RefreshCw, Settings2, ShieldCheck,
   Sun, Users, Waypoints, X,
 } from 'lucide-react'
@@ -8,7 +8,7 @@ import { getLanguage, t, type TranslationKey } from '../i18n'
 import { BrandMark } from './BrandMark'
 
 export type AppNavigationProps = {
-  active: 'home' | 'conversations' | 'automations' | 'agents' | 'connectors' | 'updates' | 'connections' | 'about-you' | 'people' | 'feedback' | 'settings'
+  active: 'home' | 'saved' | 'past' | 'conversations' | 'automations' | 'agents' | 'connectors' | 'updates' | 'connections' | 'about-you' | 'people' | 'feedback' | 'settings'
   collapsed: boolean
   mobileOpen: boolean
   theme: 'light' | 'dark'
@@ -35,8 +35,9 @@ export function AppNavigation(props: AppNavigationProps) {
       <nav className="nav-groups">
         <section className="nav-group">
           {!collapsed && <h2>{t('workspace')}</h2>}
-          <RouteItem label="home" to="/app" icon={Home} active={active === 'home'} collapsed={collapsed} />
-          <RouteItem label="conversations" to="/app/conversations" icon={MessageCircle} active={active === 'conversations'} collapsed={collapsed} />
+          <RouteItem label="today" to="/app" icon={Home} active={active === 'home'} collapsed={collapsed} />
+          <RouteItem label="savedTopics" to="/app/saved" icon={Bookmark} active={active === 'saved'} collapsed={collapsed} />
+          <RouteItem label="pastDays" to="/app/past" icon={History} active={active === 'past'} collapsed={collapsed} />
           <RouteItem label="schedules" to="/app/automations" icon={CalendarClock} active={active === 'automations'} collapsed={collapsed} />
           <RouteItem label="memory" to="/app/about-you" icon={Database} active={active === 'about-you'} collapsed={collapsed} />
         </section>
@@ -70,7 +71,7 @@ export function AppNavigation(props: AppNavigationProps) {
   </>
 }
 
-type SpaPath = '/app' | '/app/conversations' | '/app/automations' | '/app/agents' | '/app/connectors' | '/app/updates' | '/app/connections' | '/app/about-you' | '/app/people' | '/app/settings' | '/app/feedback'
+type SpaPath = '/app' | '/app/saved' | '/app/past' | '/app/conversations' | '/app/automations' | '/app/agents' | '/app/connectors' | '/app/updates' | '/app/connections' | '/app/about-you' | '/app/people' | '/app/settings' | '/app/feedback'
 
 function RouteItem({ label, to, icon: Icon, active, collapsed }: { label: TranslationKey; to: SpaPath; icon: typeof MessageCircle; active: boolean; collapsed: boolean }) {
   return <Link className={`nav-item${active ? ' is-active' : ''}`} to={to} aria-current={active ? 'page' : undefined} title={collapsed ? t(label) : undefined}>

@@ -5,6 +5,7 @@ import { t } from '../i18n'
 import { getBasePath } from '../shared/paths'
 import { LoginPage, SetupPage, authStateQuery } from '../features/auth/AuthPages'
 import { HomePage } from '../features/home/HomePage'
+import { PastDaysPage, SavedTopicsPage } from '../features/home/ConversationArchivePage'
 import { ChatPage } from '../features/chat/ChatPage'
 
 export type AuthDestination = '/app' | '/app/login' | '/app/setup' | null
@@ -36,6 +37,8 @@ const appRoute = createRoute({
   },
 })
 const homeRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: HomePage })
+const savedRoute = createRoute({ getParentRoute: () => appRoute, path: 'saved', component: SavedTopicsPage })
+const pastRoute = createRoute({ getParentRoute: () => appRoute, path: 'past', component: PastDaysPage })
 const loginRoute = createRoute({ getParentRoute: () => appRoute, path: 'login', component: LoginPage })
 const setupRoute = createRoute({ getParentRoute: () => appRoute, path: 'setup', component: SetupPage })
 const conversationsRoute = createRoute({ getParentRoute: () => appRoute, path: 'conversations', component: () => <ChatPage conversationId={null} /> })
@@ -61,7 +64,7 @@ function ConversationRoute() {
 
 export const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
-    homeRoute, loginRoute, setupRoute, conversationsRoute, conversationRoute,
+    homeRoute, savedRoute, pastRoute, loginRoute, setupRoute, conversationsRoute, conversationRoute,
     automationsRoute, agentsRoute, agentDetailRoute, connectorsRoute, updatesRoute, connectionsRoute, aboutRoute, peopleRoute, settingsRoute, feedbackRoute,
   ]),
 ])
