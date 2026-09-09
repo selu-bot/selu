@@ -455,11 +455,12 @@ pub async fn set_automation_enabled(
         let schedule_id = if let Some(schedule_id) = existing {
             sqlx::query(
                 "UPDATE schedules SET prompt = ?, cron_expression = ?, cron_description = ?,
-                 active = 1, one_shot = 0, next_run_at = ?, agent_id = ? WHERE id = ?",
+                 timezone = ?, active = 1, one_shot = 0, next_run_at = ?, agent_id = ? WHERE id = ?",
             )
             .bind(&prompt)
             .bind(&preset.cron_expression)
             .bind(&description)
+            .bind(&timezone)
             .bind(&next_run)
             .bind(agent_id)
             .bind(&schedule_id)

@@ -3,7 +3,7 @@
 use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Context;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
@@ -22,6 +22,8 @@ pub struct TimingInput {
     pub cron_expression: Option<String>,
     #[serde(default, alias = "at")]
     pub fire_at: Option<String>,
+    #[serde(default)]
+    pub local_fire_at: Option<String>,
     #[serde(default, alias = "when", alias = "when_text")]
     pub text: Option<String>,
     #[serde(default)]
@@ -200,18 +202,54 @@ pub async fn normalize_timing(
             })
         }
         "one_shot" | "once" | "at" => {
-            let value = required_timing_value(
-                input.fire_at,
-                "automation.fire_at_required",
-                "timing.fire_at is required for one-shot automations.",
-            )?;
-            let fire_at = parse_future_rfc3339(&value)?;
+            let fire_at = match (
+                input
+                    .local_fire_at
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty()),
+                input
+                    .fire_at
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty()),
+            ) {
+                (Some(_), Some(_)) => {
+                    return Err(AutomationError::bad_request(
+                        "automation.ambiguous_fire_at_input",
+                        "Provide either timing.local_fire_at or timing.fire_at, not both.",
+                    ));
+                }
+                (Some(local), None) => schedules::parse_user_datetime_to_utc(local, &timezone)
+                    .map_err(|error| {
+                        let message = error.to_string();
+                        let code = if message.contains("does not exist") {
+                            "automation.local_time_nonexistent"
+                        } else {
+                            "automation.invalid_local_fire_at"
+                        };
+                        AutomationError::validation(code, message)
+                    })?,
+                (None, Some(absolute)) => parse_future_rfc3339(absolute)?,
+                (None, None) => {
+                    return Err(AutomationError::bad_request(
+                        "automation.fire_at_required",
+                        "timing.local_fire_at or timing.fire_at is required for one-shot automations.",
+                    ));
+                }
+            };
+            if fire_at <= Utc::now() {
+                return Err(AutomationError::validation(
+                    "automation.fire_at_not_future",
+                    "The resolved one-shot time must be in the future.",
+                ));
+            }
             let description = non_empty_or(
                 input.description,
                 format!("Once at {}", fire_at.to_rfc3339()),
             );
             Ok(NormalizedTiming::OneShot {
-                fire_at: fire_at.to_rfc3339(),
+                fire_at: fire_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
                 description,
                 timezone,
             })
@@ -263,7 +301,6 @@ pub async fn list_automations(
     db: &SqlitePool,
     user_id: &str,
 ) -> Result<Vec<Automation>, AutomationError> {
-    let timezone = user_timezone(db, user_id).await?;
     let rows = sqlx::query!(
         r#"SELECT id as "id!"
                 FROM schedules
@@ -277,7 +314,7 @@ pub async fn list_automations(
 
     let mut automations = Vec::with_capacity(rows.len());
     for row in rows {
-        if let Some(automation) = load_automation(db, user_id, &row.id, &timezone).await? {
+        if let Some(automation) = load_automation(db, user_id, &row.id).await? {
             automations.push(automation);
         }
     }
@@ -289,8 +326,7 @@ pub async fn get_automation(
     user_id: &str,
     automation_id: &str,
 ) -> Result<Option<Automation>, AutomationError> {
-    let timezone = user_timezone(db, user_id).await?;
-    load_automation(db, user_id, automation_id, &timezone).await
+    load_automation(db, user_id, automation_id).await
 }
 
 pub async fn create_automation(
@@ -323,7 +359,7 @@ pub async fn create_automation(
         NormalizedTiming::OneShot {
             fire_at,
             description,
-            ..
+            timezone,
         } => {
             let fire_at = parse_future_rfc3339(fire_at)?;
             schedules::create_reminder(
@@ -334,6 +370,7 @@ pub async fn create_automation(
                 &write.prompt,
                 fire_at,
                 description,
+                timezone,
                 &write.pipe_ids,
             )
             .await
@@ -394,19 +431,20 @@ pub async fn update_automation(
         NormalizedTiming::OneShot {
             fire_at,
             description,
-            ..
+            timezone,
         } => {
             let fire_at = parse_future_rfc3339(fire_at)?;
             let fire_at_db = to_db_timestamp(fire_at);
             let result = sqlx::query!(
                 r#"UPDATE schedules
                    SET name = ?, prompt = ?, agent_id = ?, cron_expression = '',
-                       cron_description = ?, one_shot = 1, next_run_at = ?
+                       cron_description = ?, timezone = ?, one_shot = 1, next_run_at = ?
                    WHERE id = ? AND user_id = ?"#,
                 write.name,
                 write.prompt,
                 write.agent_id,
                 description,
+                timezone,
                 fire_at_db,
                 automation_id,
                 user_id,
@@ -447,9 +485,8 @@ pub async fn set_automation_state(
     automation_id: &str,
     active: bool,
 ) -> Result<Automation, AutomationError> {
-    let timezone = user_timezone(db, user_id).await?;
     let row = sqlx::query!(
-        r#"SELECT active, one_shot, cron_expression, next_run_at
+        r#"SELECT active, one_shot, cron_expression, next_run_at, timezone
            FROM schedules WHERE id = ? AND user_id = ?"#,
         automation_id,
         user_id,
@@ -462,7 +499,8 @@ pub async fn set_automation_state(
     if (row.active != 0) != active {
         if active {
             let next_run_at = if row.one_shot != 0 {
-                let fire_at = parse_db_timestamp(&row.next_run_at)?;
+                let fire_at = crate::services::timestamps::parse_utc(&row.next_run_at)
+                    .map_err(AutomationError::Database)?;
                 if fire_at <= Utc::now() {
                     return Err(AutomationError::conflict(
                         "automation.one_shot_expired",
@@ -471,7 +509,7 @@ pub async fn set_automation_state(
                 }
                 row.next_run_at
             } else {
-                schedules::compute_next_run(&row.cron_expression, &timezone, Utc::now())
+                schedules::compute_next_run(&row.cron_expression, &row.timezone, Utc::now())
                     .map(to_db_timestamp)
                     .map_err(|error| {
                         AutomationError::validation(
@@ -501,7 +539,7 @@ pub async fn set_automation_state(
         }
     }
 
-    load_automation(db, user_id, automation_id, &timezone)
+    load_automation(db, user_id, automation_id)
         .await?
         .ok_or(AutomationError::NotFound)
 }
@@ -530,11 +568,10 @@ async fn load_automation(
     db: &SqlitePool,
     user_id: &str,
     automation_id: &str,
-    timezone: &str,
 ) -> Result<Option<Automation>, AutomationError> {
     let row = sqlx::query!(
         r#"SELECT id as "id!", name, prompt, agent_id, cron_expression,
-                  cron_description, active, one_shot, last_run_at, next_run_at, created_at
+                  cron_description, timezone, active, one_shot, last_run_at, next_run_at, created_at
            FROM schedules
            WHERE id = ? AND user_id = ?"#,
         automation_id,
@@ -570,15 +607,16 @@ async fn load_automation(
 
     let timing = if row.one_shot != 0 {
         NormalizedTiming::OneShot {
-            fire_at: db_timestamp_to_rfc3339(&row.next_run_at)?,
+            fire_at: crate::services::timestamps::canonical_utc(&row.next_run_at)
+                .map_err(AutomationError::Database)?,
             description: row.cron_description,
-            timezone: timezone.to_string(),
+            timezone: row.timezone.clone(),
         }
     } else {
         NormalizedTiming::Recurring {
             cron_expression: row.cron_expression,
             description: row.cron_description,
-            timezone: timezone.to_string(),
+            timezone: row.timezone.clone(),
         }
     };
 
@@ -594,13 +632,16 @@ async fn load_automation(
         delivery_destinations: destinations,
         timing,
         active: row.active != 0,
-        next_run_at: db_timestamp_to_rfc3339(&row.next_run_at)?,
+        next_run_at: crate::services::timestamps::canonical_utc(&row.next_run_at)
+            .map_err(AutomationError::Database)?,
         last_run_at: row
             .last_run_at
             .as_deref()
-            .map(db_timestamp_to_rfc3339)
-            .transpose()?,
-        created_at: db_timestamp_to_rfc3339(&row.created_at)?,
+            .map(crate::services::timestamps::canonical_utc)
+            .transpose()
+            .map_err(AutomationError::Database)?,
+        created_at: crate::services::timestamps::canonical_utc(&row.created_at)
+            .map_err(AutomationError::Database)?,
     }))
 }
 
@@ -799,20 +840,8 @@ fn parse_future_rfc3339(value: &str) -> Result<DateTime<Utc>, AutomationError> {
     Ok(fire_at)
 }
 
-fn parse_db_timestamp(value: &str) -> Result<DateTime<Utc>, AutomationError> {
-    NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S")
-        .map(|value| Utc.from_utc_datetime(&value))
-        .map_err(|error| {
-            anyhow::anyhow!("invalid stored schedule timestamp '{value}': {error}").into()
-        })
-}
-
-fn db_timestamp_to_rfc3339(value: &str) -> Result<String, AutomationError> {
-    Ok(parse_db_timestamp(value)?.to_rfc3339())
-}
-
 fn to_db_timestamp(value: DateTime<Utc>) -> String {
-    value.format("%Y-%m-%d %H:%M:%S").to_string()
+    crate::services::timestamps::to_db_utc(value)
 }
 
 fn deduplicate_non_empty(values: &[String]) -> Vec<String> {
@@ -855,7 +884,8 @@ mod tests {
             "CREATE TABLE schedules (
                 id TEXT PRIMARY KEY, user_id TEXT NOT NULL, agent_id TEXT,
                 name TEXT NOT NULL, prompt TEXT NOT NULL, cron_expression TEXT NOT NULL,
-                cron_description TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1,
+                cron_description TEXT NOT NULL DEFAULT '', timezone TEXT NOT NULL DEFAULT 'UTC',
+                active INTEGER NOT NULL DEFAULT 1,
                 one_shot INTEGER NOT NULL DEFAULT 0, last_run_at TEXT,
                 next_run_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
             )",
@@ -932,7 +962,28 @@ mod tests {
             .unwrap();
         assert_eq!(created.pipe_ids, vec!["alice-web"]);
         assert_eq!(created.delivery_destinations[0].transport, "web");
-        assert!(created.next_run_at.ends_with("+00:00"));
+        assert_eq!(
+            created.timing,
+            NormalizedTiming::Recurring {
+                cron_expression: "0 0 8 * * *".to_string(),
+                description: "Daily at 08:00".to_string(),
+                timezone: "Europe/Berlin".to_string(),
+            }
+        );
+        assert!(created.next_run_at.ends_with('Z'));
+
+        set_user_timezone(&db, "alice", "America/New_York")
+            .await
+            .unwrap();
+        let after_profile_change = get_automation(&db, "alice", &created.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            after_profile_change.timing,
+            NormalizedTiming::Recurring { ref timezone, .. } if timezone == "Europe/Berlin"
+        ));
+
         assert!(
             get_automation(&db, "bob", &created.id)
                 .await

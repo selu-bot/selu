@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT active, one_shot, cron_expression, next_run_at\n           FROM schedules WHERE id = ? AND user_id = ?",
+  "query": "SELECT active, one_shot, cron_expression, next_run_at, timezone\n           FROM schedules WHERE id = ? AND user_id = ?",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "next_run_at"
           }
         }
+      },
+      {
+        "name": "timezone",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "timezone"
+          }
+        }
       }
     ],
     "parameters": {
@@ -55,8 +66,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "e679e9d20ffea993937ea6e966e1a5488c2af8be86c6f3c5a602c2b7d6982c60"
+  "hash": "ab938c86203c6275ff2ae4ab5f99fbf557c0acb209b65a6094a70346e310ad3a"
 }

@@ -1,0 +1,158 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!\", name, prompt, agent_id, cron_expression,\n                  cron_description, timezone, active, one_shot, last_run_at, next_run_at, created_at\n           FROM schedules\n           WHERE id = ? AND user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "prompt",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "prompt"
+          }
+        }
+      },
+      {
+        "name": "agent_id",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "agent_id"
+          }
+        }
+      },
+      {
+        "name": "cron_expression",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "cron_expression"
+          }
+        }
+      },
+      {
+        "name": "cron_description",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "cron_description"
+          }
+        }
+      },
+      {
+        "name": "timezone",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "timezone"
+          }
+        }
+      },
+      {
+        "name": "active",
+        "ordinal": 7,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "active"
+          }
+        }
+      },
+      {
+        "name": "one_shot",
+        "ordinal": 8,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "one_shot"
+          }
+        }
+      },
+      {
+        "name": "last_run_at",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "last_run_at"
+          }
+        }
+      },
+      {
+        "name": "next_run_at",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "next_run_at"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 11,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "767c0a646887e7aa91ea521a30c68606732b6e52a35210525dfb388aa68a0935"
+}

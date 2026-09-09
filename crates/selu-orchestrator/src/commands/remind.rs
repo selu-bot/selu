@@ -76,6 +76,7 @@ pub async fn handle_add(input: &str, ctx: &CommandContext<'_>) -> CommandResult 
                 &parsed.prompt,
                 fire_at_dt,
                 &description,
+                &timezone,
                 &[ctx.pipe_id.to_string()],
             )
             .await

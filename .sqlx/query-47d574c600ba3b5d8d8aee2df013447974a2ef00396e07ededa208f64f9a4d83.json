@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT active, cron_expression, one_shot FROM schedules WHERE id = ?",
+  "query": "SELECT active, cron_expression, one_shot, timezone FROM schedules WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,17 @@
             "name": "one_shot"
           }
         }
+      },
+      {
+        "name": "timezone",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedules",
+            "name": "timezone"
+          }
+        }
       }
     ],
     "parameters": {
@@ -43,8 +54,9 @@
     "nullable": [
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "d8f7c98a6a5d295dc1d4b67ba369f08c894b889b2933f600e53073206c730078"
+  "hash": "47d574c600ba3b5d8d8aee2df013447974a2ef00396e07ededa208f64f9a4d83"
 }
