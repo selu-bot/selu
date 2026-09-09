@@ -25,6 +25,7 @@ pub struct ScheduleRow {
     pub prompt: String,
     pub cron_expression: String,
     pub cron_description: String,
+    pub timezone: String,
     pub active: bool,
     pub one_shot: bool,
     pub last_run_at: Option<String>,
@@ -138,8 +139,10 @@ fn parse_cron(cron_expr: &str) -> Result<CronSchedule> {
         .map_err(|e| anyhow::anyhow!("Invalid cron expression '{}': {}", cron_expr, e))
 }
 
-/// Compute the next run time for a cron expression in the user's timezone,
-/// returning the result as UTC.
+/// Compute the next run time for a cron expression in the schedule's timezone,
+/// returning the result as UTC. Nonexistent spring-forward wall times are
+/// skipped by the cron iterator. During fall-back, wall times that have already
+/// occurred are skipped so an ambiguous local occurrence runs only once.
 pub fn compute_next_run(
     cron_expr: &str,
     timezone: &str,
@@ -148,15 +151,13 @@ pub fn compute_next_run(
     let tz: chrono_tz::Tz = timezone
         .parse()
         .map_err(|_| anyhow::anyhow!("Invalid timezone: {}", timezone))?;
-
     let schedule = parse_cron(cron_expr)?;
-
-    // Convert `after` to the user's local time, find the next occurrence,
-    // then convert back to UTC.
     let local_after = after.with_timezone(&tz);
+    let local_wall_after = local_after.naive_local();
+
     let next_local = schedule
         .after(&local_after)
-        .next()
+        .find(|candidate| candidate.naive_local() > local_wall_after)
         .ok_or_else(|| anyhow::anyhow!("No future occurrence for cron '{}'", cron_expr))?;
 
     Ok(next_local.with_timezone(&Utc))
@@ -190,8 +191,8 @@ pub async fn create_schedule(
     let id = Uuid::new_v4().to_string();
 
     sqlx::query!(
-        r#"INSERT INTO schedules (id, user_id, agent_id, name, prompt, cron_expression, cron_description, next_run_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        r#"INSERT INTO schedules (id, user_id, agent_id, name, prompt, cron_expression, cron_description, timezone, next_run_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         id,
         user_id,
         agent_id,
@@ -199,6 +200,7 @@ pub async fn create_schedule(
         prompt,
         cron_expression,
         cron_description,
+        timezone,
         next_run_str,
     )
     .execute(db)
@@ -233,20 +235,22 @@ pub async fn create_reminder(
     prompt: &str,
     fire_at: DateTime<Utc>,
     description: &str,
+    timezone: &str,
     pipe_ids: &[String],
 ) -> Result<String> {
     let fire_at_str = fire_at.format("%Y-%m-%d %H:%M:%S").to_string();
     let id = Uuid::new_v4().to_string();
 
     sqlx::query!(
-        r#"INSERT INTO schedules (id, user_id, agent_id, name, prompt, cron_expression, cron_description, next_run_at, one_shot)
-           VALUES (?, ?, ?, ?, ?, '', ?, ?, 1)"#,
+        r#"INSERT INTO schedules (id, user_id, agent_id, name, prompt, cron_expression, cron_description, timezone, next_run_at, one_shot)
+           VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, 1)"#,
         id,
         user_id,
         agent_id,
         name,
         prompt,
         description,
+        timezone,
         fire_at_str,
     )
     .execute(db)
@@ -271,7 +275,7 @@ pub async fn create_reminder(
 /// List all schedules for a user, with their associated pipe names.
 pub async fn list_schedules(db: &SqlitePool, user_id: &str) -> Result<Vec<ScheduleRow>> {
     let rows = sqlx::query!(
-        r#"SELECT id, user_id, name, prompt, cron_expression, cron_description,
+        r#"SELECT id, user_id, name, prompt, cron_expression, cron_description, timezone,
                   active, one_shot, last_run_at, next_run_at, created_at
            FROM schedules
            WHERE user_id = ?
@@ -310,6 +314,7 @@ pub async fn list_schedules(db: &SqlitePool, user_id: &str) -> Result<Vec<Schedu
             prompt: r.prompt,
             cron_expression: r.cron_expression,
             cron_description: r.cron_description,
+            timezone: r.timezone,
             active: r.active != 0,
             one_shot: r.one_shot != 0,
             last_run_at: r.last_run_at,
@@ -355,12 +360,13 @@ pub async fn update_schedule(
 
     sqlx::query!(
         r#"UPDATE schedules
-           SET name = ?, prompt = ?, cron_expression = ?, cron_description = ?, next_run_at = ?
+           SET name = ?, prompt = ?, cron_expression = ?, cron_description = ?, timezone = ?, next_run_at = ?
            WHERE id = ? AND user_id = ?"#,
         name,
         prompt,
         cron_expression,
         cron_description,
+        timezone,
         next_run_str,
         schedule_id,
         user_id,
@@ -423,7 +429,7 @@ pub async fn toggle_schedule(db: &SqlitePool, schedule_id: &str, user_id: &str) 
 
     // If re-activated, recompute next_run_at
     let row = sqlx::query!(
-        "SELECT active, cron_expression, one_shot FROM schedules WHERE id = ?",
+        "SELECT active, cron_expression, one_shot, timezone FROM schedules WHERE id = ?",
         schedule_id,
     )
     .fetch_optional(db)
@@ -431,15 +437,7 @@ pub async fn toggle_schedule(db: &SqlitePool, schedule_id: &str, user_id: &str) 
 
     if let Some(r) = row {
         if r.active != 0 && r.one_shot == 0 {
-            // Only recompute for recurring schedules (one-shot reminders
-            // should not be re-activated since their fire time has passed)
-            // Look up user timezone
-            let tz = sqlx::query_scalar!("SELECT timezone FROM users WHERE id = ?", user_id)
-                .fetch_optional(db)
-                .await?
-                .unwrap_or_else(|| "UTC".to_string());
-
-            match compute_next_run(&r.cron_expression, &tz, Utc::now()) {
+            match compute_next_run(&r.cron_expression, &r.timezone, Utc::now()) {
                 Ok(next) => {
                     let next_str = next.format("%Y-%m-%d %H:%M:%S").to_string();
                     let _ = sqlx::query!(
@@ -466,7 +464,7 @@ pub async fn find_by_name(
 ) -> Result<Option<ScheduleRow>> {
     let pattern = format!("%{}%", name_query);
     let row = sqlx::query!(
-        r#"SELECT id, user_id, name, prompt, cron_expression, cron_description,
+        r#"SELECT id, user_id, name, prompt, cron_expression, cron_description, timezone,
                   active, one_shot, last_run_at, next_run_at, created_at
            FROM schedules
            WHERE user_id = ? AND name LIKE ?
@@ -495,6 +493,7 @@ pub async fn find_by_name(
                 prompt: r.prompt,
                 cron_expression: r.cron_expression,
                 cron_description: r.cron_description,
+                timezone: r.timezone,
                 active: r.active != 0,
                 one_shot: r.one_shot != 0,
                 last_run_at: r.last_run_at,
@@ -512,10 +511,9 @@ pub async fn find_by_name(
 pub async fn fetch_due_schedules(db: &SqlitePool) -> Result<Vec<DueSchedule>> {
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let rows = sqlx::query!(
-        r#"SELECT s.id, s.user_id, s.agent_id, s.name, s.prompt, s.cron_expression, s.one_shot, u.timezone
-           FROM schedules s
-           LEFT JOIN users u ON s.user_id = u.id
-           WHERE s.active = 1 AND s.next_run_at <= ?"#,
+        r#"SELECT id, user_id, agent_id, name, prompt, cron_expression, one_shot, timezone
+           FROM schedules
+           WHERE active = 1 AND next_run_at <= ?"#,
         now,
     )
     .fetch_all(db)
@@ -540,7 +538,7 @@ pub async fn fetch_due_schedules(db: &SqlitePool) -> Result<Vec<DueSchedule>> {
             name: r.name,
             prompt: r.prompt,
             cron_expression: r.cron_expression,
-            timezone: r.timezone.unwrap_or_else(|| "UTC".to_string()),
+            timezone: r.timezone,
             one_shot: r.one_shot != 0,
             pipe_ids: pipe_rows,
         });
@@ -834,6 +832,7 @@ pub async fn dispatch_set_reminder(
             fire_at_in_timezone(&fire_at, &timezone)
                 .unwrap_or_else(|| fire_at.format("%Y-%m-%d %H:%M UTC").to_string())
         ),
+        &timezone,
         &[pipe_id.to_string()],
     )
     .await?;
@@ -849,7 +848,7 @@ pub async fn dispatch_set_reminder(
     .to_string())
 }
 
-fn parse_user_datetime_to_utc(input: &str, timezone: &str) -> Result<DateTime<Utc>> {
+pub fn parse_user_datetime_to_utc(input: &str, timezone: &str) -> Result<DateTime<Utc>> {
     if let Ok(dt) = DateTime::parse_from_rfc3339(input) {
         return Ok(dt.with_timezone(&Utc));
     }
@@ -858,22 +857,33 @@ fn parse_user_datetime_to_utc(input: &str, timezone: &str) -> Result<DateTime<Ut
         .parse()
         .map_err(|_| anyhow::anyhow!("Invalid timezone '{}'", timezone))?;
 
-    let naive = NaiveDateTime::parse_from_str(input, "%Y-%m-%dT%H:%M:%S")
-        .or_else(|_| NaiveDateTime::parse_from_str(input, "%Y-%m-%d %H:%M:%S"))
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Invalid fire_at datetime '{}': {}. Use ISO 8601, e.g. 2026-03-08T11:00:00 or 2026-03-08T10:00:00Z",
-                input,
-                e
-            )
-        })?;
+    let naive = [
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+    ]
+    .into_iter()
+    .find_map(|format| NaiveDateTime::parse_from_str(input, format).ok())
+    .ok_or_else(|| {
+        anyhow::anyhow!(
+            "Invalid fire_at datetime '{}'. Use ISO 8601, e.g. 2026-03-08T11:00 or 2026-03-08T10:00:00Z",
+            input
+        )
+    })?;
 
     let local_dt = match tz.from_local_datetime(&naive) {
         LocalResult::Single(dt) => dt,
-        LocalResult::Ambiguous(a, _) => a,
+        LocalResult::Ambiguous(first, second) => {
+            if first.with_timezone(&Utc) <= second.with_timezone(&Utc) {
+                first
+            } else {
+                second
+            }
+        }
         LocalResult::None => {
             return Err(anyhow::anyhow!(
-                "The local time '{}' does not exist in timezone '{}' (DST transition).",
+                "The local time '{}' does not exist in timezone '{}' because of a daylight-saving transition.",
                 input,
                 timezone
             ));
@@ -972,6 +982,36 @@ mod tests {
     fn test_parse_user_datetime_to_utc_with_offset_keeps_absolute_time() {
         let dt = parse_user_datetime_to_utc("2026-03-04T11:10:00+01:00", "UTC").unwrap();
         assert_eq!(dt.format("%Y-%m-%d %H:%M").to_string(), "2026-03-04 10:10");
+    }
+
+    #[test]
+    fn test_parse_user_datetime_to_utc_rejects_dst_gap() {
+        let error = parse_user_datetime_to_utc("2026-03-08T02:30", "America/New_York").unwrap_err();
+        assert!(error.to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_parse_user_datetime_to_utc_uses_earlier_dst_overlap() {
+        let dt = parse_user_datetime_to_utc("2026-11-01T01:30", "America/New_York").unwrap();
+        assert_eq!(dt.to_rfc3339(), "2026-11-01T05:30:00+00:00");
+    }
+
+    #[test]
+    fn test_compute_next_run_skips_dst_gap() {
+        let after = DateTime::parse_from_rfc3339("2026-03-07T08:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let next = compute_next_run("0 30 2 * * *", "America/New_York", after).unwrap();
+        assert_eq!(next.to_rfc3339(), "2026-03-09T06:30:00+00:00");
+    }
+
+    #[test]
+    fn test_compute_next_run_does_not_repeat_dst_overlap() {
+        let first_occurrence = DateTime::parse_from_rfc3339("2026-11-01T05:30:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let next = compute_next_run("0 30 1 * * *", "America/New_York", first_occurrence).unwrap();
+        assert_eq!(next.to_rfc3339(), "2026-11-02T06:30:00+00:00");
     }
 
     #[test]

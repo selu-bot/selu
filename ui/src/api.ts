@@ -36,8 +36,8 @@ export type Message = {
 export type ConversationPage = { conversations: Conversation[]; next_cursor?: string }
 export const CONVERSATION_PAGE_SIZE = 40
 
-export type Run = { id: string; client_message_id: string; status: string }
-export type Session = { display_name: string; is_admin: boolean; language: string; supports_photo_uploads?: boolean }
+export type Run = { id: string; client_message_id: string; status: string; created_at: string; started_at: string | null; completed_at: string | null }
+export type Session = { display_name: string; is_admin: boolean; language: string; timezone: string; supports_photo_uploads?: boolean }
 export type PhotoUpload = { filename: string; mime_type: string; data_base64: string }
 export type AuthUser = { user_id?: string; display_name?: string; username?: string; is_admin?: boolean; language?: string }
 export type AuthState = { status: 'setup_required' | 'anonymous' | 'authenticated'; user?: AuthUser }

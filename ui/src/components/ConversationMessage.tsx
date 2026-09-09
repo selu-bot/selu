@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Approval, Message, MessageAttachment, TurnRating } from '../api'
 import { defineTranslations, t, useTranslations } from '../i18n'
+import { formatInTimeZone } from '../shared/dateTime'
 import { appPath } from '../shared/paths'
 import { BrandMark } from './BrandMark'
 
@@ -54,9 +55,11 @@ type ConversationMessageProps = {
   message: Message
   entering?: boolean
   feedback?: TurnFeedback
+  language?: string
+  timezone?: string
 }
 
-export function ConversationMessage({ message, entering = false, feedback }: ConversationMessageProps) {
+export function ConversationMessage({ message, entering = false, feedback, language = 'en', timezone = 'UTC' }: ConversationMessageProps) {
   const activities = toolActivityNames(message)
   if (activities) return <ToolActivities names={activities} />
   if (message.role === 'tool') return <ToolMessage message={message} />
@@ -70,7 +73,7 @@ export function ConversationMessage({ message, entering = false, feedback }: Con
     <div className="message-content">
       <div className="message-meta">
         <span>{message.role === 'user' ? t('you') : 'Selu'}</span>
-        <time dateTime={message.created_at}>{formatTime(message.created_at)}</time>
+        <time dateTime={message.created_at}>{formatTime(message.created_at, language, timezone)}</time>
       </div>
       <PhotoAttachments photos={photos} />
       {hasText && <div className="message-surface">
@@ -267,7 +270,6 @@ export function isToolCallPlaceholder(message: Message) {
   return toolActivityNames(message) !== null
 }
 
-function formatTime(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.valueOf()) ? '' : new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(date)
+function formatTime(value: string, language: string, timezone: string) {
+  return formatInTimeZone(value, language, timezone, { hour: '2-digit', minute: '2-digit' })
 }

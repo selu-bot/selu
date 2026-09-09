@@ -2,6 +2,7 @@ import { CalendarClock, Menu, MessageCircle, Plus, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Conversation } from '../api'
 import { t } from '../i18n'
+import { formatInTimeZone } from '../shared/dateTime'
 
 type ConversationListProps = {
   conversations: Conversation[]
@@ -14,10 +15,12 @@ type ConversationListProps = {
   onSelect: (id: string) => void
   onCreate: () => void
   onOpenNavigation: () => void
+  language: string
+  timezone: string
 }
 
 export function ConversationList(props: ConversationListProps) {
-  const { conversations, selectedId, loading, creating, hasMore, loadingMore, onLoadMore, onSelect, onCreate, onOpenNavigation } = props
+  const { conversations, selectedId, loading, creating, hasMore, loadingMore, onLoadMore, onSelect, onCreate, onOpenNavigation, language, timezone } = props
   const [query, setQuery] = useState('')
   const filtered = useMemo(() => {
     const term = query.trim().toLocaleLowerCase()
@@ -44,10 +47,10 @@ export function ConversationList(props: ConversationListProps) {
     <div className="conversation-scroll">
       {loading && <ConversationSkeleton />}
       {!loading && filtered.length === 0 && <div className="conversation-empty"><MessageCircle /><strong>{query ? t('nothingFound') : t('noConversations')}</strong><p>{query ? t('tryAnotherSearch') : t('startConversationHint')}</p></div>}
-      {regular.map((conversation, index) => <ConversationItem key={conversation.id} conversation={conversation} index={index} selected={conversation.id === selectedId} onSelect={onSelect} />)}
+      {regular.map((conversation, index) => <ConversationItem key={conversation.id} conversation={conversation} index={index} selected={conversation.id === selectedId} language={language} timezone={timezone} onSelect={onSelect} />)}
       {scheduled.length > 0 && <>
         <div className="conversation-group-label"><CalendarClock aria-hidden="true" />{t('scheduledRuns')}</div>
-        {scheduled.map((conversation, index) => <ConversationItem key={conversation.id} conversation={conversation} index={index} selected={conversation.id === selectedId} onSelect={onSelect} />)}
+        {scheduled.map((conversation, index) => <ConversationItem key={conversation.id} conversation={conversation} index={index} selected={conversation.id === selectedId} language={language} timezone={timezone} onSelect={onSelect} />)}
       </>}
       {hasMore && !query && <button className="load-more" onClick={onLoadMore} disabled={loadingMore}>
         {loadingMore ? t('loadingMore') : t('loadMore')}
@@ -60,10 +63,12 @@ type ConversationItemProps = {
   conversation: Conversation
   index: number
   selected: boolean
+  language: string
+  timezone: string
   onSelect: (id: string) => void
 }
 
-function ConversationItem({ conversation, index, selected, onSelect }: ConversationItemProps) {
+function ConversationItem({ conversation, index, selected, language, timezone, onSelect }: ConversationItemProps) {
   const isSchedule = conversation.kind === 'schedule'
   return <button
     className={`conversation-item stagger-${Math.min(index, 12)}${selected ? ' is-selected' : ''}${isSchedule ? ' is-schedule' : ''}`}
@@ -71,7 +76,7 @@ function ConversationItem({ conversation, index, selected, onSelect }: Conversat
   >
     <span className="conversation-glyph">{isSchedule ? <CalendarClock aria-hidden="true" /> : initials(conversation.title)}</span>
     <span className="conversation-copy"><strong>{conversation.title ?? t('newConversation')}</strong><small>{conversation.channel_name}</small></span>
-    <time dateTime={conversation.last_activity_at}>{formatRelative(conversation.last_activity_at)}</time>
+    <time dateTime={conversation.last_activity_at}>{formatRelative(conversation.last_activity_at, language, timezone)}</time>
     {conversation.active_run_id && <i className="conversation-live-dot" aria-label={t('working')} />}
   </button>
 }
@@ -86,15 +91,15 @@ function initials(title: string | null) {
   return (title ?? 'S').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toLocaleUpperCase()
 }
 
-function formatRelative(value: string) {
+function formatRelative(value: string, language: string, timezone: string) {
   const date = new Date(value)
   if (Number.isNaN(date.valueOf())) return ''
   const seconds = Math.round((date.valueOf() - Date.now()) / 1000)
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style: 'narrow' })
+  const formatter = new Intl.RelativeTimeFormat(language, { numeric: 'auto', style: 'narrow' })
   if (Math.abs(seconds) < 60) return formatter.format(seconds, 'second')
   const minutes = Math.round(seconds / 60)
   if (Math.abs(minutes) < 60) return formatter.format(minutes, 'minute')
   const hours = Math.round(minutes / 60)
   if (Math.abs(hours) < 24) return formatter.format(hours, 'hour')
-  return new Intl.DateTimeFormat(undefined, { day: '2-digit', month: 'short' }).format(date)
+  return formatInTimeZone(date, language, timezone, { day: '2-digit', month: 'short' })
 }

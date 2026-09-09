@@ -1,5 +1,5 @@
 import {
-  Bot, Bookmark, CalendarClock, Database, Globe2, Heart, History, Home, LogOut,
+  Bot, Bookmark, CalendarClock, Database, Globe2, Heart, Home, LogOut,
   MessageCircle, MoonStar, PanelLeftClose, PanelLeftOpen, RefreshCw, Settings2, ShieldCheck,
   Sun, Users, Waypoints, X,
 } from 'lucide-react'
@@ -37,7 +37,6 @@ export function AppNavigation(props: AppNavigationProps) {
           {!collapsed && <h2>{t('workspace')}</h2>}
           <RouteItem label="today" to="/app" icon={Home} active={active === 'home'} collapsed={collapsed} />
           <RouteItem label="savedTopics" to="/app/saved" icon={Bookmark} active={active === 'saved'} collapsed={collapsed} />
-          <RouteItem label="pastDays" to="/app/past" icon={History} active={active === 'past'} collapsed={collapsed} />
           <RouteItem label="schedules" to="/app/automations" icon={CalendarClock} active={active === 'automations'} collapsed={collapsed} />
           <RouteItem label="memory" to="/app/about-you" icon={Database} active={active === 'about-you'} collapsed={collapsed} />
         </section>

@@ -21,6 +21,7 @@ pub struct SessionUser {
     pub display_name: String,
     pub is_admin: bool,
     pub language: String,
+    pub timezone: String,
 }
 
 #[derive(Debug)]
@@ -38,7 +39,7 @@ pub enum SetupOutcome {
 /// Resolve a session ID against the database.
 pub async fn resolve_session(db: &SqlitePool, session_id: &str) -> Result<Option<SessionUser>> {
     let row = sqlx::query(
-        r#"SELECT ws.user_id, u.username, u.display_name, u.is_admin, u.language
+        r#"SELECT ws.user_id, u.username, u.display_name, u.is_admin, u.language, u.timezone
            FROM web_sessions ws
            JOIN users u ON u.id = ws.user_id
            WHERE ws.id = ? AND ws.expires_at > datetime('now')"#,
@@ -56,6 +57,7 @@ pub async fn resolve_session(db: &SqlitePool, session_id: &str) -> Result<Option
             display_name: row.try_get("display_name")?,
             is_admin: row.try_get::<i64, _>("is_admin")? != 0,
             language: row.try_get("language")?,
+            timezone: row.try_get("timezone")?,
         })
     })
     .transpose()
@@ -84,7 +86,7 @@ pub async fn login(
 
     let username = username.trim();
     let row = sqlx::query(
-        "SELECT id, username, display_name, password_hash, is_admin, language FROM users WHERE username = ?",
+        "SELECT id, username, display_name, password_hash, is_admin, language, timezone FROM users WHERE username = ?",
     )
     .bind(username)
     .fetch_optional(db)
@@ -122,6 +124,9 @@ pub async fn login(
         language: row
             .try_get("language")
             .context("failed to decode language")?,
+        timezone: row
+            .try_get("timezone")
+            .context("failed to decode timezone")?,
     };
     let session_id = create_session(db, &user.user_id).await?;
     Ok(Some(SessionGrant { session_id, user }))
@@ -259,6 +264,7 @@ pub async fn setup_first_admin(
             display_name: display_name.to_string(),
             is_admin: true,
             language: language.to_string(),
+            timezone: "UTC".to_string(),
         },
     }))
 }

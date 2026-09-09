@@ -3007,3 +3007,38 @@ entries:
       the filesystem. On restart Selu restores the previous active package and
       revision state before loading installed agents; ambiguous or escaped paths
       stop startup with recovery context instead of loading inconsistent code.
+  - id: 2026-09-09-timezone-contract-dayline
+    date: "2026-09-09"
+    pr:
+    area: api
+    type: changed
+    audience: both
+    summary: "Canonicalizes client timestamps, exposes user and schedule timezones, and unifies Today into a Continuous Dayline"
+    affected_files:
+      - crates/selu-orchestrator/src/api/conversations.rs
+      - crates/selu-orchestrator/src/api/mobile.rs
+      - crates/selu-orchestrator/src/services/auth.rs
+      - crates/selu-orchestrator/src/services/conversations.rs
+      - ui/src/features/home/HomePage.tsx
+      - ui/src/features/home/ConversationArchivePage.tsx
+      - ui/src/features/automations/AutomationsPage.tsx
+    docs_sections:
+      - reference/api
+      - user-guide/channels/web-chat
+      - user-guide/automations
+    details: |
+      All conversation summary, message, run, event, mobile schedule, and mobile
+      authentication timestamps are returned as RFC 3339 UTC. Legacy offset-less
+      SQLite values remain readable as UTC and pagination orders mixed legacy and
+      RFC 3339 rows by their absolute instants.
+
+      GET /api/v1/session and mobile login/redeem responses expose the authenticated
+      user's IANA timezone. Mobile schedules expose their own persisted timezone.
+      The React app uses the session timezone for Today/Past boundaries and displayed
+      conversation times, while one-shot datetime-local input is interpreted and
+      displayed in the selected automation timezone through local_fire_at.
+
+      Today with Selu now presents completed conversations and scheduled results above
+      an inline Now marker and future automation runs below it on one responsive rail.
+      Past days and the automation calendar remain directly accessible, and scheduled
+      results never offer topic saving.

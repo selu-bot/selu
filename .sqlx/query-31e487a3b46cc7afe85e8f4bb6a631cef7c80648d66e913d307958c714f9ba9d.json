@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE schedules\n                   SET name = ?, prompt = ?, agent_id = ?, cron_expression = '',\n                       cron_description = ?, timezone = ?, one_shot = 1, next_run_at = ?\n                   WHERE id = ? AND user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "31e487a3b46cc7afe85e8f4bb6a631cef7c80648d66e913d307958c714f9ba9d"
+}

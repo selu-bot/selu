@@ -239,6 +239,7 @@ mod tests {
             display_name: display_name.to_string(),
             is_admin,
             language: "en".to_string(),
+            timezone: "UTC".to_string(),
         })
     }
 

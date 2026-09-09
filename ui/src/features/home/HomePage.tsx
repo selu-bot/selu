@@ -1,7 +1,7 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { ArrowUp, Bookmark, CalendarClock, ChevronRight, Clock3, Menu, MessageCircle, Sparkles } from 'lucide-react'
+import { ArrowUp, Bookmark, CalendarClock, CalendarSearch, ChevronRight, Clock3, Menu, MessageCircle, Sparkles } from 'lucide-react'
 import { api, type Conversation, type Message, type PhotoUpload, type Snapshot } from '../../api'
 import { BrandMark } from '../../components/BrandMark'
 import { SaveTopicDialog } from '../../components/ConversationActions'
@@ -9,6 +9,7 @@ import { PhotoPickerButton, PhotoPreviewStrip } from '../../components/Composer'
 import { getLanguage, t, useLanguage } from '../../i18n'
 import { useNotices } from '../../notices'
 import { createClientId } from '../../shared/clientId'
+import { dateKeyInTimeZone, formatInTimeZone, isSameDayInTimeZone } from '../../shared/dateTime'
 import { dedupeConversations, replaceConversation, type ConversationPages } from '../../shared/conversations'
 import { photoUploadPayload, preparePhotoFiles, type SelectedPhoto } from '../../shared/photoUploads'
 import { failedSendQueryKey, type RetryableSend } from '../../shared/sendRetry'
@@ -62,6 +63,7 @@ export function HomePage() {
   const [photos, setPhotos] = useState<SelectedPhoto[]>([])
   const [photoSelectionBusy, setPhotoSelectionBusy] = useState(false)
   const [saveTarget, setSaveTarget] = useState<Conversation | null>(null)
+  const [now, setNow] = useState(Date.now)
   const { navigation, navCollapsed, openMobileNavigation, session } = useAppChrome('home')
   const conversations = useInfiniteQuery({
     queryKey: ['conversations'],
@@ -74,17 +76,25 @@ export function HomePage() {
     () => dedupeConversations(conversations.data?.pages.flatMap((page) => page.conversations) ?? []),
     [conversations.data],
   )
-  const today = useMemo(
-    () => items.filter((item) => isSameLocalDay(item.last_activity_at, new Date())).sort(byNewestActivity),
-    [items],
+  const timezone = session.data?.timezone ?? 'UTC'
+  const completedToday = useMemo(
+    () => items
+      .filter((item) => !item.active_run_id && new Date(item.last_activity_at).valueOf() <= now && isSameDayInTimeZone(item.last_activity_at, now, timezone))
+      .sort(byOldestActivity),
+    [items, now, timezone],
   )
   const upcoming = useMemo(
     () => (automations.data?.automations ?? [])
-      .filter((item) => item.active && !Number.isNaN(new Date(item.next_run_at).valueOf()))
+      .filter((item) => item.active && new Date(item.next_run_at).valueOf() > now)
       .sort((left, right) => new Date(left.next_run_at).valueOf() - new Date(right.next_run_at).valueOf())
-      .slice(0, 3),
-    [automations.data],
+      .slice(0, 5),
+    [automations.data, now],
   )
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const start = useMutation({
     mutationFn: ({ text, selectedPhotos }: { text: string; selectedPhotos: SelectedPhoto[] }) => startHomeConversation({
@@ -151,7 +161,7 @@ export function HomePage() {
       <header className="home-topbar">
         <button className="icon-button mobile-menu" onClick={openMobileNavigation} aria-label={t('openNavigation')}><Menu /></button>
         <BrandMark compact />
-        <time className="today-date" dateTime={localDateKey(new Date())}>{formatDayHeading(new Date())}</time>
+        <time className="today-date" dateTime={dateKeyInTimeZone(now, timezone)}>{formatDayHeading(now, timezone)}</time>
       </header>
       <div className="home-scroll">
         <div className="home-content today-content">
@@ -159,46 +169,46 @@ export function HomePage() {
             <span className="eyebrow">{t('todayWithSelu')}</span>
             <h1 id="home-title">{name ? t('homeGreeting').replace('{name}', name) : t('homeGreetingFallback')}</h1>
             <p>{t('homeSubtitle')}</p>
-            <form className="home-composer" onSubmit={submit}>
-              <PhotoPreviewStrip photos={photos} disabled={start.isPending} onRemove={(id) => setPhotos((current) => current.filter((photo) => photo.id !== id))} />
-              <div className="home-composer-tools">
-                <Sparkles aria-hidden="true" />
-                {session.data?.supports_photo_uploads === true && <PhotoPickerButton
-                  className="home-photo-picker"
-                  disabled={start.isPending || photoSelectionBusy}
-                  onSelect={(files) => void addPhotos(files)}
-                />}
-              </div>
-              <textarea rows={2} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() }
-              }} placeholder={t('homePlaceholder')} aria-label={t('homePlaceholder')} disabled={start.isPending} />
-              <button className="home-send-button" disabled={(!draft.trim() && photos.length === 0) || start.isPending} aria-label={t('send')}><ArrowUp /></button>
-            </form>
-            <span className="home-composer-hint">{t('homeComposerHint')}</span>
           </section>
 
           <div className="today-layout">
-            <section className="today-timeline" aria-labelledby="today-timeline-title">
+            <section className="today-timeline dayline" aria-labelledby="today-timeline-title">
               <header className="today-section-heading">
                 <div><span className="eyebrow">{t('today')}</span><h2 id="today-timeline-title">{t('todayWithSelu')}</h2><p>{t('todayTimelineHint')}</p></div>
-                <Link to="/app/past" className="text-link">{t('pastDays')}<ChevronRight /></Link>
+                <nav className="dayline-links" aria-label={t('todayWithSelu')}>
+                  <Link to="/app/past" className="dayline-search-link" aria-label={t('searchPastDays')} title={t('searchPastDays')}><CalendarSearch aria-hidden="true" /></Link>
+                  <Link to="/app/automations" className="text-link"><CalendarClock />{t('schedules')}<ChevronRight /></Link>
+                </nav>
               </header>
-              <div className="timeline-list">
-                {today.map((item) => <TimelineEntry key={item.id} conversation={item} onSave={() => setSaveTarget(item)} />)}
-                {!conversations.isLoading && today.length === 0 && <div className="timeline-empty"><Clock3 /><p>{t('noTodayActivity')}</p></div>}
+              <div className="timeline-list dayline-list">
+                {completedToday.map((item) => <TimelineEntry key={item.id} conversation={item} timezone={timezone} onSave={() => setSaveTarget(item)} />)}
+                {!conversations.isLoading && completedToday.length === 0 && <DaylineEmpty icon={<Clock3 />} label={t('noTodayActivity')} />}
+                <div className="dayline-now" role="separator" aria-label={t('now')}><span aria-hidden="true" /><strong>{t('now')}</strong></div>
+                {upcoming.map((automation) => <UpcomingAutomation key={automation.id} automation={automation} timezone={timezone} />)}
+                {!automations.isLoading && upcoming.length === 0 && <DaylineEmpty icon={<CalendarClock />} label={t('noUpcomingAutomations')} future />}
               </div>
             </section>
-            <aside className="upcoming-panel" aria-labelledby="upcoming-title">
-              <header><CalendarClock aria-hidden="true" /><div><span className="eyebrow">{t('upcoming')}</span><h2 id="upcoming-title">{t('upcomingAutomations')}</h2></div></header>
-              <div className="upcoming-list">
-                {upcoming.map((automation) => <UpcomingAutomation key={automation.id} automation={automation} />)}
-                {!automations.isLoading && upcoming.length === 0 && <p className="home-empty">{t('noUpcomingAutomations')}</p>}
-              </div>
-              <Link to="/app/automations" className="text-link upcoming-link">{t('schedules')}<ChevronRight /></Link>
-            </aside>
           </div>
         </div>
       </div>
+      <footer className="home-quick-compose" aria-label={t('homePlaceholder')}>
+        <form className="home-composer" onSubmit={submit}>
+          <PhotoPreviewStrip photos={photos} disabled={start.isPending} onRemove={(id) => setPhotos((current) => current.filter((photo) => photo.id !== id))} />
+          <div className="home-composer-tools">
+            <Sparkles aria-hidden="true" />
+            {session.data?.supports_photo_uploads === true && <PhotoPickerButton
+              className="home-photo-picker"
+              disabled={start.isPending || photoSelectionBusy}
+              onSelect={(files) => void addPhotos(files)}
+            />}
+          </div>
+          <textarea rows={1} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit() }
+          }} placeholder={t('homePlaceholder')} aria-label={t('homePlaceholder')} disabled={start.isPending} />
+          <button className="home-send-button" disabled={(!draft.trim() && photos.length === 0) || start.isPending} aria-label={t('send')}><ArrowUp /></button>
+        </form>
+        <span className="home-composer-hint">{t('homeComposerHint')}</span>
+      </footer>
     </section>
     {saveTarget && <SaveTopicDialog
       initialTitle={saveTarget.title ?? topicNameFallback(saveTarget)}
@@ -209,14 +219,18 @@ export function HomePage() {
   </main>
 }
 
-export function TimelineEntry({ conversation, onSave, onUnsave }: { conversation: Conversation; onSave?: () => void; onUnsave?: () => void }) {
+export function canSaveTopic(conversation: Conversation) {
+  return conversation.kind !== 'schedule' && (conversation.can_save ?? true)
+}
+
+export function TimelineEntry({ conversation, timezone, onSave, onUnsave }: { conversation: Conversation; timezone: string; onSave?: () => void; onUnsave?: () => void }) {
   const schedule = conversation.kind === 'schedule'
-  const canSave = conversation.can_save ?? !schedule
+  const canSave = canSaveTopic(conversation)
   return <article className={`timeline-entry${schedule ? ' is-schedule' : ''}`}>
     <span className="timeline-rail" aria-hidden="true"><i /></span>
     <span className="timeline-icon" aria-hidden="true">{schedule ? <CalendarClock /> : <MessageCircle />}</span>
     <Link to="/app/conversations/$conversationId" params={{ conversationId: conversation.id }} className="timeline-copy" aria-label={`${t('openConversation')}: ${conversation.title ?? t('newConversation')}`}>
-      <span className="timeline-meta"><time dateTime={conversation.last_activity_at}>{formatTime(conversation.last_activity_at)}</time>{schedule && <small>{t('scheduledResult')}</small>}{conversation.active_run_id && <small className="is-live">{t('working')}</small>}</span>
+      <span className="timeline-meta"><time dateTime={conversation.last_activity_at}>{formatTime(conversation.last_activity_at, timezone)}</time>{schedule && <small>{t('scheduledResult')}</small>}{conversation.active_run_id && <small className="is-live">{t('working')}</small>}</span>
       <strong>{conversation.title ?? t('newConversation')}</strong>
       {conversation.preview && <p>{conversation.preview}</p>}
     </Link>
@@ -226,47 +240,44 @@ export function TimelineEntry({ conversation, onSave, onUnsave }: { conversation
   </article>
 }
 
-function UpcomingAutomation({ automation }: { automation: Automation }) {
-  return <Link to="/app/automations" className="upcoming-item">
-    <span><strong>{automation.name}</strong><small>{automation.timing.description}</small></span>
-    <time dateTime={automation.next_run_at}><small>{t('nextRun')}</small>{formatUpcoming(automation.next_run_at)}</time>
-  </Link>
+function UpcomingAutomation({ automation, timezone }: { automation: Automation; timezone: string }) {
+  return <article className="timeline-entry is-upcoming">
+    <span className="timeline-rail" aria-hidden="true"><i /></span>
+    <span className="timeline-icon" aria-hidden="true"><CalendarClock /></span>
+    <Link to="/app/automations" className="timeline-copy" aria-label={`${t('upcoming')}: ${automation.name}`}>
+      <span className="timeline-meta"><time dateTime={automation.next_run_at}>{formatUpcoming(automation.next_run_at, timezone)}</time><small>{t('nextRun')}</small></span>
+      <strong>{automation.name}</strong>
+      <p>{automation.timing.description}</p>
+    </Link>
+  </article>
 }
 
-function byNewestActivity(left: Conversation, right: Conversation) {
-  return new Date(right.last_activity_at).valueOf() - new Date(left.last_activity_at).valueOf()
+function DaylineEmpty({ icon, label, future = false }: { icon: ReactNode; label: string; future?: boolean }) {
+  return <div className={`dayline-empty${future ? ' is-future' : ''}`}>
+    <span className="timeline-rail" aria-hidden="true"><i /></span>
+    <span className="timeline-icon" aria-hidden="true">{icon}</span>
+    <p>{label}</p>
+  </div>
 }
 
-export function localDateKey(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-export function isSameLocalDay(value: string, reference: Date) {
-  const date = new Date(value)
-  return !Number.isNaN(date.valueOf()) && localDateKey(date) === localDateKey(reference)
+function byOldestActivity(left: Conversation, right: Conversation) {
+  return new Date(left.last_activity_at).valueOf() - new Date(right.last_activity_at).valueOf()
 }
 
 function selectedLocale() {
   return getLanguage() === 'de' ? 'de-DE' : 'en-US'
 }
 
-export function formatDayHeading(date: Date) {
-  return new Intl.DateTimeFormat(selectedLocale(), { weekday: 'long', month: 'long', day: 'numeric' }).format(date)
+export function formatDayHeading(value: string | number | Date, timezone: string) {
+  return formatInTimeZone(value, selectedLocale(), timezone, { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
-function formatTime(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.valueOf())) return ''
-  return new Intl.DateTimeFormat(selectedLocale(), { hour: 'numeric', minute: '2-digit' }).format(date)
+function formatTime(value: string, timezone: string) {
+  return formatInTimeZone(value, selectedLocale(), timezone, { hour: 'numeric', minute: '2-digit' })
 }
 
-function formatUpcoming(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.valueOf())) return ''
-  return new Intl.DateTimeFormat(selectedLocale(), { weekday: 'short', hour: 'numeric', minute: '2-digit' }).format(date)
+function formatUpcoming(value: string, timezone: string) {
+  return formatInTimeZone(value, selectedLocale(), timezone, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
 function topicNameFallback(conversation: Conversation) {
