@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "WITH retention_refs AS (\n                 SELECT ref.image_id, r.state, r.retain_until, NULL AS owner, r.created_at\n                 FROM managed_docker_image_refs ref\n                 JOIN agent_package_revisions r ON r.id = ref.agent_revision_id\n                 UNION ALL\n                 SELECT image_id, state, retain_until, owner, created_at\n                 FROM managed_docker_system_refs\n             )\n             SELECT i.image_id AS \"image_id!\", i.display_name AS \"display_name!\",\n                    i.size_bytes AS \"size_bytes!\", i.first_seen_at AS \"first_seen_at!\",\n                    ref.state, ref.retain_until, ref.owner\n             FROM managed_docker_images i\n             LEFT JOIN retention_refs ref ON ref.image_id = i.image_id\n             ORDER BY i.image_id, ref.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "image_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_docker_images",
+            "name": "image_id"
+          }
+        }
+      },
+      {
+        "name": "display_name!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_docker_images",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "name": "size_bytes!",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "managed_docker_images",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "name": "first_seen_at!",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_docker_images",
+            "name": "first_seen_at"
+          }
+        }
+      },
+      {
+        "name": "state",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_docker_system_refs",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "name": "retain_until",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_docker_system_refs",
+            "name": "retain_until"
+          }
+        }
+      },
+      {
+        "name": "owner",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_docker_system_refs",
+            "name": "owner"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "cc02ae0c100935f0ac19e7e0ce222131f57a7d432292cffaa020b5815e873465"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_docker_system_refs\n                 (id, owner, state, image_id, image_ref, retain_until)\n                 VALUES (?, ?, ?, ?, ?, ?)\n                 ON CONFLICT(owner, image_ref, image_id) DO UPDATE SET\n                     state = excluded.state,\n                     retain_until = excluded.retain_until,\n                     updated_at = datetime('now')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "86daa888e7de3045d768a3037cd08a166a4763ce4bd8d0b3bba8a063a1f2606e"
+}

@@ -736,7 +736,11 @@ async fn detail(
 
     let mut capabilities = Vec::new();
     for (capability_id, manifest) in &definition.capability_manifests {
-        let image_status = match state.capabilities.is_image_available(&manifest.image).await {
+        let image_status = match state
+            .capabilities
+            .is_image_available(&agent_id, &manifest.image)
+            .await
+        {
             Ok(true) => "available",
             Ok(false) => "missing",
             Err(_) => "unknown",

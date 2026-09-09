@@ -25,13 +25,16 @@ use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, OwnedRwLockReadGuard, RwLock};
 use tokio::time::sleep;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::capabilities::egress_proxy::{ContainerEgressPolicy, EgressRegistry};
 use crate::capabilities::manifest::{CapabilityClass, CapabilityManifest};
+use crate::services::docker_storage::{
+    DockerStorage, RecordedImageReference, restore_ref_for_recorded_image,
+};
 
 /// The gRPC port that capability containers must listen on
 pub const CAPABILITY_GRPC_PORT: u16 = 50051;
@@ -59,6 +62,7 @@ pub struct RunningCapability {
 #[derive(Clone)]
 pub struct CapabilityRunner {
     docker: Arc<Docker>,
+    docker_storage: DockerStorage,
     egress_registry: EgressRegistry,
     /// Port the egress proxy listens on (resolved per-network with the gateway IP)
     egress_proxy_port: u16,
@@ -74,6 +78,7 @@ impl CapabilityRunner {
     pub fn new(
         egress_registry: EgressRegistry,
         egress_proxy_addr: impl Into<String>,
+        docker_storage: DockerStorage,
     ) -> Result<Self> {
         let docker =
             Docker::connect_with_local_defaults().context("Failed to connect to Docker daemon")?;
@@ -85,6 +90,7 @@ impl CapabilityRunner {
 
         Ok(Self {
             docker: Arc::new(docker),
+            docker_storage,
             egress_registry,
             egress_proxy_port: port,
             self_container_id: Arc::new(RwLock::new(None)),
@@ -92,10 +98,32 @@ impl CapabilityRunner {
         })
     }
 
-    /// Return whether an image is available in the local Docker image store.
-    /// A Docker 404 means the image is missing; connection and permission
-    /// failures are returned to the caller instead of being misreported.
-    pub async fn is_image_available(&self, image: &str) -> Result<bool> {
+    pub(crate) async fn shared_maintenance_lease(&self) -> OwnedRwLockReadGuard<()> {
+        self.docker_storage.shared_lease().await
+    }
+
+    pub(crate) async fn validate_current_manifest(
+        &self,
+        agent_id: &str,
+        manifest: &CapabilityManifest,
+    ) -> Result<()> {
+        self.docker_storage
+            .validate_current_manifest(agent_id, manifest)
+            .await
+    }
+
+    /// Return whether the exact image recorded for the current agent revision is
+    /// available. The manifest's mutable tag is only a database lookup key.
+    pub async fn is_image_available(&self, agent_id: &str, image: &str) -> Result<bool> {
+        let _maintenance_lease = self.docker_storage.shared_lease().await;
+        let recorded = self
+            .docker_storage
+            .current_image_reference(agent_id, image)
+            .await?;
+        self.inspect_image_available(&recorded.image_id).await
+    }
+
+    async fn inspect_image_available(&self, image: &str) -> Result<bool> {
         match self.docker.inspect_image(image).await {
             Ok(_) => Ok(true),
             Err(error) if is_missing_image_error(&error) => Ok(false),
@@ -104,49 +132,84 @@ impl CapabilityRunner {
         }
     }
 
-    /// Ensure an image exists locally, downloading it on demand when missing.
-    /// Returns `true` when this call downloaded the image and `false` when it
-    /// was already present (or another concurrent request restored it).
-    pub async fn ensure_image_available(&self, image: &str) -> Result<bool> {
-        if self.is_image_available(image).await? {
+    /// Ensure the exact image recorded for the current revision exists locally.
+    /// A missing pin is restored only through its recorded repository digest.
+    pub async fn ensure_image_available(&self, agent_id: &str, image: &str) -> Result<bool> {
+        let _maintenance_lease = self.docker_storage.shared_lease().await;
+        self.ensure_image_available_locked(agent_id, image).await
+    }
+
+    async fn ensure_image_available_locked(&self, agent_id: &str, image: &str) -> Result<bool> {
+        let recorded = self
+            .docker_storage
+            .current_image_reference(agent_id, image)
+            .await?;
+        self.ensure_recorded_image_available_locked(image, &recorded)
+            .await
+    }
+
+    async fn ensure_recorded_image_available_locked(
+        &self,
+        declared_image: &str,
+        recorded: &RecordedImageReference,
+    ) -> Result<bool> {
+        if self.inspect_image_available(&recorded.image_id).await? {
             return Ok(false);
         }
 
+        let restore_ref = restore_ref_for_recorded_image(declared_image, recorded)?;
         let image_lock = {
             let mut locks = self.image_pull_locks.write().await;
             locks
-                .entry(image.to_string())
+                .entry(recorded.image_id.clone())
                 .or_insert_with(|| Arc::new(Mutex::new(())))
                 .clone()
         };
         let _guard = image_lock.lock().await;
 
-        // Another request may have completed the download while we waited.
-        if self.is_image_available(image).await? {
+        // Another request may have restored the exact pin while we waited.
+        if self.inspect_image_available(&recorded.image_id).await? {
             return Ok(false);
         }
 
         info!(
-            image,
-            "Capability image is missing; downloading it on demand"
+            image_id = %recorded.image_id,
+            repo_digest = %restore_ref,
+            "Pinned capability image is missing; restoring its recorded digest"
         );
         let options = CreateImageOptions {
-            from_image: Some(image.to_string()),
+            from_image: Some(restore_ref.clone()),
             ..Default::default()
         };
         let mut stream = self.docker.create_image(Some(options), None, None);
         while let Some(result) = stream.next().await {
-            result.with_context(|| format!("Failed to download capability image '{}'", image))?;
+            result.with_context(|| {
+                format!(
+                    "Failed to restore pinned capability image '{}'",
+                    recorded.image_id
+                )
+            })?;
         }
 
-        if !self.is_image_available(image).await? {
+        let restored = self
+            .docker_storage
+            .inspect_image(&self.docker, &restore_ref)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to verify restored capability image '{}'",
+                    recorded.image_id
+                )
+            })?;
+        verify_restored_image_id(&recorded.image_id, &restored.image_id)?;
+        if !self.inspect_image_available(&recorded.image_id).await? {
             return Err(anyhow!(
-                "Docker finished downloading capability image '{}' but it is still unavailable",
-                image
+                "Docker restored capability image '{}' but its pinned image ID is unavailable",
+                recorded.image_id
             ));
         }
 
-        info!(image, "Capability image restored");
+        info!(image_id = %recorded.image_id, "Pinned capability image restored");
         Ok(true)
     }
 
@@ -348,20 +411,81 @@ impl CapabilityRunner {
     /// Returns a `RunningCapability` once the container's gRPC port is ready.
     pub async fn start(
         &self,
+        agent_id: &str,
         manifest: &CapabilityManifest,
         session_id: Option<&str>,
         user_id: Option<&str>,
         egress_policy: &ContainerEgressPolicy,
     ) -> Result<RunningCapability> {
-        self.ensure_image_available(&manifest.image)
+        let _maintenance_lease = self.docker_storage.shared_lease().await;
+        self.validate_current_manifest(agent_id, manifest).await?;
+        self.start_with_maintenance_lease(agent_id, manifest, session_id, user_id, egress_policy)
+            .await
+    }
+
+    /// Start a current capability while the caller already holds the shared
+    /// maintenance lease. The declared tag resolves only through the immutable
+    /// record owned by the current package revision.
+    pub(crate) async fn start_with_maintenance_lease(
+        &self,
+        agent_id: &str,
+        manifest: &CapabilityManifest,
+        session_id: Option<&str>,
+        user_id: Option<&str>,
+        egress_policy: &ContainerEgressPolicy,
+    ) -> Result<RunningCapability> {
+        let recorded = self
+            .docker_storage
+            .current_image_reference(agent_id, &manifest.image)
+            .await?;
+        self.ensure_recorded_image_available_locked(&manifest.image, &recorded)
             .await
             .with_context(|| {
                 format!(
-                    "Failed to restore the image for capability '{}'",
+                    "Failed to restore the pinned image for capability '{}'",
                     manifest.id
                 )
             })?;
 
+        let mut pinned_manifest = manifest.clone();
+        pinned_manifest.image = recorded.image_id;
+        self.start_available_image(&pinned_manifest, session_id, user_id, egress_policy)
+            .await
+    }
+
+    /// Start a staged capability whose image was already pulled and recorded
+    /// against the staged revision. This must not create a current-image
+    /// reference before the package revision is activated.
+    pub(crate) async fn start_staged_with_maintenance_lease(
+        &self,
+        manifest: &CapabilityManifest,
+        session_id: Option<&str>,
+        user_id: Option<&str>,
+        egress_policy: &ContainerEgressPolicy,
+    ) -> Result<RunningCapability> {
+        if !is_exact_image_id(&manifest.image) {
+            return Err(anyhow!(
+                "Staged capability '{}' did not provide an immutable image ID",
+                manifest.id
+            ));
+        }
+        if !self.inspect_image_available(&manifest.image).await? {
+            return Err(anyhow!(
+                "The staged image for capability '{}' is no longer available",
+                manifest.id
+            ));
+        }
+        self.start_available_image(manifest, session_id, user_id, egress_policy)
+            .await
+    }
+
+    async fn start_available_image(
+        &self,
+        manifest: &CapabilityManifest,
+        session_id: Option<&str>,
+        user_id: Option<&str>,
+        egress_policy: &ContainerEgressPolicy,
+    ) -> Result<RunningCapability> {
         let is_shared = session_id.is_none();
         let container_name = if is_shared {
             format!(
@@ -520,63 +644,83 @@ impl CapabilityRunner {
             })?;
 
         let container_id = container.id.clone();
+        let started = async {
+            self.docker
+                .start_container(&container_id, None)
+                .await
+                .with_context(|| format!("Failed to start container '{}'", container_id))?;
 
-        self.docker
-            .start_container(&container_id, None)
-            .await
-            .with_context(|| format!("Failed to start container '{}'", container_id))?;
+            info!(
+                container_id = %container_id,
+                capability = %manifest.id,
+                "Started capability container"
+            );
 
-        info!(
-            container_id = %container_id,
-            capability = %manifest.id,
-            "Started capability container"
-        );
+            let inspect = self
+                .docker
+                .inspect_container(&container_id, None)
+                .await
+                .with_context(|| format!("Failed to inspect container '{}'", container_id))?;
 
-        // ── Inspect to get connection details ───────────────────────────────────
-        let inspect = self
-            .docker
-            .inspect_container(&container_id, None)
-            .await
-            .with_context(|| format!("Failed to inspect container '{}'", container_id))?;
+            let grpc_addr = if self.self_container_id.read().await.is_some() {
+                let container_ip =
+                    extract_container_ip(&inspect, network_name).ok_or_else(|| {
+                        anyhow!(
+                            "No container IP found for '{}' on network '{}'",
+                            container_id,
+                            network_name
+                        )
+                    })?;
+                format!("http://{}:{}", container_ip, CAPABILITY_GRPC_PORT)
+            } else {
+                let host_port =
+                    extract_host_port(&inspect, CAPABILITY_GRPC_PORT).ok_or_else(|| {
+                        anyhow!("No host port assigned for container '{}'", container_id)
+                    })?;
+                format!("http://127.0.0.1:{}", host_port)
+            };
 
-        let grpc_addr = if self.self_container_id.read().await.is_some() {
-            // Running inside Docker — connect via the container's IP on the shared network
-            let container_ip = extract_container_ip(&inspect, network_name).ok_or_else(|| {
-                anyhow!(
-                    "No container IP found for '{}' on network '{}'",
-                    container_id,
-                    network_name
-                )
-            })?;
-            format!("http://{}:{}", container_ip, CAPABILITY_GRPC_PORT)
-        } else {
-            // Running on the host — connect via the mapped host port on 127.0.0.1
-            let host_port = extract_host_port(&inspect, CAPABILITY_GRPC_PORT)
-                .ok_or_else(|| anyhow!("No host port assigned for container '{}'", container_id))?;
-            format!("http://127.0.0.1:{}", host_port)
-        };
+            crate::capabilities::egress_proxy::register(
+                &self.egress_registry,
+                egress_token.clone(),
+                egress_policy.clone(),
+            )
+            .await;
 
-        // ── Register egress policy (keyed by auth token) ──────────────────────
-        crate::capabilities::egress_proxy::register(
-            &self.egress_registry,
-            egress_token.clone(),
-            egress_policy.clone(),
-        )
+            wait_for_grpc_ready(&self.docker, &container_id, &grpc_addr, 30)
+                .await
+                .with_context(|| {
+                    format!("Capability '{}' did not become ready in time", manifest.id)
+                })?;
+
+            Ok::<RunningCapability, anyhow::Error>(RunningCapability {
+                container_id: container_id.clone(),
+                capability_id: manifest.id.clone(),
+                grpc_addr,
+                egress_token: egress_token.clone(),
+            })
+        }
         .await;
 
-        // ── Wait for gRPC healthcheck ─────────────────────────────────────────
-        wait_for_grpc_ready(&self.docker, &container_id, &grpc_addr, 30)
-            .await
-            .with_context(|| {
-                format!("Capability '{}' did not become ready in time", manifest.id)
-            })?;
+        if started.is_err() {
+            crate::capabilities::egress_proxy::deregister(&self.egress_registry, &egress_token)
+                .await;
+            if let Err(error) = self
+                .docker
+                .remove_container(
+                    &container_id,
+                    Some(RemoveContainerOptions {
+                        force: true,
+                        ..Default::default()
+                    }),
+                )
+                .await
+            {
+                debug!(container_id = %container_id, %error, "Failed startup container cleanup");
+            }
+        }
 
-        Ok(RunningCapability {
-            container_id,
-            capability_id: manifest.id.clone(),
-            grpc_addr,
-            egress_token,
-        })
+        started
     }
 
     /// Stop and remove a running capability container
@@ -618,6 +762,24 @@ impl CapabilityRunner {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn is_exact_image_id(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix("sha256:") else {
+        return false;
+    };
+    hex.len() == 64 && hex.chars().all(|character| character.is_ascii_hexdigit())
+}
+
+fn verify_restored_image_id(expected: &str, actual: &str) -> Result<()> {
+    if expected != actual {
+        return Err(anyhow!(
+            "Restored capability image ID '{}' did not match the revision pin '{}'",
+            actual,
+            expected
+        ));
+    }
+    Ok(())
+}
 
 fn is_missing_image_error(error: &DockerError) -> bool {
     matches!(
@@ -915,6 +1077,55 @@ mod tests {
         assert!(is_missing_image_error(&missing));
         assert!(!is_missing_image_error(&unavailable));
         assert!(!is_missing_image_error(&DockerError::RequestTimeoutError));
+    }
+
+    #[test]
+    fn missing_pinned_image_without_digest_fails_closed() {
+        let recorded = RecordedImageReference {
+            image_id: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                .to_string(),
+            repo_digest: None,
+        };
+
+        let error =
+            restore_ref_for_recorded_image("example/capability:latest", &recorded).unwrap_err();
+        assert!(error.to_string().contains("no immutable repository digest"));
+    }
+
+    #[test]
+    fn missing_pinned_image_restores_only_same_repository_exact_digest() {
+        let recorded = RecordedImageReference {
+            image_id:
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .to_string(),
+            repo_digest: Some(
+                "example/capability@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    .to_string(),
+            ),
+        };
+        assert_eq!(
+            restore_ref_for_recorded_image("example/capability:latest", &recorded).unwrap(),
+            recorded.repo_digest.clone().unwrap()
+        );
+
+        let wrong_repository = RecordedImageReference {
+            repo_digest: Some(
+                "attacker/capability@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    .to_string(),
+            ),
+            ..recorded
+        };
+        assert!(
+            restore_ref_for_recorded_image("example/capability:latest", &wrong_repository).is_err()
+        );
+    }
+
+    #[test]
+    fn restored_image_must_match_recorded_image_id() {
+        let expected = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let moved = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        assert!(verify_restored_image_id(expected, expected).is_ok());
+        assert!(verify_restored_image_id(expected, moved).is_err());
     }
 
     fn make_inspect(

@@ -84,6 +84,23 @@ pub struct AckResponse {
     pub message: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProtectedImageRef {
+    pub image_ref: String,
+    pub owner: String,
+    pub state: String,
+    pub retain_until: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StorageMetadata {
+    pub ready: bool,
+    pub generated_at: Option<String>,
+    pub cleanup_block_reason: Option<String>,
+    pub managed_repositories: Vec<String>,
+    pub protected_image_refs: Vec<ProtectedImageRef>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct StatusResponse {
     pub status: String,
@@ -98,4 +115,9 @@ pub struct StatusResponse {
     pub previous_digest: Option<String>,
     pub previous_version: Option<String>,
     pub previous_build: Option<String>,
+    pub storage_metadata_ready: bool,
+    pub storage_metadata_generated_at: Option<String>,
+    pub storage_cleanup_block_reason: Option<String>,
+    pub managed_repositories: Vec<String>,
+    pub protected_image_refs: Vec<ProtectedImageRef>,
 }

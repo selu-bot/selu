@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE agent_package_revisions\n             SET state = 'uninstalled', retain_until = datetime('now', '+14 days'),\n                 package_path = ?, updated_at = datetime('now')\n             WHERE agent_id = ? AND state = 'current'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "63185856cbd79759b3c09c2e8b216026cb1fd93ddf9c9c52e7bdc92bc131586d"
+}

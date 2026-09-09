@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT bootstrap_status, blocked_reason\n             FROM docker_storage_state WHERE id = 'global'",
+  "describe": {
+    "columns": [
+      {
+        "name": "bootstrap_status",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_storage_state",
+            "name": "bootstrap_status"
+          }
+        }
+      },
+      {
+        "name": "blocked_reason",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "docker_storage_state",
+            "name": "blocked_reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "1fe3ee04e746e3ddc939be3eadbc477056646528ff9c477dafc862f84cbe0422"
+}

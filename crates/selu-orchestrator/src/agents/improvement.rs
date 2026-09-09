@@ -501,20 +501,6 @@ pub async fn reset_all(db: &SqlitePool, agent_id: &str, user_id: &str) -> Result
     Ok(())
 }
 
-pub async fn delete_all_for_agent(db: &SqlitePool, agent_id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM turn_signals WHERE agent_id = ?")
-        .bind(agent_id)
-        .execute(db)
-        .await?;
-    sqlx::query("DELETE FROM agent_insights WHERE agent_id = ?")
-        .bind(agent_id)
-        .execute(db)
-        .await?;
-
-    debug!(agent_id = %agent_id, "Deleted behavioral lessons for agent");
-    Ok(())
-}
-
 /// Record a completed turn and reflect after each batch of five turns.
 pub async fn process_turn_signal(
     db: &SqlitePool,

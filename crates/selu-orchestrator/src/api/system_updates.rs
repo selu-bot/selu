@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use axum::{
     Json, Router,
     extract::State,
@@ -25,6 +27,14 @@ pub fn router() -> Router<AppState> {
         .route("/api/v1/system-updates/apply", post(apply))
         .route("/api/v1/system-updates/rollback", post(rollback))
         .route(
+            "/api/v1/system-updates/storage",
+            get(storage).route_layer(axum::middleware::from_fn(no_store)),
+        )
+        .route(
+            "/api/v1/system-updates/storage/cleanup",
+            post(cleanup_storage),
+        )
+        .route(
             "/api/v1/system-updates/status",
             get(status).route_layer(axum::middleware::from_fn(no_store)),
         )
@@ -48,6 +58,11 @@ struct UpdateSettingsRequest {
     public_origin: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct CleanupStorageRequest {
+    image_ids: Vec<String>,
+}
+
 #[derive(Debug, Serialize)]
 struct ActionResponse {
     ok: bool,
@@ -61,15 +76,18 @@ struct ErrorEnvelope {
 
 #[derive(Debug, Serialize)]
 struct ErrorBody {
-    code: &'static str,
+    code: String,
     message: &'static str,
 }
 
-fn error(status: StatusCode, code: &'static str, message: &'static str) -> Response {
+fn error(status: StatusCode, code: impl Into<String>, message: &'static str) -> Response {
     (
         status,
         Json(ErrorEnvelope {
-            error: ErrorBody { code, message },
+            error: ErrorBody {
+                code: code.into(),
+                message,
+            },
         }),
     )
         .into_response()
@@ -184,6 +202,58 @@ async fn rollback(_admin: ApiAdmin, State(state): State<AppState>) -> Response {
                 StatusCode::BAD_REQUEST,
                 "update_rollback_failed",
                 "The previous version could not be restored.",
+            )
+        }
+    }
+}
+
+async fn storage(_admin: ApiAdmin, State(state): State<AppState>) -> Response {
+    match state.docker_storage.preview().await {
+        Ok(report) => Json(report).into_response(),
+        Err(service_error) => {
+            tracing::error!(error = %service_error, "Failed to inspect managed Docker storage");
+            error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "storage_status_unavailable",
+                "Docker storage could not be checked right now.",
+            )
+        }
+    }
+}
+
+async fn cleanup_storage(
+    _admin: ApiAdmin,
+    State(state): State<AppState>,
+    Json(request): Json<CleanupStorageRequest>,
+) -> Response {
+    let confirmed: HashSet<String> = request.image_ids.iter().cloned().collect();
+    if confirmed.len() != request.image_ids.len() {
+        return error(
+            StatusCode::BAD_REQUEST,
+            "storage_cleanup_candidates_invalid",
+            "The cleanup preview was invalid. Review the current images and try again.",
+        );
+    }
+
+    match state.docker_storage.cleanup(false, Some(&confirmed)).await {
+        Ok(report)
+            if !report.blocked_code.is_empty()
+                && report.reclaimed_image_count.unwrap_or_default() == 0 =>
+        {
+            let code = report.blocked_code;
+            error(
+                StatusCode::CONFLICT,
+                code,
+                "Docker cleanup is paused while Selu checks that every needed image is protected.",
+            )
+        }
+        Ok(report) => Json(report).into_response(),
+        Err(service_error) => {
+            tracing::error!(error = %service_error, "Managed Docker storage cleanup failed");
+            error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "storage_cleanup_failed",
+                "Docker storage could not be cleaned up right now. Nothing else was removed.",
             )
         }
     }

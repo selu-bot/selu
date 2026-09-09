@@ -19,8 +19,8 @@ use crate::agents::{
     model,
     runtime_limits::{self, AutonomyLevel},
 };
-use crate::capabilities::discovery::sync_dynamic_tools_for_agent;
-use crate::capabilities::manifest::CredentialScope;
+use crate::capabilities::discovery::sync_dynamic_tools_for_capability;
+use crate::capabilities::manifest::{CredentialScope, ToolSource};
 use crate::permissions::{network_policy, tool_policy};
 use crate::state::{AgentUpdateJob, AppState};
 
@@ -103,6 +103,7 @@ pub async fn install_agent(
         &docker,
         &state.capabilities,
         &state.credentials,
+        &state.docker_storage,
     )
     .await
     .map_err(ServiceError::operation)?;
@@ -119,6 +120,19 @@ pub async fn complete_setup(
     agent_id: &str,
     values: &HashMap<String, String>,
 ) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
+
+    // Setup is fail-closed: a retry or a discovery error must never leave a
+    // previously loaded definition active while setup_complete says otherwise.
+    sqlx::query("UPDATE agents SET setup_complete = 0 WHERE id = ?")
+        .bind(agent_id)
+        .execute(&state.db)
+        .await?;
+    let current = state.agents.load();
+    let mut inactive = (**current).clone();
+    inactive.remove(agent_id);
+    state.agents.store(std::sync::Arc::new(inactive));
+
     let path = std::path::Path::new(&state.config.installed_agents_dir).join(agent_id);
     let definition = crate::agents::loader::load_one(&path)
         .await
@@ -158,14 +172,25 @@ pub async fn complete_setup(
         }
     }
 
-    sync_dynamic_tools_for_agent(
-        &state.db,
-        &state.capabilities,
-        &state.credentials,
-        agent_id,
-        &definition.capability_manifests,
-    )
-    .await;
+    // Unlike startup synchronization, setup discovery is not best-effort. The
+    // agent remains absent from the active map and setup_complete remains false
+    // until every runnable dynamic capability has discovered valid tools.
+    for (capability_id, manifest) in &definition.capability_manifests {
+        if manifest.tool_source != ToolSource::Dynamic {
+            continue;
+        }
+        sync_dynamic_tools_for_capability(
+            &state.db,
+            &state.capabilities,
+            &state.credentials,
+            agent_id,
+            capability_id,
+            manifest,
+            &definition.capability_manifests,
+        )
+        .await
+        .map_err(ServiceError::operation)?;
+    }
 
     let mut policies = Vec::new();
     for key in values
@@ -332,6 +357,7 @@ pub async fn set_automation_enabled(
     agent_id: &str,
     enabled: bool,
 ) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     let agent = {
         let agents = state.agents.load();
         agents
@@ -476,6 +502,7 @@ pub async fn set_auto_update(
     agent_id: &str,
     enabled: bool,
 ) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     let result = sqlx::query("UPDATE agents SET auto_update = ? WHERE id = ? AND is_bundled = 0")
         .bind(i64::from(enabled))
         .bind(agent_id)
@@ -618,6 +645,7 @@ fn validate_credential_target(
     credential_name: &str,
     scope: &str,
 ) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     let agents = state.agents.load();
     let agent = agents.get(agent_id).ok_or(ServiceError::AgentNotFound)?;
     let manifest = agent
@@ -698,6 +726,7 @@ pub async fn remove_storage(
     agent_id: &str,
     entry_id: &str,
 ) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     let result = sqlx::query("DELETE FROM agent_storage WHERE id = ? AND agent_id = ?")
         .bind(entry_id)
         .bind(agent_id)
@@ -714,6 +743,7 @@ pub async fn remove_memory(
     agent_id: &str,
     memory_id: &str,
 ) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     let result = sqlx::query("DELETE FROM agent_memories WHERE id = ? AND agent_id = ?")
         .bind(memory_id)
         .bind(agent_id)
@@ -730,6 +760,7 @@ pub async fn download_capability_image(
     agent_id: &str,
     capability_id: &str,
 ) -> Result<ImageDownloadOutcome, ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     let image = {
         let agents = state.agents.load();
         let agent = agents.get(agent_id).ok_or(ServiceError::AgentNotFound)?;
@@ -740,7 +771,11 @@ pub async fn download_capability_image(
             .image
             .clone()
     };
-    match state.capabilities.ensure_image_available(&image).await {
+    match state
+        .capabilities
+        .ensure_image_available(agent_id, &image)
+        .await
+    {
         Ok(true) => Ok(ImageDownloadOutcome::Downloaded),
         Ok(false) => Ok(ImageDownloadOutcome::AlreadyAvailable),
         Err(error) => Err(ServiceError::operation(error)),
@@ -754,6 +789,7 @@ pub async fn update_improvement(
     action: &str,
     insight_id: Option<&str>,
 ) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     if action == "reset" {
         return crate::agents::improvement::reset_all(db, agent_id, user_id)
             .await
@@ -782,6 +818,7 @@ pub async fn submit_rating(
     agent_id: &str,
     rating: u8,
 ) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     if !(1..=5).contains(&rating) {
         return Err(ServiceError::Validation("rating must be between 1 and 5"));
     }
@@ -825,6 +862,7 @@ pub async fn uninstall_agent(state: &AppState, agent_id: &str) -> Result<(), Ser
         &state.db,
         &state.agents,
         &state.capabilities,
+        &state.docker_storage,
     )
     .await
     .map_err(ServiceError::operation)
@@ -838,6 +876,7 @@ pub async fn check_updates(state: &AppState) -> Result<usize, ServiceError> {
         &state.agents,
         &state.capabilities,
         &state.credentials,
+        &state.docker_storage,
     )
     .await
     .map_err(ServiceError::operation)
@@ -911,8 +950,15 @@ pub async fn update_status(
 }
 
 fn parse_marketplace_entry(entry_json: &str) -> Result<MarketplaceEntry, ServiceError> {
-    serde_json::from_str(entry_json)
-        .map_err(|_| ServiceError::Validation("invalid marketplace entry"))
+    let entry: MarketplaceEntry = serde_json::from_str(entry_json)
+        .map_err(|_| ServiceError::Validation("invalid marketplace entry"))?;
+    ensure_safe_agent_id(&entry.id)?;
+    Ok(entry)
+}
+
+fn ensure_safe_agent_id(agent_id: &str) -> Result<(), ServiceError> {
+    marketplace::validate_agent_id(agent_id)
+        .map_err(|_| ServiceError::Validation("invalid agent id"))
 }
 
 fn validate_model(provider_id: &str, model_id: &str, temperature: f32) -> Result<(), ServiceError> {
@@ -928,6 +974,7 @@ fn validate_model(provider_id: &str, model_id: &str, temperature: f32) -> Result
 }
 
 async fn ensure_agent_exists(db: &SqlitePool, agent_id: &str) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM agents WHERE id = ? LIMIT 1")
         .bind(agent_id)
         .fetch_optional(db)
@@ -945,6 +992,7 @@ fn ensure_capability_exists(
     agent_id: &str,
     capability_id: &str,
 ) -> Result<(), ServiceError> {
+    ensure_safe_agent_id(agent_id)?;
     let agents = state.agents.load();
     let agent = agents.get(agent_id).ok_or(ServiceError::AgentNotFound)?;
     if agent.capability_manifests.contains_key(capability_id) {
@@ -1018,6 +1066,7 @@ async fn run_update_job(state: AppState, entry: MarketplaceEntry, job_id: String
         &docker,
         &state.capabilities,
         &state.credentials,
+        &state.docker_storage,
         Some(progress_tx),
     )
     .await;

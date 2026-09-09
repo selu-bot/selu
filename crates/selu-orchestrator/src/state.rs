@@ -64,6 +64,8 @@ pub struct AppState {
     pub pending_approvals: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
     /// In-flight and recent agent update jobs keyed by update job id.
     pub agent_update_jobs: Arc<Mutex<HashMap<String, AgentUpdateJob>>>,
+    /// Durable managed-image registry and shared Docker maintenance leases.
+    pub docker_storage: crate::services::docker_storage::DockerStorage,
     /// Capability engine: manages Docker container lifecycle + gRPC dispatch
     pub capabilities: CapabilityEngine,
     /// Channel-agnostic outbound message registry.
@@ -88,6 +90,7 @@ impl AppState {
         db: SqlitePool,
         config: AppConfig,
         agents: HashMap<String, AgentDefinition>,
+        docker_storage: crate::services::docker_storage::DockerStorage,
         capabilities: CapabilityEngine,
         channel_registry: ChannelRegistry,
         credentials: CredentialStore,
@@ -106,6 +109,7 @@ impl AppState {
             conversation_confirmation_owners: Arc::new(Mutex::new(HashMap::new())),
             pending_approvals: Arc::new(Mutex::new(HashMap::new())),
             agent_update_jobs: Arc::new(Mutex::new(HashMap::new())),
+            docker_storage,
             capabilities,
             channel_registry,
             credentials,

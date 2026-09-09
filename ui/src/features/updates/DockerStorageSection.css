@@ -1,0 +1,264 @@
+.docker-storage-summary {
+  display: grid;
+  gap: 18px;
+}
+
+.docker-storage-metrics,
+.docker-storage-preview-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.docker-storage-metric {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--canvas-elevated);
+}
+
+.docker-storage-metric.is-emphasis {
+  border-color: color-mix(in srgb, var(--coral) 34%, var(--line));
+  background: color-mix(in srgb, var(--coral) 6%, var(--panel));
+}
+
+.docker-storage-metric dt {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 680;
+  line-height: 1.4;
+}
+
+.docker-storage-metric dd {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: clamp(20px, 2.5vw, 27px);
+  font-weight: 780;
+  letter-spacing: -.04em;
+}
+
+.docker-storage-metric small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 10.5px;
+}
+
+.docker-storage-toolbar,
+.docker-storage-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.docker-storage-status {
+  min-width: 0;
+}
+
+.docker-storage-status p,
+.docker-storage-error p {
+  max-width: 650px;
+  margin: 7px 0 0;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.docker-storage-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.docker-storage-loading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  min-height: 94px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.docker-storage-loading > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--coral-deep);
+}
+
+.docker-storage-loading .selu-ui-skeleton {
+  grid-column: 2;
+}
+
+.docker-storage-error {
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--coral) 35%, var(--line));
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--coral) 6%, var(--panel));
+}
+
+.docker-storage-error strong {
+  font-size: 12.5px;
+}
+
+.docker-storage-preview {
+  display: grid;
+  gap: 24px;
+}
+
+.docker-storage-preview-blocked {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--coral) 32%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--coral) 6%, var(--panel));
+}
+
+.docker-storage-preview-blocked strong {
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.docker-storage-preview-blocked p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.docker-storage-preview section {
+  display: grid;
+  gap: 12px;
+}
+
+.docker-storage-preview h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: -.01em;
+}
+
+.docker-storage-preview-totals {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.docker-storage-preview-totals .docker-storage-metric {
+  padding: 12px;
+  border-radius: 13px;
+}
+
+.docker-storage-preview-totals .docker-storage-metric dd {
+  font-size: 17px;
+}
+
+.docker-storage-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.docker-storage-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.docker-storage-entry:first-child {
+  padding-top: 4px;
+}
+
+.docker-storage-entry:last-child {
+  padding-bottom: 4px;
+  border-bottom: 0;
+}
+
+.docker-storage-entry-copy {
+  min-width: 0;
+}
+
+.docker-storage-entry-copy strong,
+.docker-storage-entry-copy small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.docker-storage-entry-copy strong {
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.docker-storage-entry-copy small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.docker-storage-entry-meta {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 680;
+}
+
+@media (max-width: 640px) {
+  .docker-storage-toolbar,
+  .docker-storage-error {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .docker-storage-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .docker-storage-actions .selu-ui-button,
+  .docker-storage-error .selu-ui-button {
+    width: 100%;
+  }
+
+  .docker-storage-preview-totals,
+  .docker-storage-preview-blocked {
+    grid-template-columns: 1fr;
+  }
+
+  .docker-storage-preview-blocked p {
+    grid-column: 1;
+  }
+
+  .docker-storage-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .docker-storage-entry-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 420px) {
+  .docker-storage-metrics {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT repository AS \"repository!\"\n         FROM managed_docker_image_repositories WHERE image_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "repository!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_docker_image_repositories",
+            "name": "repository"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6cb278514770ed36f65d3a70173bf3ccbcbdf73b380b9af640ad7aa9423cbb34"
+}

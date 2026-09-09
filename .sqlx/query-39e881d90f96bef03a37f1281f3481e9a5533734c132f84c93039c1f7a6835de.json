@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, package_path FROM agent_package_revisions\n             WHERE state <> 'current' AND retain_until IS NOT NULL\n               AND retain_until <= datetime('now')",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "agent_package_revisions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "package_path",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "agent_package_revisions",
+            "name": "package_path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "39e881d90f96bef03a37f1281f3481e9a5533734c132f84c93039c1f7a6835de"
+}

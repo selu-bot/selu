@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_docker_image_refs\n             (id, agent_revision_id, image_id, image_ref, repo_digest)\n             VALUES (?, ?, ?, ?, ?)\n             ON CONFLICT(agent_revision_id, image_ref, image_id) DO UPDATE SET\n                 repo_digest = excluded.repo_digest,\n                 updated_at = datetime('now')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "9e48c06c75029e96048fdeafdeca5743ca7c7f4be48fe0f606ce09729ee7c93c"
+}

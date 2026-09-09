@@ -2972,3 +2972,38 @@ entries:
       Empty ordinary conversations stay provisional and are omitted from visible
       history until their first message is durably accepted. History is retained; no
       automatic deletion policy was added.
+
+  - id: 2026-09-08-safe-docker-image-cleanup
+    date: "2026-09-08"
+    pr:
+    area: api
+    type: added
+    audience: both
+    summary: "Adds safe, retention-aware cleanup for Selu-managed Docker images"
+    affected_files:
+      - crates/selu-orchestrator/src/api/system_updates.rs
+      - crates/selu-orchestrator/src/services/docker_storage.rs
+      - crates/selu-orchestrator/src/agents/marketplace.rs
+      - crates/selu-orchestrator/src/capabilities/runner.rs
+      - crates/selu-orchestrator/migrations/0065_docker_image_retention.sql
+      - crates/selu-orchestrator/migrations/0066_agent_package_activation_journal.sql
+    docs_sections:
+      - user-guide/self-hosting/docker
+      - user-guide/self-hosting/updating
+      - reference/api
+    details: |
+      Administrators can preview managed, protected, and reclaimable Docker image
+      storage with GET /api/v1/system-updates/storage and trigger conservative
+      cleanup with POST /api/v1/system-updates/storage/cleanup. Cleanup removes
+      only exact immutable image IDs recorded by Selu, never uses global prune,
+      never forces removal, and protects images used by every running or stopped
+      container. Current agent images are retained indefinitely; one previous
+      agent package and image revision is retained for 30 days, uninstall
+      tombstones for 14 days, and staged or failed images for 7 days. Automatic
+      daily cleanup runs only after the installed-agent registry bootstraps
+      successfully and otherwise fails closed with a plain-language blocked reason.
+
+      Agent package updates now journal every activation rename before changing
+      the filesystem. On restart Selu restores the previous active package and
+      revision state before loading installed agents; ambiguous or escaped paths
+      stop startup with recovery context instead of loading inconsistent code.

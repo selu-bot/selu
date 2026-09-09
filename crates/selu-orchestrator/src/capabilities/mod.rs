@@ -78,13 +78,13 @@ impl CapabilityEngine {
     }
 
     /// Return whether a capability image is present in Docker's local image store.
-    pub async fn is_image_available(&self, image: &str) -> Result<bool> {
-        self.runner.is_image_available(image).await
+    pub async fn is_image_available(&self, agent_id: &str, image: &str) -> Result<bool> {
+        self.runner.is_image_available(agent_id, image).await
     }
 
     /// Download a missing capability image. Returns whether a download was needed.
-    pub async fn ensure_image_available(&self, image: &str) -> Result<bool> {
-        self.runner.ensure_image_available(image).await
+    pub async fn ensure_image_available(&self, agent_id: &str, image: &str) -> Result<bool> {
+        self.runner.ensure_image_available(agent_id, image).await
     }
 
     /// Invoke a tool by name. Starts the capability container if not already running.
@@ -173,12 +173,14 @@ impl CapabilityEngine {
 
         let client = self
             .get_or_start(
+                agent_id,
                 manifests,
                 &cap_id,
                 &key,
                 session_for_start,
                 user_for_start,
                 &egress_policy,
+                false,
             )
             .await?;
 
@@ -195,7 +197,16 @@ impl CapabilityEngine {
                     warn!(capability = %cap_id, "Shared container may have crashed, retrying with fresh container");
                     self.remove_active(&key).await;
                     let client = self
-                        .get_or_start(manifests, &cap_id, &key, None, None, &egress_policy)
+                        .get_or_start(
+                            agent_id,
+                            manifests,
+                            &cap_id,
+                            &key,
+                            None,
+                            None,
+                            &egress_policy,
+                            false,
+                        )
                         .await?;
                     return client
                         .invoke(
@@ -218,6 +229,7 @@ impl CapabilityEngine {
     /// (e.g. dynamic tool discovery) and bypasses tool-name resolution.
     pub async fn invoke_direct(
         &self,
+        agent_id: &str,
         manifests: &HashMap<String, CapabilityManifest>,
         capability_id: &str,
         tool_name: &str,
@@ -225,6 +237,59 @@ impl CapabilityEngine {
         credentials: Value,
         session_id: &str,
         thread_id: &str,
+    ) -> Result<String> {
+        self.invoke_direct_inner(
+            agent_id,
+            manifests,
+            capability_id,
+            tool_name,
+            args,
+            credentials,
+            session_id,
+            thread_id,
+            false,
+        )
+        .await
+    }
+
+    /// Invoke a control-plane tool while the caller already holds the shared
+    /// Docker maintenance lease.
+    pub async fn invoke_direct_with_maintenance_lease(
+        &self,
+        agent_id: &str,
+        manifests: &HashMap<String, CapabilityManifest>,
+        capability_id: &str,
+        tool_name: &str,
+        args: Value,
+        credentials: Value,
+        session_id: &str,
+        thread_id: &str,
+    ) -> Result<String> {
+        self.invoke_direct_inner(
+            agent_id,
+            manifests,
+            capability_id,
+            tool_name,
+            args,
+            credentials,
+            session_id,
+            thread_id,
+            true,
+        )
+        .await
+    }
+
+    async fn invoke_direct_inner(
+        &self,
+        agent_id: &str,
+        manifests: &HashMap<String, CapabilityManifest>,
+        capability_id: &str,
+        tool_name: &str,
+        args: Value,
+        credentials: Value,
+        session_id: &str,
+        thread_id: &str,
+        maintenance_lease_held: bool,
     ) -> Result<String> {
         if !manifests.contains_key(capability_id) {
             return Err(anyhow!("Unknown capability '{}'", capability_id));
@@ -238,17 +303,19 @@ impl CapabilityEngine {
             allowed_hosts: manifest.network.hosts.clone(),
             denied_hosts: Vec::new(),
         };
-        // invoke_direct is used for internal control-plane flows (e.g. discovery)
-        // which create ephemeral sessions — always use exclusive keying here.
+        // Control-plane flows create ephemeral sessions, so they always use
+        // exclusive keying even if the manifest normally enables sharing.
         let key = format!("{}::{}", session_id, capability_id);
         let client = self
             .get_or_start(
+                agent_id,
                 manifests,
                 capability_id,
                 &key,
                 Some(session_id),
                 None, // no user_id for internal flows
                 &egress_policy,
+                maintenance_lease_held,
             )
             .await?;
         client
@@ -288,12 +355,14 @@ impl CapabilityEngine {
         let user_for_start = if shared { None } else { Some(user_id) };
         let client = self
             .get_or_start(
+                agent_id,
                 manifests,
                 capability_id,
                 &key,
                 session_for_start,
                 user_for_start,
                 &egress_policy,
+                false,
             )
             .await?;
         client
@@ -331,12 +400,14 @@ impl CapabilityEngine {
         let user_for_start = if shared { None } else { Some(user_id) };
         let client = self
             .get_or_start(
+                agent_id,
                 manifests,
                 capability_id,
                 &key,
                 session_for_start,
                 user_for_start,
                 &egress_policy,
+                false,
             )
             .await?;
         client
@@ -484,13 +555,33 @@ impl CapabilityEngine {
 
     async fn get_or_start(
         &self,
+        agent_id: &str,
         manifests: &HashMap<String, CapabilityManifest>,
         cap_id: &str,
         key: &str,
         session_for_start: Option<&str>,
         user_id: Option<&str>,
         egress_policy: &crate::capabilities::egress_proxy::ContainerEgressPolicy,
+        maintenance_lease_held: bool,
     ) -> Result<CapabilityGrpcClient> {
+        let manifest = manifests
+            .get(cap_id)
+            .ok_or_else(|| anyhow!("Unknown capability '{}'", cap_id))?;
+
+        // Normal invocations acquire exactly one shared lease before observing
+        // active state. Staged discovery already runs under the caller's
+        // exclusive lease and must not recursively acquire this fair RwLock.
+        let _maintenance_lease = if maintenance_lease_held {
+            None
+        } else {
+            Some(self.runner.shared_maintenance_lease().await)
+        };
+        if !maintenance_lease_held {
+            self.runner
+                .validate_current_manifest(agent_id, manifest)
+                .await?;
+        }
+
         {
             let active = self.active.read().await;
             if let Some(ac) = active.get(key) {
@@ -504,15 +595,27 @@ impl CapabilityEngine {
             }
         }
 
-        let manifest = manifests
-            .get(cap_id)
-            .ok_or_else(|| anyhow!("Unknown capability '{}'", cap_id))?;
-
         debug!(capability = %cap_id, key = %key, "Starting capability container");
-        let running = self
-            .runner
-            .start(manifest, session_for_start, user_id, egress_policy)
-            .await?;
+        let running = if maintenance_lease_held {
+            self.runner
+                .start_staged_with_maintenance_lease(
+                    manifest,
+                    session_for_start,
+                    user_id,
+                    egress_policy,
+                )
+                .await?
+        } else {
+            self.runner
+                .start_with_maintenance_lease(
+                    agent_id,
+                    manifest,
+                    session_for_start,
+                    user_id,
+                    egress_policy,
+                )
+                .await?
+        };
         let client = CapabilityGrpcClient::connect(&running.grpc_addr, cap_id).await?;
 
         let mut active = self.active.write().await;
@@ -529,6 +632,8 @@ impl CapabilityEngine {
                 client: client.clone(),
             },
         );
+        drop(active);
+        drop(_maintenance_lease);
         Ok(client)
     }
 

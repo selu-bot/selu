@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_docker_images\n             (image_id, size_bytes, display_name)\n             VALUES (?, ?, ?)\n             ON CONFLICT(image_id) DO UPDATE SET\n                 size_bytes = excluded.size_bytes,\n                 display_name = excluded.display_name,\n                 last_seen_at = datetime('now')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "0038998c44ede778b1f94d801ee738adb838152b64fb9dbdcd4a0fb8405732ef"
+}

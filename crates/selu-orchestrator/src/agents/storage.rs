@@ -118,16 +118,6 @@ pub async fn list(
     Ok((map, truncated))
 }
 
-/// Delete all storage for a given agent (called on agent uninstall).
-pub async fn delete_all_for_agent(db: &SqlitePool, agent_id: &str) -> Result<()> {
-    sqlx::query!("DELETE FROM agent_storage WHERE agent_id = ?", agent_id)
-        .execute(db)
-        .await?;
-
-    debug!(agent_id = %agent_id, "Agent storage: deleted all entries for agent");
-    Ok(())
-}
-
 // ── Built-in tool specs ──────────────────────────────────────────────────────
 
 /// Tool spec for `store_get` — retrieve a stored value by key.
@@ -432,23 +422,5 @@ mod tests {
         let (entries, truncated) = list(&db, "agent1", "user1").await.unwrap();
         assert_eq!(entries.len(), 100);
         assert!(truncated);
-    }
-
-    #[tokio::test]
-    async fn test_delete_all_for_agent() {
-        let db = test_db().await;
-        set(&db, "agent1", "user1", "k1", "v1").await.unwrap();
-        set(&db, "agent1", "user2", "k2", "v2").await.unwrap();
-        set(&db, "agent2", "user1", "k3", "v3").await.unwrap();
-
-        delete_all_for_agent(&db, "agent1").await.unwrap();
-
-        assert_eq!(get(&db, "agent1", "user1", "k1").await.unwrap(), None);
-        assert_eq!(get(&db, "agent1", "user2", "k2").await.unwrap(), None);
-        // agent2 data should be untouched
-        assert_eq!(
-            get(&db, "agent2", "user1", "k3").await.unwrap(),
-            Some("v3".to_string())
-        );
     }
 }

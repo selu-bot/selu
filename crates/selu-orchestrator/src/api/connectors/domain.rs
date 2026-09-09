@@ -378,6 +378,7 @@ pub async fn create_whatsapp(
         .context("create updater client for WhatsApp setup")
         .map_err(ConnectorError::external)?;
     let channel = crate::services::system_updates::release_channel(state).await;
+    let maintenance_lease = state.docker_storage.shared_lease().await;
     let ensure = client
         .ensure_whatsapp_bridge(&SidecarEnsureWhatsappBridgeRequest {
             request_id: Uuid::new_v4().to_string(),
@@ -389,6 +390,7 @@ pub async fn create_whatsapp(
         .await
         .context("start WhatsApp bridge")
         .map_err(ConnectorError::external)?;
+    drop(maintenance_lease);
     if !ensure.accepted {
         return Err(ConnectorError::external(anyhow!(
             "{}",
@@ -809,6 +811,7 @@ pub async fn ensure_whatsapp_bridge_for_active_pipe(state: &AppState) {
             return;
         }
     };
+    let _maintenance_lease = state.docker_storage.shared_lease().await;
     match client
         .ensure_whatsapp_bridge(&SidecarEnsureWhatsappBridgeRequest {
             request_id: Uuid::new_v4().to_string(),
@@ -842,10 +845,11 @@ pub async fn stop_bridge_if_no_active_connector(state: &AppState) -> Result<()> 
 }
 
 async fn stop_whatsapp_bridge(
-    _state: &AppState,
+    state: &AppState,
     client: &SidecarUpdaterClient,
     channel: &str,
 ) -> Result<()> {
+    let _maintenance_lease = state.docker_storage.shared_lease().await;
     let response = client
         .stop_whatsapp_bridge(&SidecarStopWhatsappBridgeRequest {
             request_id: Uuid::new_v4().to_string(),

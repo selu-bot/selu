@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_docker_system_refs\n             SET state = 'superseded', retain_until = ?,\n                 updated_at = datetime('now')\n             WHERE state IN ('current', 'previous')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "96a9bd25fe42eb9221be05a5e624611521f32e482cdcc286dfecf83127c0f2d9"
+}

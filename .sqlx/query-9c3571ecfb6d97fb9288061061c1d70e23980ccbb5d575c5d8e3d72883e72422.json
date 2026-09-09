@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_docker_image_refs SET agent_revision_id = ?,\n                     updated_at = datetime('now')\n                 WHERE agent_revision_id = ? AND image_ref = ? AND image_id <> ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "9c3571ecfb6d97fb9288061061c1d70e23980ccbb5d575c5d8e3d72883e72422"
+}
