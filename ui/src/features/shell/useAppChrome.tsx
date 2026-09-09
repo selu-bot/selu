@@ -6,7 +6,7 @@ import { AppNavigation } from '../../components/AppNavigation'
 import { getLanguage, setLanguage, type Language } from '../../i18n'
 import { useStoredBoolean, useTheme } from '../../shared/preferences'
 
-export type AppSection = 'home' | 'conversations' | 'automations' | 'agents' | 'connectors' | 'updates' | 'connections' | 'about-you' | 'people' | 'feedback' | 'settings'
+export type AppSection = 'home' | 'saved' | 'past' | 'conversations' | 'automations' | 'agents' | 'connectors' | 'updates' | 'connections' | 'about-you' | 'people' | 'feedback' | 'settings'
 
 export function useAppChrome(active: AppSection) {
   const cache = useQueryClient()

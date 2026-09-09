@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { QueryClient } from '@tanstack/react-query'
 import { createAppRouter, resolveAuthRedirect } from './app/router'
-import { startHomeConversation } from './features/home/HomePage'
-import { translations } from './i18n'
+import { formatDayHeading, isSameLocalDay, localDateKey, startHomeConversation } from './features/home/HomePage'
+import { setLanguage, translations } from './i18n'
 import { appPath, normalizeBasePath } from './shared/paths'
 import type { RetryableSend } from './shared/sendRetry'
 import { prefersReducedMotion } from './shared/transitions'
@@ -20,6 +20,8 @@ describe('routing', () => {
     ['/app/setup', '/app/setup'],
     ['/app/conversations', '/app/conversations'],
     ['/app/conversations/abc', '/app/conversations/$conversationId'],
+    ['/app/saved', '/app/saved'],
+    ['/app/past', '/app/past'],
     ['/app/automations', '/app/automations'],
     ['/app/connections', '/app/connections'],
     ['/app/about-you', '/app/about-you'],
@@ -122,6 +124,29 @@ describe('Home conversation handoff', () => {
       messageId: 'stable-message-id',
       photos: selectedPhotos,
     })
+  })
+})
+
+describe('Today timeline', () => {
+  it('groups activity by the viewer’s local calendar day', () => {
+    const reference = new Date(2026, 8, 8, 23, 30)
+    const sameDay = new Date(2026, 8, 8, 0, 5).toISOString()
+    const priorDay = new Date(2026, 8, 7, 23, 59).toISOString()
+    expect(localDateKey(reference)).toBe('2026-09-08')
+    expect(isSameLocalDay(sameDay, reference)).toBe(true)
+    expect(isSameLocalDay(priorDay, reference)).toBe(false)
+  })
+
+  it('formats day headings in Selu’s selected language', () => {
+    const date = new Date(2026, 8, 9, 12)
+    try {
+      setLanguage('de')
+      expect(formatDayHeading(date)).toContain('Mittwoch')
+      setLanguage('en')
+      expect(formatDayHeading(date)).toContain('Wednesday')
+    } finally {
+      setLanguage('en')
+    }
   })
 })
 

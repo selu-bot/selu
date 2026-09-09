@@ -146,9 +146,14 @@ pub struct ConversationSummary {
     pub title: Option<String>,
     pub status: String,
     pub kind: String,
+    pub schedule_id: Option<String>,
     pub created_at: String,
     pub last_activity_at: String,
     pub active_run_id: Option<String>,
+    pub saved_at: Option<String>,
+    pub can_save: bool,
+    pub preview: Option<String>,
+    pub message_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -179,27 +184,45 @@ pub async fn list_conversations(
     user_id: &str,
     limit: i64,
     before: Option<&ListCursor>,
+    saved: Option<bool>,
 ) -> Result<ConversationPage> {
     let limit = limit.clamp(1, 100);
+    let saved_filter = saved.map(i64::from);
     // Fetch one extra row to learn whether an older page exists without a
-    // second COUNT query.
-    let rows = sqlx::query_as::<_, (String, String, String, Option<String>, String, String, String, String, Option<String>)>(
+    // second COUNT query. Empty conversations are provisional: they become
+    // visible only after the first message is accepted. Schedule threads stay
+    // visible because their lifecycle is owned by the automation executor.
+    let rows = sqlx::query_as::<_, (String, String, String, Option<String>, String, String, Option<String>, String, String, Option<String>, Option<String>, Option<String>, i64)>(
         r#"WITH ranked AS (
-               SELECT t.id, t.pipe_id, p.name, t.title, t.status, t.thread_kind, t.created_at,
+               SELECT t.id, t.pipe_id, p.name, t.title, t.status, t.thread_kind, t.schedule_id, t.created_at,
                       COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id = t.id), t.created_at) AS last_activity_at,
                       (SELECT r.id FROM conversation_runs r
                        WHERE r.thread_id = t.id AND r.status IN ('queued','running','waiting_for_approval','cancelling')
-                       ORDER BY r.created_at DESC LIMIT 1) AS active_run_id
+                       ORDER BY r.created_at DESC LIMIT 1) AS active_run_id,
+                      t.saved_at,
+                      (SELECT NULLIF(TRIM(m.content), '') FROM messages m
+                       WHERE m.thread_id = t.id AND m.role IN ('user','assistant') AND TRIM(m.content) <> ''
+                       ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
+                      (SELECT COUNT(*) FROM messages m
+                       WHERE m.thread_id = t.id AND m.role IN ('user','assistant') AND TRIM(m.content) <> '') AS message_count
                FROM threads t JOIN pipes p ON p.id = t.pipe_id
                WHERE t.user_id = ?
+                 AND (t.started_at IS NOT NULL OR t.thread_kind = 'schedule')
+                 AND (? IS NULL
+                      OR (? = 1 AND t.saved_at IS NOT NULL)
+                      OR (? = 0 AND t.saved_at IS NULL))
            )
-           SELECT id, pipe_id, name, title, status, thread_kind, created_at, last_activity_at, active_run_id
+           SELECT id, pipe_id, name, title, status, thread_kind, schedule_id, created_at,
+                  last_activity_at, active_run_id, saved_at, preview, message_count
            FROM ranked
            WHERE (? IS NULL OR last_activity_at < ? OR (last_activity_at = ? AND id < ?))
            ORDER BY last_activity_at DESC, id DESC
            LIMIT ?"#,
     )
     .bind(user_id)
+    .bind(saved_filter)
+    .bind(saved_filter)
+    .bind(saved_filter)
     .bind(before.map(|cursor| cursor.last_activity_at.as_str()))
     .bind(before.map(|cursor| cursor.last_activity_at.as_str()))
     .bind(before.map(|cursor| cursor.last_activity_at.as_str()))
@@ -217,10 +240,15 @@ pub async fn list_conversations(
             channel_name: r.2,
             title: r.3,
             status: r.4,
+            can_save: r.5 != "schedule",
             kind: r.5,
-            created_at: r.6,
-            last_activity_at: r.7,
-            active_run_id: r.8,
+            schedule_id: r.6,
+            created_at: r.7,
+            last_activity_at: r.8,
+            active_run_id: r.9,
+            saved_at: r.10,
+            preview: r.11,
+            message_count: r.12,
         })
         .collect();
     let next_cursor = if conversations.len() as i64 > limit {
@@ -312,12 +340,18 @@ pub async fn get_conversation(
     user_id: &str,
     conversation_id: &str,
 ) -> Result<Option<ConversationSummary>> {
-    let row = sqlx::query_as::<_, (String, String, String, Option<String>, String, String, String, Option<String>, Option<String>)>(
-        r#"SELECT t.id, t.pipe_id, p.name, t.title, t.status, t.thread_kind, t.created_at,
-                  (SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id = t.id) AS last_activity_at,
+    let row = sqlx::query_as::<_, (String, String, String, Option<String>, String, String, Option<String>, String, String, Option<String>, Option<String>, Option<String>, i64)>(
+        r#"SELECT t.id, t.pipe_id, p.name, t.title, t.status, t.thread_kind, t.schedule_id, t.created_at,
+                  COALESCE((SELECT MAX(m.created_at) FROM messages m WHERE m.thread_id = t.id), t.created_at) AS last_activity_at,
                   (SELECT r.id FROM conversation_runs r
                    WHERE r.thread_id = t.id AND r.status IN ('queued','running','waiting_for_approval','cancelling')
-                   ORDER BY r.created_at DESC LIMIT 1) AS active_run_id
+                   ORDER BY r.created_at DESC LIMIT 1) AS active_run_id,
+                  t.saved_at,
+                  (SELECT NULLIF(TRIM(m.content), '') FROM messages m
+                   WHERE m.thread_id = t.id AND m.role IN ('user','assistant') AND TRIM(m.content) <> ''
+                   ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
+                  (SELECT COUNT(*) FROM messages m
+                   WHERE m.thread_id = t.id AND m.role IN ('user','assistant') AND TRIM(m.content) <> '') AS message_count
            FROM threads t JOIN pipes p ON p.id = t.pipe_id
            WHERE t.user_id = ? AND t.id = ?"#,
     )
@@ -332,10 +366,15 @@ pub async fn get_conversation(
         channel_name: r.2,
         title: r.3,
         status: r.4,
+        can_save: r.5 != "schedule",
         kind: r.5,
-        created_at: r.6.clone(),
-        last_activity_at: r.7.unwrap_or(r.6),
-        active_run_id: r.8,
+        schedule_id: r.6,
+        created_at: r.7,
+        last_activity_at: r.8,
+        active_run_id: r.9,
+        saved_at: r.10,
+        preview: r.11,
+        message_count: r.12,
     }))
 }
 
@@ -460,8 +499,8 @@ mod tests {
         kind: &str,
     ) -> String {
         let id = uuid::Uuid::new_v4().to_string();
-        sqlx::query("INSERT INTO threads (id, pipe_id, session_id, user_id, status, thread_kind, created_at) VALUES (?, ?, 'session', ?, 'active', ?, ?)")
-            .bind(&id).bind(pipe_id).bind(user_id).bind(kind).bind(created_at).execute(db).await.unwrap();
+        sqlx::query("INSERT INTO threads (id, pipe_id, session_id, user_id, status, thread_kind, created_at, started_at) VALUES (?, ?, 'session', ?, 'active', ?, ?, ?)")
+            .bind(&id).bind(pipe_id).bind(user_id).bind(kind).bind(created_at).bind(created_at).execute(db).await.unwrap();
         id
     }
 
@@ -502,7 +541,7 @@ mod tests {
         let mut cursor = None;
         let mut pages = 0;
         loop {
-            let page = list_conversations(&db, &user_id, 2, cursor.as_ref())
+            let page = list_conversations(&db, &user_id, 2, cursor.as_ref(), None)
                 .await
                 .unwrap();
             assert!(page.conversations.len() <= 2);
@@ -527,6 +566,99 @@ mod tests {
         let first_two: Vec<_> = seen.iter().take(2).collect();
         assert!(first_two.contains(&&expected[4]) && first_two.contains(&&expected[5]));
         assert_eq!(seen.last().unwrap(), &expected[0]);
+    }
+
+    #[tokio::test]
+    async fn provisional_conversation_is_hidden_until_started() {
+        let db = setup_db().await;
+        let (user_id, pipe_id) = seed_user_and_pipe(&db).await;
+        let thread_id = seed_thread(
+            &db,
+            &user_id,
+            &pipe_id,
+            "2026-09-08 10:00:00",
+            "conversation",
+        )
+        .await;
+        sqlx::query("UPDATE threads SET started_at = NULL WHERE id = ?")
+            .bind(&thread_id)
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let hidden = list_conversations(&db, &user_id, 20, None, None)
+            .await
+            .unwrap();
+        assert!(!hidden.conversations.iter().any(|item| item.id == thread_id));
+
+        sqlx::query("UPDATE threads SET started_at = created_at WHERE id = ?")
+            .bind(&thread_id)
+            .execute(&db)
+            .await
+            .unwrap();
+        let visible = list_conversations(&db, &user_id, 20, None, None)
+            .await
+            .unwrap();
+        assert!(
+            visible
+                .conversations
+                .iter()
+                .any(|item| item.id == thread_id)
+        );
+    }
+
+    #[tokio::test]
+    async fn saved_filter_and_schedule_metadata_are_stable() {
+        let db = setup_db().await;
+        let (user_id, pipe_id) = seed_user_and_pipe(&db).await;
+        let normal = seed_thread(
+            &db,
+            &user_id,
+            &pipe_id,
+            "2026-09-08 10:00:00",
+            "conversation",
+        )
+        .await;
+        let scheduled =
+            seed_thread(&db, &user_id, &pipe_id, "2026-09-08 11:00:00", "schedule").await;
+        sqlx::query("UPDATE threads SET saved_at = '2026-09-08 12:00:00' WHERE id = ?")
+            .bind(&normal)
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE threads SET schedule_id = 'daily-briefing' WHERE id = ?")
+            .bind(&scheduled)
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO messages (id, pipe_id, session_id, thread_id, role, content, created_at) VALUES ('preview', ?, 'session', ?, 'assistant', 'Latest useful reply', '2026-09-08 12:00:00')")
+            .bind(&pipe_id)
+            .bind(&normal)
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let saved = list_conversations(&db, &user_id, 20, None, Some(true))
+            .await
+            .unwrap();
+        assert_eq!(saved.conversations.len(), 1);
+        assert_eq!(saved.conversations[0].id, normal);
+        assert_eq!(
+            saved.conversations[0].preview.as_deref(),
+            Some("Latest useful reply")
+        );
+        assert!(saved.conversations[0].can_save);
+
+        let all = list_conversations(&db, &user_id, 20, None, None)
+            .await
+            .unwrap();
+        let schedule = all
+            .conversations
+            .iter()
+            .find(|item| item.id == scheduled)
+            .unwrap();
+        assert_eq!(schedule.schedule_id.as_deref(), Some("daily-briefing"));
+        assert!(!schedule.can_save);
     }
 
     #[tokio::test]
