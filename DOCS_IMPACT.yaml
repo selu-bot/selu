@@ -2937,7 +2937,7 @@ entries:
       database directory.
   - id: 2026-09-09-today-with-selu
     date: "2026-09-09"
-    pr:
+    pr: 54
     area: ui
     type: changed
     audience: both
