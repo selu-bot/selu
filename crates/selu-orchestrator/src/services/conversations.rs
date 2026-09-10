@@ -226,6 +226,8 @@ pub async fn list_conversations(
 ) -> Result<ConversationPage> {
     let limit = limit.clamp(1, 100);
     let saved_filter = saved.map(i64::from);
+    let activity_upper_bound =
+        chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     // Fetch one extra row to learn whether an older page exists without a
     // second COUNT query. Empty conversations are provisional: they become
     // visible only after the first message is accepted. Schedule threads stay
@@ -254,7 +256,8 @@ pub async fn list_conversations(
            SELECT id, pipe_id, name, title, status, thread_kind, schedule_id, created_at,
                   last_activity_at, active_run_id, saved_at, preview, message_count
            FROM ranked
-           WHERE (? IS NULL OR julianday(last_activity_at) < julianday(?)
+           WHERE julianday(last_activity_at) <= julianday(?)
+             AND (? IS NULL OR julianday(last_activity_at) < julianday(?)
                   OR (julianday(last_activity_at) = julianday(?) AND id < ?))
            ORDER BY julianday(last_activity_at) DESC, id DESC
            LIMIT ?"#,
@@ -263,6 +266,7 @@ pub async fn list_conversations(
     .bind(saved_filter)
     .bind(saved_filter)
     .bind(saved_filter)
+    .bind(&activity_upper_bound)
     .bind(before.map(|cursor| cursor.last_activity_at.as_str()))
     .bind(before.map(|cursor| cursor.last_activity_at.as_str()))
     .bind(before.map(|cursor| cursor.last_activity_at.as_str()))
@@ -623,6 +627,52 @@ mod tests {
             .unwrap();
         assert_eq!(second.conversations.len(), 1);
         assert_eq!(second.conversations[0].id, oldest);
+        assert!(second.next_cursor.is_none());
+    }
+
+    #[tokio::test]
+    async fn future_activity_is_filtered_before_keyset_pagination() {
+        let db = setup_db().await;
+        let (user_id, pipe_id) = seed_user_and_pipe(&db).await;
+        let older = seed_thread(
+            &db,
+            &user_id,
+            &pipe_id,
+            "2026-09-08T08:00:00Z",
+            "conversation",
+        )
+        .await;
+        let newer = seed_thread(
+            &db,
+            &user_id,
+            &pipe_id,
+            "2026-09-08T09:00:00Z",
+            "conversation",
+        )
+        .await;
+        for hour in 0..3 {
+            seed_thread(
+                &db,
+                &user_id,
+                &pipe_id,
+                &format!("2099-01-01T0{hour}:00:00Z"),
+                "schedule",
+            )
+            .await;
+        }
+
+        let first = list_conversations(&db, &user_id, 1, None, None)
+            .await
+            .unwrap();
+        assert_eq!(first.conversations.len(), 1);
+        assert_eq!(first.conversations[0].id, newer);
+        assert!(first.conversations[0].last_activity_at.ends_with('Z'));
+
+        let second = list_conversations(&db, &user_id, 1, first.next_cursor.as_ref(), None)
+            .await
+            .unwrap();
+        assert_eq!(second.conversations.len(), 1);
+        assert_eq!(second.conversations[0].id, older);
         assert!(second.next_cursor.is_none());
     }
 

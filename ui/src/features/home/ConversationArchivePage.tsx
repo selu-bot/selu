@@ -6,7 +6,7 @@ import { SaveTopicDialog } from '../../components/ConversationActions'
 import { t, useLanguage } from '../../i18n'
 import { useNotices, useQueryErrorNotice } from '../../notices'
 import { dedupeConversations, replaceConversation, type ConversationPages } from '../../shared/conversations'
-import { dateKeyInTimeZone, isSameDayInTimeZone } from '../../shared/dateTime'
+import { dateKeyInTimeZone } from '../../shared/dateTime'
 import { AppPageShell } from '../shell/AppPageShell'
 import { formatDayHeading, TimelineEntry } from './HomePage'
 
@@ -36,7 +36,7 @@ function ConversationArchivePage({ mode }: { mode: 'saved' | 'past' }) {
   useQueryErrorNotice(session.error ?? conversations.error)
   const items = useMemo(() => {
     const all = dedupeConversations(conversations.data?.pages.flatMap((page) => page.conversations) ?? [])
-    const scoped = mode === 'past' ? all.filter((item) => !isSameDayInTimeZone(item.last_activity_at, Date.now(), timezone)) : all
+    const scoped = mode === 'past' ? pastConversationsBeforeToday(all, Date.now(), timezone) : all
     const term = query.trim().toLocaleLowerCase()
     return scoped.filter((item) => !term || [item.title, item.preview, item.channel_name].some((value) => value?.toLocaleLowerCase().includes(term)))
   }, [conversations.data, mode, query, timezone])
@@ -105,6 +105,15 @@ function ConversationArchivePage({ mode }: { mode: 'saved' | 'past' }) {
       onSave={(nextTitle) => save.mutate({ conversation: saveTarget, title: nextTitle })}
     />}
   </AppPageShell>
+}
+
+export function pastConversationsBeforeToday(items: Conversation[], reference: string | number | Date, timezone: string) {
+  const todayKey = dateKeyInTimeZone(reference, timezone)
+  if (!todayKey) return []
+  return items.filter((item) => {
+    const activityKey = dateKeyInTimeZone(item.last_activity_at, timezone)
+    return Boolean(activityKey) && activityKey < todayKey
+  })
 }
 
 function groupByDay(items: Conversation[], timezone: string) {

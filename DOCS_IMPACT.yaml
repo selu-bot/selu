@@ -28,6 +28,33 @@
 #     the user or developer experience.
 
 entries:
+  - id: 2026-09-10-recent-first-completed-timeline
+    date: "2026-09-10"
+    pr: 57
+    area: ui
+    type: changed
+    audience: users
+    summary: "Completed web timeline activity is now recent-first and excludes future items"
+    affected_files:
+      - crates/selu-orchestrator/src/services/conversations.rs
+      - ui/src/features/home/ConversationArchivePage.tsx
+      - ui/src/features/home/HomePage.tsx
+      - ui/src/style.css
+    docs_sections:
+      - user-guide/channels/web-chat
+    details: |
+      The web Today timeline and past-day history now present completed
+      conversations newest first. Conversations and automation cards dated in
+      the future are excluded from completed history, including before server
+      pagination limits are applied.
+
+      The Today view automatically follows paginated conversation results until
+      it crosses the user's local-day boundary, while Past Days contains only
+      earlier local dates. The wider Dayline presentation adds a fixed time
+      gutter, continuous activity rail, explicit text-backed states, visible
+      Past Days navigation, and persistent row affordances without changing the
+      accessible DOM order.
+
   - id: 2026-09-03-unified-conversation-api-foundation
     date: "2026-09-03"
     pr:
