@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowUp, Bookmark, CalendarClock, CalendarSearch, ChevronRight, Clock3, Menu, MessageCircle, Sparkles } from 'lucide-react'
-import { api, type Conversation, type Message, type PhotoUpload, type Snapshot } from '../../api'
+import { api, type Conversation, type ConversationPage, type Message, type PhotoUpload, type Snapshot } from '../../api'
 import { BrandMark } from '../../components/BrandMark'
 import { SaveTopicDialog } from '../../components/ConversationActions'
 import { PhotoPickerButton, PhotoPreviewStrip } from '../../components/Composer'
@@ -14,7 +14,6 @@ import { dedupeConversations, replaceConversation, type ConversationPages } from
 import { photoUploadPayload, preparePhotoFiles, type SelectedPhoto } from '../../shared/photoUploads'
 import { failedSendQueryKey, type RetryableSend } from '../../shared/sendRetry'
 import { navigateWithTransition } from '../../shared/transitions'
-import { automationsApi, type Automation } from '../automations/api'
 import { useAppChrome } from '../shell/useAppChrome'
 
 type StartConversationDependencies = {
@@ -71,25 +70,22 @@ export function HomePage() {
     initialPageParam: '',
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   })
-  const automations = useQuery({ queryKey: ['automations'], queryFn: automationsApi.list })
   const items = useMemo(
     () => dedupeConversations(conversations.data?.pages.flatMap((page) => page.conversations) ?? []),
     [conversations.data],
   )
   const timezone = session.data?.timezone ?? 'UTC'
   const completedToday = useMemo(
-    () => items
-      .filter((item) => !item.active_run_id && new Date(item.last_activity_at).valueOf() <= now && isSameDayInTimeZone(item.last_activity_at, now, timezone))
-      .sort(byOldestActivity),
+    () => completedTodayConversations(items, now, timezone),
     [items, now, timezone],
   )
-  const upcoming = useMemo(
-    () => (automations.data?.automations ?? [])
-      .filter((item) => item.active && new Date(item.next_run_at).valueOf() > now)
-      .sort((left, right) => new Date(left.next_run_at).valueOf() - new Date(right.next_run_at).valueOf())
-      .slice(0, 5),
-    [automations.data, now],
-  )
+  const loadNextTodayPage = shouldLoadNextHomePage(conversations.data?.pages ?? [], now, timezone)
+
+  useEffect(() => {
+    if (loadNextTodayPage && !conversations.isFetchingNextPage && !conversations.isError) {
+      void conversations.fetchNextPage()
+    }
+  }, [conversations.fetchNextPage, conversations.isError, conversations.isFetchingNextPage, loadNextTodayPage])
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000)
@@ -165,30 +161,25 @@ export function HomePage() {
       </header>
       <div className="home-scroll">
         <div className="home-content today-content">
-          <section className="ask-hero today-hero" aria-labelledby="home-title">
-            <span className="eyebrow">{t('todayWithSelu')}</span>
-            <h1 id="home-title">{name ? t('homeGreeting').replace('{name}', name) : t('homeGreetingFallback')}</h1>
-            <p>{t('homeSubtitle')}</p>
-          </section>
-
-          <div className="today-layout">
-            <section className="today-timeline dayline" aria-labelledby="today-timeline-title">
-              <header className="today-section-heading">
-                <div><span className="eyebrow">{t('today')}</span><h2 id="today-timeline-title">{t('todayWithSelu')}</h2><p>{t('todayTimelineHint')}</p></div>
-                <nav className="dayline-links" aria-label={t('todayWithSelu')}>
-                  <Link to="/app/past" className="dayline-search-link" aria-label={t('searchPastDays')} title={t('searchPastDays')}><CalendarSearch aria-hidden="true" /></Link>
-                  <Link to="/app/automations" className="text-link"><CalendarClock />{t('schedules')}<ChevronRight /></Link>
-                </nav>
-              </header>
-              <div className="timeline-list dayline-list">
-                {completedToday.map((item) => <TimelineEntry key={item.id} conversation={item} timezone={timezone} onSave={() => setSaveTarget(item)} />)}
-                {!conversations.isLoading && completedToday.length === 0 && <DaylineEmpty icon={<Clock3 />} label={t('noTodayActivity')} />}
-                <div className="dayline-now" role="separator" aria-label={t('now')}><span aria-hidden="true" /><strong>{t('now')}</strong></div>
-                {upcoming.map((automation) => <UpcomingAutomation key={automation.id} automation={automation} timezone={timezone} />)}
-                {!automations.isLoading && upcoming.length === 0 && <DaylineEmpty icon={<CalendarClock />} label={t('noUpcomingAutomations')} future />}
+          <section className="today-timeline dayline" aria-labelledby="today-timeline-title">
+            <header className="today-section-heading">
+              <div className="today-heading-copy">
+                <span className="eyebrow">{t('today')}</span>
+                <h1 id="today-timeline-title">{t('todayWithSelu')}</h1>
+                <p>{name ? t('homeGreeting').replace('{name}', name) : t('homeGreetingFallback')}</p>
               </div>
-            </section>
-          </div>
+              <nav className="dayline-links" aria-label={t('todayWithSelu')}>
+                <Link to="/app/past" className="dayline-search-link" aria-label={t('searchPastDays')} title={t('searchPastDays')}>
+                  <CalendarSearch aria-hidden="true" /><span>{t('pastDays')}</span><ChevronRight aria-hidden="true" />
+                </Link>
+                <Link to="/app/automations" className="text-link"><CalendarClock aria-hidden="true" />{t('schedules')}<ChevronRight aria-hidden="true" /></Link>
+              </nav>
+            </header>
+            <div className="timeline-list dayline-list">
+              {completedToday.map((item) => <TimelineEntry key={item.id} conversation={item} timezone={timezone} onSave={() => setSaveTarget(item)} />)}
+              {!conversations.isLoading && completedToday.length === 0 && <DaylineEmpty icon={<Clock3 />} label={t('noTodayActivity')} />}
+            </div>
+          </section>
         </div>
       </div>
       <footer className="home-quick-compose" aria-label={t('homePlaceholder')}>
@@ -227,41 +218,55 @@ export function TimelineEntry({ conversation, timezone, onSave, onUnsave }: { co
   const schedule = conversation.kind === 'schedule'
   const canSave = canSaveTopic(conversation)
   return <article className={`timeline-entry${schedule ? ' is-schedule' : ''}`}>
-    <span className="timeline-rail" aria-hidden="true"><i /></span>
-    <span className="timeline-icon" aria-hidden="true">{schedule ? <CalendarClock /> : <MessageCircle />}</span>
+    <time className="timeline-time" dateTime={conversation.last_activity_at}>{formatTime(conversation.last_activity_at, timezone)}</time>
+    <span className="timeline-rail" aria-hidden="true"><i>{schedule ? <CalendarClock /> : <MessageCircle />}</i></span>
     <Link to="/app/conversations/$conversationId" params={{ conversationId: conversation.id }} className="timeline-copy" aria-label={`${t('openConversation')}: ${conversation.title ?? t('newConversation')}`}>
-      <span className="timeline-meta"><time dateTime={conversation.last_activity_at}>{formatTime(conversation.last_activity_at, timezone)}</time>{schedule && <small>{t('scheduledResult')}</small>}{conversation.active_run_id && <small className="is-live">{t('working')}</small>}</span>
+      <span className="timeline-meta">
+        {schedule && <small className="is-schedule-state">{t('scheduledResult')}</small>}
+        {conversation.saved_at && <small className="is-saved-state"><Bookmark aria-hidden="true" />{t('savedTopic')}</small>}
+        {conversation.active_run_id && <small className="is-live">{t('working')}</small>}
+      </span>
       <strong>{conversation.title ?? t('newConversation')}</strong>
       {conversation.preview && <p>{conversation.preview}</p>}
+      <ChevronRight className="timeline-open-cue" aria-hidden="true" />
     </Link>
-    {canSave && !conversation.saved_at && onSave && <button className="topic-action" type="button" onClick={onSave}><Bookmark />{t('saveTopic')}</button>}
-    {canSave && conversation.saved_at && onUnsave && <button className="topic-action is-saved" type="button" onClick={onUnsave}><Bookmark />{t('unsaveTopic')}</button>}
-    {canSave && conversation.saved_at && !onUnsave && <span className="saved-badge"><Bookmark />{t('savedTopic')}</span>}
+    {canSave && !conversation.saved_at && onSave && <button className="topic-action" type="button" onClick={onSave}><Bookmark aria-hidden="true" />{t('saveTopic')}</button>}
+    {canSave && conversation.saved_at && onUnsave && <button className="topic-action is-saved" type="button" onClick={onUnsave}><Bookmark aria-hidden="true" />{t('unsaveTopic')}</button>}
   </article>
 }
 
-function UpcomingAutomation({ automation, timezone }: { automation: Automation; timezone: string }) {
-  return <article className="timeline-entry is-upcoming">
-    <span className="timeline-rail" aria-hidden="true"><i /></span>
-    <span className="timeline-icon" aria-hidden="true"><CalendarClock /></span>
-    <Link to="/app/automations" className="timeline-copy" aria-label={`${t('upcoming')}: ${automation.name}`}>
-      <span className="timeline-meta"><time dateTime={automation.next_run_at}>{formatUpcoming(automation.next_run_at, timezone)}</time><small>{t('nextRun')}</small></span>
-      <strong>{automation.name}</strong>
-      <p>{automation.timing.description}</p>
-    </Link>
-  </article>
-}
-
-function DaylineEmpty({ icon, label, future = false }: { icon: ReactNode; label: string; future?: boolean }) {
-  return <div className={`dayline-empty${future ? ' is-future' : ''}`}>
-    <span className="timeline-rail" aria-hidden="true"><i /></span>
-    <span className="timeline-icon" aria-hidden="true">{icon}</span>
+function DaylineEmpty({ icon, label }: { icon: ReactNode; label: string }) {
+  return <div className="dayline-empty">
+    <span className="timeline-time" aria-hidden="true" />
+    <span className="timeline-rail" aria-hidden="true"><i>{icon}</i></span>
     <p>{label}</p>
   </div>
 }
 
-function byOldestActivity(left: Conversation, right: Conversation) {
-  return new Date(left.last_activity_at).valueOf() - new Date(right.last_activity_at).valueOf()
+function byNewestActivity(left: Conversation, right: Conversation) {
+  return new Date(right.last_activity_at).valueOf() - new Date(left.last_activity_at).valueOf()
+}
+
+export function completedTodayConversations(items: Conversation[], now: string | number | Date, timezone: string) {
+  const upperBound = new Date(now).valueOf()
+  return items
+    .filter((item) => !item.active_run_id
+      && new Date(item.last_activity_at).valueOf() <= upperBound
+      && isSameDayInTimeZone(item.last_activity_at, now, timezone))
+    .sort(byNewestActivity)
+}
+
+export function shouldLoadNextHomePage(pages: ConversationPage[], now: string | number | Date, timezone: string) {
+  const lastPage = pages.at(-1)
+  const nextCursor = lastPage?.next_cursor
+  if (!lastPage || !nextCursor) return false
+  if (pages.slice(0, -1).some((page) => page.next_cursor === nextCursor)) return false
+
+  const oldestLoaded = lastPage.conversations.at(-1)
+  if (!oldestLoaded) return true
+  const oldestKey = dateKeyInTimeZone(oldestLoaded.last_activity_at, timezone)
+  const todayKey = dateKeyInTimeZone(now, timezone)
+  return !oldestKey || !todayKey || oldestKey >= todayKey
 }
 
 function selectedLocale() {
@@ -274,10 +279,6 @@ export function formatDayHeading(value: string | number | Date, timezone: string
 
 function formatTime(value: string, timezone: string) {
   return formatInTimeZone(value, selectedLocale(), timezone, { hour: 'numeric', minute: '2-digit' })
-}
-
-function formatUpcoming(value: string, timezone: string) {
-  return formatInTimeZone(value, selectedLocale(), timezone, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
 function topicNameFallback(conversation: Conversation) {
